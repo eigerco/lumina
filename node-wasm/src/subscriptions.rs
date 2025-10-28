@@ -2,17 +2,17 @@ use std::cell::RefCell;
 use std::future::Future;
 use std::pin::Pin;
 use std::rc::Rc;
-use std::task::{Context, Poll};
+use std::task::{Context, Poll, ready};
 
+use futures::Stream;
 use js_sys::{AsyncIterator, Boolean, Object, Promise, Reflect, Symbol};
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::to_value;
-use tokio::sync::mpsc;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::future_to_promise;
 
-use crate::error::Error;
-use crate::ports::Port;
+use crate::error::Result;
+use crate::ports::{MessagePortLike, PortSender, RawPortReceier, split_port};
 use crate::worker::SubscriptionFeedback;
 
 #[wasm_bindgen(getter_with_clone)]
@@ -22,55 +22,55 @@ pub struct SubscriptionError {
     pub error: String,
 }
 
-struct JsStream<S>(Rc<RefCell<JsStreamInner<S>>>);
+struct SubscriptionStream(Rc<RefCell<SubscriptionStreamInner>>);
 
-impl<S> Clone for JsStream<S> {
+struct SubscriptionStreamInner {
+    receiver: RawPortReceier,
+    feedback: PortSender<SubscriptionFeedback>,
+}
+
+impl SubscriptionStream {
+    fn new(receiver: RawPortReceier, feedback: PortSender<SubscriptionFeedback>) -> Self {
+        SubscriptionStream(Rc::new(RefCell::new(SubscriptionStreamInner {
+            receiver,
+            feedback,
+        })))
+    }
+
+    fn send_ready(&self) -> Result<()> {
+        self.0
+            .borrow_mut()
+            .feedback
+            .send(&SubscriptionFeedback::Ready, &[])
+    }
+}
+
+impl Future for SubscriptionStream {
+    type Output = Option<JsValue>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+        let event = ready!(Pin::new(&mut self.0.borrow_mut().receiver).poll_next(cx));
+        Poll::Ready(event.map(|ev| ev.data()))
+    }
+}
+
+impl Clone for SubscriptionStream {
     fn clone(&self) -> Self {
         Self(self.0.clone())
     }
 }
 
-struct JsStreamInner<S> {
-    channel: mpsc::UnboundedReceiver<S>,
-    port: Port,
-}
+pub(crate) fn into_async_iterator(port: MessagePortLike) -> Result<AsyncIterator> {
+    let (feedback, receiver) = split_port(port)?;
+    let stream = SubscriptionStream::new(receiver, feedback);
 
-impl<S> JsStream<S> {
-    pub(crate) fn new(channel: mpsc::UnboundedReceiver<S>, port: Port) -> Self {
-        JsStream(Rc::new(RefCell::new(JsStreamInner { channel, port })))
-    }
-
-    fn send_ready(&self) -> Result<(), Error> {
-        self.0
-            .borrow_mut()
-            .port
-            .send(&SubscriptionFeedback::Ready, None)
-    }
-}
-
-impl<S> Future for JsStream<S> {
-    type Output = Option<S>;
-
-    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
-        Pin::new(&mut self.0.borrow_mut().channel).poll_recv(cx)
-    }
-}
-
-pub(crate) fn into_async_iterator<S: Serialize + 'static>(
-    channel: mpsc::UnboundedReceiver<Result<S, SubscriptionError>>,
-    port: Port,
-) -> AsyncIterator {
-    let stream = JsStream::new(channel, port);
     let next = Closure::<dyn FnMut() -> Promise>::new(move || {
         let cloned = stream.clone();
         future_to_promise(async move {
             if let Err(e) = cloned.send_ready() {
                 return Ok(to_value(&e).unwrap());
             }
-            let next_item = match cloned.await.transpose() {
-                Ok(item) => item,
-                Err(e) => return Ok(to_value(&e).unwrap()),
-            };
+            let next_item = cloned.await;
 
             let result = Object::new();
             Reflect::set(&result, &"done".into(), &Boolean::from(next_item.is_none()))
@@ -79,7 +79,7 @@ pub(crate) fn into_async_iterator<S: Serialize + 'static>(
                 Reflect::set(
                     &result,
                     &"value".into(),
-                    &to_value(&item).expect("to_value shouldn't fail here"),
+                    &item, //&to_value(&item).expect("to_value shouldn't fail here"),
                 )
                 .expect("reflect shouldn't fail on Object");
             }
@@ -97,5 +97,5 @@ pub(crate) fn into_async_iterator<S: Serialize + 'static>(
     Reflect::set(&iterator, &"next".into(), &next).expect("reflect shouldn't fail on Object");
     Reflect::set(&iterator, &Symbol::async_iterator(), &iterator_return_this)
         .expect("reflect shouldn't fail on Object");
-    iterator.unchecked_into()
+    Ok(iterator.unchecked_into())
 }

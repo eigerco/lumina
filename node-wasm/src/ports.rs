@@ -1,5 +1,10 @@
+use std::marker::PhantomData;
+use std::pin::Pin;
+use std::rc::Rc;
+use std::task::{Context as TaskContext, Poll, ready};
+
+use futures::Stream;
 use js_sys::{Array, Function, Reflect};
-use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::from_value;
 use tokio::sync::mpsc;
@@ -43,7 +48,7 @@ impl TryFrom<MessageEvent> for MultiplexMessage<Command> {
         let MultiplexMessage::<Command> { id, mut payload } =
             from_value(ev.data()).context("could not deserialize message")?;
 
-        if let Some(port) = ev.get_port() {
+        if let Some(port) = ev.get_ports().into_iter().take(1).last() {
             if let Command::Management(WorkerCommand::ConnectPort(maybe_port)) = &mut payload {
                 let _ = maybe_port.insert(port);
             }
@@ -60,7 +65,7 @@ impl TryFrom<MessageEvent> for MultiplexMessage<WorkerResult> {
         let MultiplexMessage::<WorkerResult> { id, mut payload } =
             from_value(ev.data()).context("could not deserialize message")?;
 
-        if let Some(port) = ev.get_port() {
+        if let Some(port) = ev.get_ports().into_iter().take(1).last() {
             if let Ok(WorkerResponse::Subscribed(maybe_port)) = &mut payload {
                 let _ = maybe_port.insert(port);
             }
@@ -96,110 +101,92 @@ impl From<MessagePort> for MessagePortLike {
     }
 }
 
-/// Wraps JavaScript object with port-like semantics (can `postMessage` and receive `onmessage`),
-/// with some convenience functions and type checking.
-pub(crate) struct Port {
-    port: MessagePortLike,
+pub(crate) fn split_port<Tx>(port: MessagePortLike) -> Result<(PortSender<Tx>, RawPortReceier)> {
+    let _post_message: Function = Reflect::get(&port, &"postMessage".into())?
+        .dyn_into()
+        .context("could not get object's postMessage")?;
+
+    let port = Rc::new(port);
+
+    let (tx, receiving_channel) = mpsc::unbounded_channel();
+    let onmessage = Closure::new(move |ev: MessageEvent| {
+        if tx.send(ev).is_err() {
+            error!("forwarding message from port failed, no receiver waiting");
+        }
+    });
+    register_onmessage_callback(port.as_ref(), &onmessage)?;
+
+    let sender = PortSender::<Tx> {
+        port: port.clone(),
+        _sent: PhantomData,
+    };
+    let receiver = RawPortReceier {
+        port,
+        receiving_channel,
+        onmessage,
+    };
+    Ok((sender, receiver))
+}
+
+pub(crate) struct PortSender<Tx> {
+    port: Rc<MessagePortLike>,
+    _sent: PhantomData<Tx>,
+}
+
+impl<Tx> PortSender<Tx>
+where
+    Tx: Serialize,
+{
+    pub(crate) fn send(&self, value: &Tx, ports: &[MessagePortLike]) -> Result<()> {
+        let value = to_json_value(&value).context("error converting to JsValue")?;
+        let ports: Array = ports.iter().collect();
+
+        self.port
+            .post_message_with_transferable(&value, &ports)
+            .context("could not send message")
+    }
+}
+
+pub(crate) struct RawPortReceier {
+    port: Rc<MessagePortLike>,
+    receiving_channel: mpsc::UnboundedReceiver<MessageEvent>,
     onmessage: Closure<dyn Fn(MessageEvent)>,
 }
 
-impl Port {
-    /// Create a new Port out of JS object, registering on message callback.
-    /// Minimal duck-type checking is performed using reflection when setting appropriate properties.
-    pub fn new<F>(port: MessagePortLike, onmessage_callback: F) -> Result<Port>
-    where
-        F: Fn(MessageEvent) -> Result<()> + 'static,
-    {
-        let _post_message: Function = Reflect::get(&port, &"postMessage".into())?
-            .dyn_into()
-            .context("could not get object's postMessage")?;
+impl Stream for RawPortReceier {
+    type Item = MessageEvent;
 
-        let onmessage = Closure::new(move |ev: MessageEvent| {
-            if let Err(e) = onmessage_callback(ev) {
-                error!("error receiving message: {e}");
-            }
-        });
+    fn poll_next(self: Pin<&mut Self>, cx: &mut TaskContext<'_>) -> Poll<Option<Self::Item>> {
+        let this = self.get_mut();
+        let event =
+            ready!(this.receiving_channel.poll_recv(cx)).expect("forward channel should not drop");
 
-        let port = register_onmessage_callback(port, &onmessage)?;
-
-        Ok(Port { port, onmessage })
-    }
-
-    /// Prepare the port for receiving MultiplexMessages
-    pub fn with_multiplex_message_channel<T>(
-        port: MessagePortLike,
-    ) -> Result<(Self, mpsc::UnboundedReceiver<MultiplexMessage<T>>)>
-    where
-        MultiplexMessage<T>: TryFrom<MessageEvent, Error = Error>,
-        T: Serialize + 'static,
-    {
-        let (tx, rx) = mpsc::unbounded_channel();
-
-        let port = Port::new(port, move |ev: MessageEvent| -> Result<()> {
-            let msg = ev.try_into()?;
-            tx.send(msg)
-                .context("forwarding failed, no receiver waiting")?;
-            Ok(())
-        })?;
-
-        Ok((port, rx))
-    }
-
-    /// Prepare a port for receiving subscription items
-    pub fn with_subscription_channel<T: DeserializeOwned + 'static>(
-        port: MessagePortLike,
-    ) -> Result<(Self, mpsc::UnboundedReceiver<T>)> {
-        let (tx, rx) = mpsc::unbounded_channel();
-
-        let client_port = Port::new(port, move |ev: MessageEvent| -> Result<()> {
-            let item: T = from_value(ev.data()).context("could not deserialize message")?;
-            tx.send(item)
-                .context("forwarding subscription item failed, no receiver waiting")?;
-            Ok(())
-        })?;
-
-        Ok((client_port, rx))
-    }
-
-    /// Send a serialisable message over the port, together with a object to transfer.
-    /// No checking is performed whether receiver is able to correctly interpret the message,
-    /// nor whether port can actually perform object transfer.
-    pub fn send<T: Serialize>(&self, msg: &T, transferable: Option<JsValue>) -> Result<()> {
-        let value = to_json_value(&msg).context("error converting to JsValue")?;
-        if let Some(transferable) = transferable {
-            self.port
-                .post_message_with_transferable(&value, &Array::of1(&transferable))
-                .context("could not send message")?;
-        } else {
-            self.port
-                .post_message(&value)
-                .context("could not send message")?;
-        }
-        Ok(())
+        // TODO: proper channel shutdown
+        Poll::Ready(Some(event))
     }
 }
 
-impl Drop for Port {
+impl Drop for RawPortReceier {
     fn drop(&mut self) {
-        unregister_onmessage(&self.port, &self.onmessage)
+        unregister_onmessage(self.port.as_ref(), &self.onmessage);
     }
 }
 
 // helper to hide slight differences in message passing between runtime.Port used by browser
 // extensions and everything else
 pub(crate) fn register_onmessage_callback<F>(
-    port: MessagePortLike,
+    port: &MessagePortLike,
     callback: &Closure<F>,
-) -> Result<MessagePortLike, Error>
+) -> Result<(), Error>
 where
     F: Fn(MessageEvent) + ?Sized,
 {
-    if Reflect::has(&port, &JsValue::from("onMessage"))
+    if Reflect::has(port, &JsValue::from("onMessage"))
         .context("failed to reflect onMessage property")?
     {
         // Browser extension runtime.Port has `onMessage` property, on which we should call
         // `addListener` on.
-        let listeners = Reflect::get(&port, &"onMessage".into())
+        let listeners = Reflect::get(port, &"onMessage".into())
             .context("could not get `onMessage` property")?;
 
         let add_listener: Function = Reflect::get(&listeners, &"addListener".into())
@@ -208,18 +195,18 @@ where
             .context("expected `onMessage.addListener` to be a function")?;
         Reflect::apply(&add_listener, &listeners, &Array::of1(callback.as_ref()))
             .context("error calling `onMessage.addListener`")?;
-    } else if Reflect::has(&port, &JsValue::from("onmessage"))
+    } else if Reflect::has(port, &JsValue::from("onmessage"))
         .context("failed to reflect onmessage property")?
     {
         // MessagePort, as well as message passing via Worker instance, requires setting
         // `onmessage` property to callback
-        Reflect::set(&port, &"onmessage".into(), callback.as_ref())
+        Reflect::set(port, &"onmessage".into(), callback.as_ref())
             .context("could not set onmessage callback")?;
     } else {
         return Err(Error::new("Don't know how to register onmessage callback"));
     }
 
-    Ok(port)
+    Ok(())
 }
 
 /// unregister onmessage callback in any of the various forms it can take
@@ -244,6 +231,7 @@ pub(crate) fn unregister_onmessage(port: &JsValue, callback: &Closure<dyn Fn(Mes
 mod tests {
     use super::*;
 
+    use futures::StreamExt;
     use futures::channel::oneshot;
     use lumina_utils::executor::spawn;
     use wasm_bindgen_futures::spawn_local;
@@ -270,6 +258,24 @@ mod tests {
         assert_eq!(m.post_increment(), MessageId(u32::MAX));
         assert_eq!(m.post_increment(), MessageId(0));
         assert_eq!(m.post_increment(), MessageId(1));
+    }
+
+    #[wasm_bindgen_test]
+    async fn port_smoke() {
+        let ch = MessageChannel::new().unwrap();
+        let (tx0, _rx0) = split_port(ch.port1().into()).unwrap();
+        let (_tx1, rx1) = split_port::<()>(ch.port2().into()).unwrap();
+        let mut rx1 = rx1.map(|e| {
+            let v: u32 = from_value(e.data()).unwrap();
+            let p = e.get_ports();
+            (v, p)
+        });
+        let transferred = MessageChannel::new().unwrap().port1().into();
+
+        tx0.send(&1u32, &[transferred]).unwrap();
+        let (value, ports) = rx1.next().await.unwrap();
+        assert_eq!(value, 1);
+        assert_eq!(ports.len(), 1);
     }
 
     #[wasm_bindgen_test]

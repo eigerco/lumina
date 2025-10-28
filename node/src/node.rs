@@ -501,6 +501,18 @@ where
         }
     }
 
+    fn height_stream(&self) -> Result<ReceiverStream<Result<u64, SubscriptionError>>> {
+        let store = self
+            .store
+            .as_ref()
+            .cloned()
+            .expect("store should be present");
+
+        //let (tx, rx)
+        spawn(async move { loop {} });
+        todo!()
+    }
+
     /// Return a stream which will yield all the headers, as they are being received by the node,
     /// starting from the first header received after the call. Stream is guaranteed to return either
     /// header or error for each height, in order.

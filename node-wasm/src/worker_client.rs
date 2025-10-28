@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use futures::StreamExt;
+use futures::stream::LocalBoxStream;
 use tokio::select;
 use tokio::sync::{mpsc, oneshot};
 use tokio_util::sync::{CancellationToken, DropGuard};
@@ -11,7 +13,7 @@ use crate::commands::{
     WorkerError, WorkerResponse, WorkerResult,
 };
 use crate::error::{Context, Error, Result};
-use crate::ports::{MessageId, MessagePortLike, MultiplexMessage, Port};
+use crate::ports::{MessageId, MessagePortLike, MultiplexMessage, PortSender, split_port};
 use lumina_utils::executor::{JoinHandle, spawn};
 
 /// WorkerClient responsible for sending `Command`s and receiving `WorkerResponse`s to them over a port like
@@ -82,10 +84,10 @@ impl WorkerClient {
 }
 
 struct Worker {
-    /// Port over which communication takes place
-    port: Port,
-    /// Queued responses from the onmessage callback
-    incoming_responses: mpsc::UnboundedReceiver<MultiplexMessage<WorkerResult>>,
+    /// Channel to send multiplexed commands over
+    command_sender: PortSender<MultiplexMessage<Command>>,
+    /// Channel to receive multiplexed responses
+    response_receiver: LocalBoxStream<'static, Result<MultiplexMessage<WorkerResult>>>,
     /// Map of message ids waiting for response to oneshot channels to send the response over
     pending_responses_map: HashMap<MessageId, oneshot::Sender<WorkerResult>>,
     /// MessageId to be used for the next request
@@ -96,12 +98,15 @@ struct Worker {
 
 impl Worker {
     fn new(port: MessagePortLike, cancellation_token: CancellationToken) -> Result<Worker> {
-        let (port, incoming_responses) =
-            Port::with_multiplex_message_channel::<WorkerResult>(port)?;
+        let (command_sender, event_receiver) = split_port(port)?;
+
+        let response_receiver = event_receiver
+            .map(MultiplexMessage::<WorkerResult>::try_from)
+            .boxed_local();
 
         Ok(Worker {
-            port,
-            incoming_responses,
+            command_sender,
+            response_receiver,
             next_message_index: Default::default(),
             pending_responses_map: Default::default(),
             cancellation_token,
@@ -117,12 +122,15 @@ impl Worker {
                 _ = self.cancellation_token.cancelled() => {
                     return Ok(())
                 }
-                msg = self.incoming_responses.recv() => {
-                    let MultiplexMessage { id, payload} = msg
-                        .ok_or(Error::new("Incoming message channel closed, should not happen"))?;
-                    if let Some(response_sender) = self.pending_responses_map.remove(&id) {
-                        let _ = response_sender.send(payload);
-                    };
+                response = self.response_receiver.next() => {
+                    match response.ok_or(Error::new("Incoming response channel closed, should not happen"))? {
+                        Ok(MultiplexMessage { id, payload}) =>  {
+                            if let Some(response_sender) = self.pending_responses_map.remove(&id) {
+                                let _ = response_sender.send(payload);
+                            };
+                        }
+                        Err(e) => error!("error receiving message: {e}"),
+                    }
                 }
                 request = outgoing_requests.recv() => {
                     let command_with_responder = request
@@ -135,13 +143,19 @@ impl Worker {
 
     fn handle_outgoing_request(
         &mut self,
-        CommandWithResponder { command, responder }: CommandWithResponder,
+        CommandWithResponder {
+            mut command,
+            responder,
+        }: CommandWithResponder,
     ) -> Result<()> {
         let id = self.next_message_index.post_increment();
-        if let Err(e) = self.send_message(MultiplexMessage {
+        let ports: Vec<_> = command.take_port().into_iter().collect();
+        let multiplex_message = MultiplexMessage {
             id,
             payload: command,
-        }) {
+        };
+
+        if let Err(e) = self.command_sender.send(&multiplex_message, ports.as_ref()) {
             error!("Failed to send request: {e}");
             return Ok(());
         }
@@ -149,16 +163,6 @@ impl Worker {
         if self.pending_responses_map.insert(id, responder).is_some() {
             return Err(Error::new("collision in message ids, should not happen"));
         }
-
-        Ok(())
-    }
-
-    fn send_message(&mut self, mut message: MultiplexMessage<Command>) -> Result<()> {
-        let port = message.payload.take_port().map(Into::into);
-
-        self.port
-            .send(&message, port)
-            .context("failed to send outgoing request without a port transfer")?;
 
         Ok(())
     }

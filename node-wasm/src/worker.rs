@@ -5,12 +5,11 @@ use futures::StreamExt;
 use libp2p::{Multiaddr, PeerId};
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{from_value, to_value};
-use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::{error, info, warn};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
-use web_sys::{BroadcastChannel, MessageChannel, MessageEvent, MessagePort};
+use web_sys::{BroadcastChannel, MessageChannel, MessagePort};
 
 use blockstore::EitherBlockstore;
 use celestia_types::nmt::Namespace;
@@ -28,7 +27,7 @@ use crate::commands::{
     WorkerCommand, WorkerError, WorkerResponse, WorkerResult,
 };
 use crate::error::{Context, Error, Result};
-use crate::ports::Port;
+use crate::ports::split_port;
 use crate::utils::random_id;
 use crate::worker_server::WorkerServer;
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
@@ -305,11 +304,11 @@ impl NodeWorkerInstance {
         match subscription {
             SubscriptionCommand::Headers => {
                 let stream = self.node.header_subscribe().await?;
-                register_forwarding_tasks_and_callbacks(stream)
+                forward_stream_to_message_port(stream)
             }
             SubscriptionCommand::Blobs(namespace) => {
                 let stream = self.node.blob_subscribe(namespace).await?;
-                register_forwarding_tasks_and_callbacks(stream)
+                forward_stream_to_message_port(stream)
             }
         }
     }
@@ -323,39 +322,32 @@ pub enum SubscriptionFeedback {
     Close,
 }
 
-fn register_forwarding_tasks_and_callbacks<T: Serialize + 'static>(
+fn forward_stream_to_message_port<T: Serialize + 'static>(
     mut stream: ReceiverStream<Result<T, SubscriptionError>>,
 ) -> Result<MessagePort> {
     let channel = MessageChannel::new()?;
-    let (signal_tx, mut signal_rx) = mpsc::channel(1);
 
-    let port = Port::new(
-        channel.port1().into(),
-        move |ev: MessageEvent| -> Result<()> {
-            let signal: SubscriptionFeedback =
-                from_value(ev.data()).context("could not deserialize subscription signal")?;
-            if signal_tx.try_send(signal).is_err() {
-                error!("Error forwarding subscription signal, should not happen");
-            }
-
-            Ok(())
-        },
-    )?;
+    let (subscription_sender, event_receiver) = split_port(channel.port1().into())?;
+    let mut feedback_receiver = event_receiver
+        .map(|ev| from_value(ev.data()).context("could not deserialize subscription signal"));
 
     spawn(async move {
         info!("Starting subscription");
         loop {
-            match signal_rx.recv().await {
-                Some(SubscriptionFeedback::Ready) => (),
-                Some(SubscriptionFeedback::Close) => break,
-                None => {
-                    warn!("unexpected subscription signal channel close, should not happen");
-                    break;
+            let Some(feedback) = feedback_receiver.next().await else {
+                error!("unexpected feedback channel close");
+                break;
+            };
+            match feedback {
+                Ok(SubscriptionFeedback::Ready) => (),
+                Ok(SubscriptionFeedback::Close) => break,
+                Err(e) => {
+                    warn!("Error receiving subscription feedback: {e}");
                 }
             }
             let item: Result<Option<T>> = stream.next().await.transpose().map_err(Error::from);
 
-            if let Err(e) = port.send(&item, None) {
+            if let Err(e) = subscription_sender.send(&item, &[]) {
                 error!("Error sending subscription item: {e}");
             }
         }

@@ -22,7 +22,6 @@ use crate::commands::{
     NodeCommand, SingleHeaderQuery, SubscriptionCommand, WorkerCommand, WorkerError, WorkerResponse,
 };
 use crate::error::{Context, Result};
-use crate::ports::Port;
 use crate::subscriptions::into_async_iterator;
 use crate::utils::{
     Network, is_safari, js_value_from_display, request_storage_persistence, timeout,
@@ -410,9 +409,7 @@ impl NodeClient {
         let command = SubscriptionCommand::Headers;
         let port = self.worker.subscribe(command).await?;
 
-        let (client_port, receiver) = Port::with_subscription_channel(port)?;
-
-        Ok(into_async_iterator::<ExtendedHeader>(receiver, client_port))
+        into_async_iterator(port)
     }
 
     #[wasm_bindgen(js_name = blobSubscribe)]
@@ -420,12 +417,7 @@ impl NodeClient {
         let command = SubscriptionCommand::Blobs(namespace);
         let port = self.worker.subscribe(command).await?;
 
-        let (client_port, receiver) = Port::with_subscription_channel(port)?;
-
-        Ok(into_async_iterator::<(u64, Vec<Blob>)>(
-            receiver,
-            client_port,
-        ))
+        into_async_iterator(port)
     }
 }
 
@@ -592,13 +584,30 @@ mod tests {
         let bridge_ma = fetch_bridge_webtransport_multiaddr(&rpc_client).await;
         let client = spawn_connected_node(vec![bridge_ma.to_string()]).await;
 
-        // Wait for the `client` node to sync until the `submitted_height`.
-        sleep(Duration::from_millis(100)).await;
+        web_sys::console::log_1(&"a".into());
 
-        let mut blobs = client
+        // Wait for the `client` node to sync until the `submitted_height`.
+        while client.syncer_info().await.unwrap().subjective_head < submitted_height {
+            web_sys::console::log_1(&"sleep".into());
+            sleep(Duration::from_millis(100)).await;
+        }
+
+        let blob_res = client
             .request_all_blobs(&namespace, submitted_height, None)
             .await
-            .expect("to fetch blob");
+            .map_err(|e| format!(">> {e:?}"));
+
+        let mut blobs = match blob_res {
+            Ok(b) => b,
+            Err(e) => {
+                web_sys::console::log_1(&e.into());
+                panic!("AAAAAAA");
+            }
+        };
+
+        //let mut blobs = client .request_all_blobs(&namespace, submitted_height, None) .await .expect("to fetch blob");
+
+        web_sys::console::log_1(&"b".into());
 
         assert_eq!(blobs.len(), 1);
         let blob = blobs.pop().unwrap();

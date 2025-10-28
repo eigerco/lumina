@@ -1,5 +1,5 @@
 use futures::future::{FutureExt, LocalBoxFuture};
-use futures::stream::{FuturesUnordered, StreamExt};
+use futures::stream::{FuturesUnordered, LocalBoxStream, StreamExt};
 use tokio::select;
 use tokio::sync::{mpsc, oneshot};
 use tokio_util::sync::{CancellationToken, DropGuard};
@@ -8,7 +8,7 @@ use wasm_bindgen::prelude::*;
 
 use crate::commands::{Command, CommandWithResponder, HasMessagePort, WorkerError, WorkerResult};
 use crate::error::{Context, Error, Result};
-use crate::ports::{MessagePortLike, MultiplexMessage, Port};
+use crate::ports::{MessagePortLike, MultiplexMessage, PortSender, split_port};
 use lumina_utils::executor::spawn;
 
 /// `WorkerServer` aggregates multiple existing [`ServerConnection`]s, receiving `Command`s
@@ -72,10 +72,10 @@ impl WorkerServer {
 }
 
 struct ConnectionWorker {
-    /// Port over which communication takes place
-    port: Port,
-    /// Queued requests from the onmessage callback
-    incoming_commands: mpsc::UnboundedReceiver<MultiplexMessage<Command>>,
+    /// Channel to receive multiplexed comands
+    command_receiver: LocalBoxStream<'static, Result<MultiplexMessage<Command>>>,
+    /// Channel to send multiplexed responses over
+    response_sender: PortSender<MultiplexMessage<WorkerResult>>,
     /// Futures waiting for completion to be send as responses
     pending_responses_map:
         FuturesUnordered<LocalBoxFuture<'static, MultiplexMessage<WorkerResult>>>,
@@ -90,12 +90,16 @@ impl ConnectionWorker {
         port: MessagePortLike,
         command_forwarding_channel: mpsc::UnboundedSender<CommandWithResponder>,
         cancellation_token: CancellationToken,
-    ) -> Result<ConnectionWorker> {
-        let (port, incoming_commands) = Port::with_multiplex_message_channel::<Command>(port)?;
+    ) -> Result<Self> {
+        let (response_sender, event_receiver) = split_port(port)?;
+
+        let command_receiver = event_receiver
+            .map(MultiplexMessage::<Command>::try_from)
+            .boxed_local();
 
         Ok(ConnectionWorker {
-            port,
-            incoming_commands,
+            command_receiver,
+            response_sender,
             pending_responses_map: Default::default(),
             command_forwarding_channel,
             cancellation_token,
@@ -108,19 +112,21 @@ impl ConnectionWorker {
                 _ = self.cancellation_token.cancelled() => {
                     return Ok(())
                 }
-                msg = self.incoming_commands.recv() => {
-                    self.handle_incoming_request(
-                        msg
-                        .ok_or(Error::new("Incoming message channel closed, should not happen"))?
-                    )?;
+                request = self.command_receiver.next() => {
+                    match request.ok_or(Error::new("Incoming message channel closed, should not happen"))? {
+                        Ok(multiplexed_command) => {
+                            self.handle_incoming_multiplexed_command(multiplexed_command)?;
+                        }
+                        Err(e) => error!("error receiving command: {e}"),
+                    }
                 }
                 res = self.pending_responses_map.next(), if !self.pending_responses_map.is_empty() => {
                     let response =
                             &mut res
                             .ok_or(Error::new("Responses channel closed, should not happen"))?;
-                    let port = response.payload.take_port().map(Into::into);
-                    self.port
-                        .send(response, port)
+                    let ports: Vec<_> = response.payload.take_port().into_iter().collect();
+                    self.response_sender
+                        .send(response, ports.as_ref())
                         .with_context(|| format!("failed to send outgoing response for {:?}", response.id))?;
 
                 }
@@ -128,7 +134,7 @@ impl ConnectionWorker {
         }
     }
 
-    fn handle_incoming_request(
+    fn handle_incoming_multiplexed_command(
         &mut self,
         MultiplexMessage { id, payload }: MultiplexMessage<Command>,
     ) -> Result<()> {

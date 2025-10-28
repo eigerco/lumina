@@ -108,19 +108,17 @@ impl WorkerSelf for ServiceWorker {
 }
 
 pub(crate) trait MessageEventExt {
-    fn get_port(&self) -> Option<MessagePortLike>;
+    fn get_ports(&self) -> Vec<MessagePortLike>;
 }
 
 impl MessageEventExt for MessageEvent {
-    fn get_port(&self) -> Option<MessagePortLike> {
+    fn get_ports(&self) -> Vec<MessagePortLike> {
         let ports = self.ports();
         if ports.is_array() {
-            let port = ports.get(0);
-            if !port.is_undefined() {
-                return Some(port.into());
-            }
+            ports.iter().map(MessagePortLike::from).collect()
+        } else {
+            vec![]
         }
-        None
     }
 }
 
