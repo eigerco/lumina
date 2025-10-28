@@ -41,7 +41,7 @@ tendermint.workspace = true
 thiserror.workspace = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-tonic = { workspace = true, default-features = false, features = ["transport"] }
+tonic = { workspace = true, features = ["transport"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 celestia-grpc = { workspace = true, features = ["wasm-bindgen"] }
