@@ -46,14 +46,14 @@ tendermint.workspace = true
 tendermint-proto.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["sync"] }
-tonic = { workspace = true, features = ["codegen"] }
+tonic = { workspace = true, default-features = false, features = ["codegen"] }
 tracing.workspace = true
 uniffi = { workspace = true, optional = true, features = ["tokio"] }
 zeroize = "1.8"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio = { workspace = true, features = ["time"] }
-tonic = { workspace = true, features = ["transport"] }
+tonic = { workspace = true, default-features = false, features = ["transport"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 getrandom_02.workspace = true
