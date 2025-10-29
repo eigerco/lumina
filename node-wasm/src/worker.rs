@@ -1,25 +1,21 @@
-use std::fmt::Debug;
 use std::time::Duration;
 
 use futures::StreamExt;
 use libp2p::{Multiaddr, PeerId};
-use serde::{Deserialize, Serialize};
-use serde_wasm_bindgen::{from_value, to_value};
-use tokio_stream::wrappers::ReceiverStream;
-use tracing::{error, info, warn};
+use serde::Serialize;
+use serde_wasm_bindgen::to_value;
+use tracing::{error, info};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
-use web_sys::{BroadcastChannel, MessageChannel, MessagePort};
+use web_sys::{BroadcastChannel, MessagePort};
 
 use blockstore::EitherBlockstore;
 use celestia_types::nmt::Namespace;
 use celestia_types::{Blob, ExtendedHeader};
 use lumina_node::blockstore::{InMemoryBlockstore, IndexedDbBlockstore};
 use lumina_node::events::{EventSubscriber, NodeEventInfo};
-use lumina_node::node::SubscriptionError;
 use lumina_node::node::{Node, SyncingInfo};
 use lumina_node::store::{EitherStore, InMemoryStore, IndexedDbStore, SamplingMetadata};
-use lumina_utils::executor::spawn;
 
 use crate::client::WasmNodeConfig;
 use crate::commands::{
@@ -27,7 +23,7 @@ use crate::commands::{
     WorkerCommand, WorkerError, WorkerResponse, WorkerResult,
 };
 use crate::error::{Context, Error, Result};
-use crate::ports::split_port;
+use crate::subscriptions::{BlobsAtHeight, forward_stream_to_message_port};
 use crate::utils::random_id;
 use crate::worker_server::WorkerServer;
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
@@ -308,53 +304,15 @@ impl NodeWorkerInstance {
             }
             SubscriptionCommand::Blobs(namespace) => {
                 let stream = self.node.blob_subscribe(namespace).await?;
-                forward_stream_to_message_port(stream)
+
+                forward_stream_to_message_port(
+                    stream.map(|result| {
+                        result.map(|(height, blobs)| BlobsAtHeight { height, blobs })
+                    }),
+                )
             }
         }
     }
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-pub enum SubscriptionFeedback {
-    /// receiver has read the previous item and is ready for more
-    Ready,
-    /// receiver closed the channel
-    Close,
-}
-
-fn forward_stream_to_message_port<T: Serialize + 'static>(
-    mut stream: ReceiverStream<Result<T, SubscriptionError>>,
-) -> Result<MessagePort> {
-    let channel = MessageChannel::new()?;
-
-    let (subscription_sender, event_receiver) = split_port(channel.port1().into())?;
-    let mut feedback_receiver = event_receiver
-        .map(|ev| from_value(ev.data()).context("could not deserialize subscription signal"));
-
-    spawn(async move {
-        info!("Starting subscription");
-        loop {
-            let Some(feedback) = feedback_receiver.next().await else {
-                error!("unexpected feedback channel close");
-                break;
-            };
-            match feedback {
-                Ok(SubscriptionFeedback::Ready) => (),
-                Ok(SubscriptionFeedback::Close) => break,
-                Err(e) => {
-                    warn!("Error receiving subscription feedback: {e}");
-                }
-            }
-            let item: Result<Option<T>> = stream.next().await.transpose().map_err(Error::from);
-
-            if let Err(e) = subscription_sender.send(&item, &[]) {
-                error!("Error sending subscription item: {e}");
-            }
-        }
-        info!("Ending subscription");
-    });
-
-    Ok(channel.port2())
 }
 
 async fn event_forwarder_task(mut events_sub: EventSubscriber, events_channel: BroadcastChannel) {

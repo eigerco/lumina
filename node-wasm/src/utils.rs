@@ -14,8 +14,8 @@ use tracing_subscriber::prelude::*;
 use tracing_web::MakeConsoleWriter;
 use wasm_bindgen::prelude::*;
 use web_sys::{
-    DedicatedWorkerGlobalScope, MessageEvent, ServiceWorker, ServiceWorkerGlobalScope,
-    SharedWorker, SharedWorkerGlobalScope, Worker,
+    DedicatedWorkerGlobalScope, MessageChannel, MessageEvent, MessagePort, ServiceWorker,
+    ServiceWorkerGlobalScope, SharedWorker, SharedWorkerGlobalScope, Worker,
 };
 
 use lumina_node::network;
@@ -119,6 +119,17 @@ impl MessageEventExt for MessageEvent {
         } else {
             vec![]
         }
+    }
+}
+
+pub(crate) trait MessageChannelExt {
+    fn new_ports() -> Result<(MessagePort, MessagePort)>;
+}
+
+impl MessageChannelExt for MessageChannel {
+    fn new_ports() -> Result<(MessagePort, MessagePort)> {
+        let channel = MessageChannel::new()?;
+        Ok((channel.port1(), channel.port2()))
     }
 }
 

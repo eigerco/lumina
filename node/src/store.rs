@@ -74,8 +74,6 @@ pub trait Store: Send + Sync + Debug {
     /// Returns when new head is available in the `Store`.
     async fn wait_new_head(&self) -> u64;
 
-    fn subscribe_headers(&self) -> Receiver<ExtendedHeader>;
-
     /// Returns when `height` is available in the `Store`.
     async fn wait_height(&self, height: u64) -> Result<()>;
 

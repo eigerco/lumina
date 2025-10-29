@@ -22,7 +22,7 @@ use crate::commands::{
     NodeCommand, SingleHeaderQuery, SubscriptionCommand, WorkerCommand, WorkerError, WorkerResponse,
 };
 use crate::error::{Context, Result};
-use crate::subscriptions::into_async_iterator;
+use crate::subscriptions::{BlobsAtHeight, into_async_iterator};
 use crate::utils::{
     Network, is_safari, js_value_from_display, request_storage_persistence, timeout,
 };
@@ -409,7 +409,7 @@ impl NodeClient {
         let command = SubscriptionCommand::Headers;
         let port = self.worker.subscribe(command).await?;
 
-        into_async_iterator(port)
+        into_async_iterator::<ExtendedHeader>(port)
     }
 
     #[wasm_bindgen(js_name = blobSubscribe)]
@@ -417,7 +417,7 @@ impl NodeClient {
         let command = SubscriptionCommand::Blobs(namespace);
         let port = self.worker.subscribe(command).await?;
 
-        into_async_iterator(port)
+        into_async_iterator::<BlobsAtHeight>(port)
     }
 }
 
@@ -510,6 +510,7 @@ mod tests {
     use wasm_bindgen_test::wasm_bindgen_test;
     use web_sys::MessageChannel;
 
+    use crate::utils::MessageChannelExt;
     use crate::worker::NodeWorker;
 
     // uses bridge-0, which has skip-auth enabled
@@ -616,16 +617,14 @@ mod tests {
     }
 
     async fn spawn_connected_node(bootnodes: Vec<String>) -> NodeClient {
-        let message_channel = MessageChannel::new().unwrap();
-        let mut worker = NodeWorker::new(message_channel.port1().into());
+        let (p0, p1) = MessageChannel::new_ports().unwrap();
+        let mut worker = NodeWorker::new(p0.into());
 
         spawn_local(async move {
             worker.run().await.unwrap();
         });
 
-        let client = NodeClient::new(message_channel.port2().into())
-            .await
-            .unwrap();
+        let client = NodeClient::new(p1.into()).await.unwrap();
         assert!(!client.is_running().await.expect("node ready to be run"));
 
         client

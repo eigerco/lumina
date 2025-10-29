@@ -191,17 +191,18 @@ mod tests {
     use web_sys::MessageChannel;
 
     use crate::commands::{NodeCommand, WorkerCommand, WorkerError, WorkerResponse};
+    use crate::utils::MessageChannelExt;
     use crate::worker_client::WorkerClient;
 
     #[wasm_bindgen_test]
     async fn smoke_test() {
-        let channel = MessageChannel::new().unwrap();
-        let client = WorkerClient::new(channel.port1().into()).unwrap();
+        let (p0, p1) = MessageChannel::new_ports().unwrap();
+        let client = WorkerClient::new(p0.into()).unwrap();
         let (stop_tx, stop_rx) = oneshot::channel();
 
         spawn(async move {
             let (request_tx, mut request_rx) = mpsc::unbounded_channel();
-            let _worker_guard = spawn_connection_worker(channel.port2().into(), request_tx)
+            let _worker_guard = spawn_connection_worker(p1.into(), request_tx)
                 .unwrap()
                 .drop_guard();
 
@@ -223,13 +224,13 @@ mod tests {
 
     #[wasm_bindgen_test]
     async fn response_channel_dropped() {
-        let channel = MessageChannel::new().unwrap();
-        let client = WorkerClient::new(channel.port1().into()).unwrap();
+        let (p0, p1) = MessageChannel::new_ports().unwrap();
+        let client = WorkerClient::new(p0.into()).unwrap();
         let (stop_tx, stop_rx) = oneshot::channel();
 
         spawn(async move {
             let (request_tx, mut request_rx) = mpsc::unbounded_channel();
-            let _worker_guard = spawn_connection_worker(channel.port2().into(), request_tx)
+            let _worker_guard = spawn_connection_worker(p1.into(), request_tx)
                 .unwrap()
                 .drop_guard();
             let CommandWithResponder { command, responder } =
@@ -255,15 +256,13 @@ mod tests {
     async fn multiple_channels() {
         const REQUEST_NUMBER: u64 = 16;
 
-        let channel = MessageChannel::new().unwrap();
-        let client = Arc::new(SendWrapper::new(
-            WorkerClient::new(channel.port1().into()).unwrap(),
-        ));
+        let (p0, p1) = MessageChannel::new_ports().unwrap();
+        let client = Arc::new(SendWrapper::new(WorkerClient::new(p0.into()).unwrap()));
         let (stop_tx, stop_rx) = oneshot::channel();
 
         spawn(async move {
             let (request_tx, mut request_rx) = mpsc::unbounded_channel();
-            let _worker_guard = spawn_connection_worker(channel.port2().into(), request_tx)
+            let _worker_guard = spawn_connection_worker(p1.into(), request_tx)
                 .unwrap()
                 .drop_guard();
             for i in 0..=REQUEST_NUMBER {

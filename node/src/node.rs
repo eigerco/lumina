@@ -596,7 +596,7 @@ where
     }
 }
 
-/// Error
+/// Error thrown while processing subscription
 #[derive(Debug, thiserror::Error)]
 #[error("Unable to receive subscription item at {height}: {source}")]
 pub struct SubscriptionError {

@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 use std::pin::Pin;
 use std::rc::Rc;
-use std::task::{Context as TaskContext, Poll, ready};
+use std::task::{Context, Poll, ready};
 
 use futures::Stream;
 use js_sys::{Array, Function, Reflect};
@@ -13,7 +13,7 @@ use wasm_bindgen::prelude::*;
 use web_sys::{MessageEvent, MessagePort};
 
 use crate::commands::{Command, WorkerCommand, WorkerResponse, WorkerResult};
-use crate::error::{Context, Error, Result};
+use crate::error::{Context as _, Error, Result};
 use crate::utils::{MessageEventExt, to_json_value};
 
 /// Counter-style message id for matching responses with requests
@@ -147,6 +147,15 @@ where
     }
 }
 
+impl<Tx> Drop for PortSender<Tx> {
+    fn drop(&mut self) {
+        // send a close signal and 🤞
+        let _ = self
+            .port
+            .post_message_with_transferable(&JsValue::NULL, &JsValue::UNDEFINED);
+    }
+}
+
 pub(crate) struct RawPortReceier {
     port: Rc<MessagePortLike>,
     receiving_channel: mpsc::UnboundedReceiver<MessageEvent>,
@@ -156,12 +165,15 @@ pub(crate) struct RawPortReceier {
 impl Stream for RawPortReceier {
     type Item = MessageEvent;
 
-    fn poll_next(self: Pin<&mut Self>, cx: &mut TaskContext<'_>) -> Poll<Option<Self::Item>> {
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.get_mut();
         let event =
             ready!(this.receiving_channel.poll_recv(cx)).expect("forward channel should not drop");
 
-        // TODO: proper channel shutdown
+        if event.data() == JsValue::NULL {
+            return Poll::Ready(None);
+        }
+
         Poll::Ready(Some(event))
     }
 }
@@ -239,6 +251,7 @@ mod tests {
     use web_sys::MessageChannel;
 
     use crate::commands::{Command, CommandWithResponder, WorkerCommand, WorkerResponse};
+    use crate::utils::MessageChannelExt;
     use crate::worker_client::WorkerClient;
     use crate::worker_server::WorkerServer;
 
@@ -262,17 +275,17 @@ mod tests {
 
     #[wasm_bindgen_test]
     async fn port_smoke() {
-        let ch = MessageChannel::new().unwrap();
-        let (tx0, _rx0) = split_port(ch.port1().into()).unwrap();
-        let (_tx1, rx1) = split_port::<()>(ch.port2().into()).unwrap();
+        let (p0, p1) = MessageChannel::new_ports().unwrap();
+        let (tx0, _rx0) = split_port(p0.into()).unwrap();
+        let (_tx1, rx1) = split_port::<()>(p1.into()).unwrap();
         let mut rx1 = rx1.map(|e| {
             let v: u32 = from_value(e.data()).unwrap();
             let p = e.get_ports();
             (v, p)
         });
-        let transferred = MessageChannel::new().unwrap().port1().into();
+        let (transferred, _) = MessageChannel::new_ports().unwrap();
 
-        tx0.send(&1u32, &[transferred]).unwrap();
+        tx0.send(&1u32, &[transferred.into()]).unwrap();
         let (value, ports) = rx1.next().await.unwrap();
         assert_eq!(value, 1);
         assert_eq!(ports.len(), 1);
@@ -280,7 +293,7 @@ mod tests {
 
     #[wasm_bindgen_test]
     async fn worker_client_server() {
-        let channel0 = MessageChannel::new().unwrap();
+        let (p0, p1) = MessageChannel::new_ports().unwrap();
         let mut server = WorkerServer::new();
         let port_channel = server.get_port_channel();
         let (stop_tx, stop_rx) = oneshot::channel();
@@ -312,8 +325,8 @@ mod tests {
             stop_rx.await.unwrap(); // wait for the test to finish before shutting the server
         });
 
-        port_channel.send(channel0.port1().into()).unwrap();
-        let client0 = WorkerClient::new(channel0.port2().into()).unwrap();
+        port_channel.send(p0.into()).unwrap();
+        let client0 = WorkerClient::new(p1.into()).unwrap();
 
         let response = client0.worker(WorkerCommand::IsRunning).await.unwrap();
         assert!(matches!(response, WorkerResponse::IsRunning(false)));
@@ -332,15 +345,13 @@ mod tests {
 
     #[wasm_bindgen_test]
     async fn spawn_client_server() {
-        let channel = MessageChannel::new().unwrap();
-        let client = WorkerClient::new(channel.port1().into()).unwrap();
+        let (p0, p1) = MessageChannel::new_ports().unwrap();
+        let client = WorkerClient::new(p0.into()).unwrap();
         let (stop_tx, stop_rx) = oneshot::channel();
 
         spawn(async move {
             let mut server = WorkerServer::new();
-            server
-                .spawn_connection_worker(channel.port2().into())
-                .unwrap();
+            server.spawn_connection_worker(p1.into()).unwrap();
 
             let CommandWithResponder { command, responder } = server.recv().await.unwrap();
             assert!(matches!(
