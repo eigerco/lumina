@@ -3,13 +3,18 @@ set -xeuo pipefail
 
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")"
 
-cd ../../
-cargo build
+target_dir="$(realpath ../../../target)"
 
-rm -rf ../target/swift-uniffi-bindings
-mkdir -p ../target/swift-uniffi-bindings
+rm -rf "$target_dir"/swift-uniffi-bindings
+mkdir -p "$target_dir"/swift-uniffi-bindings
 
-cargo run --bin uniffi-bindgen generate --library ../target/debug/liblumina_node_uniffi.a --language swift --out-dir ../target/swift-uniffi-bindings
+cargo build --lib --bin uniffi-bindgen
+
+"$target_dir"/debug/uniffi-bindgen \
+  generate \
+  --library ../target/debug/liblumina_node_uniffi.a \
+  --language swift --out-dir \
+  ../target/swift-uniffi-bindings
 
 cd tests/swift
 
@@ -21,10 +26,10 @@ mkdir lib
 mkdir -p Sources/LuminaNodeHeaders
 mkdir -p Sources/LuminaNode
 
-cp ../../../target/debug/liblumina_node_uniffi.a lib
-cp ../../../target/swift-uniffi-bindings/*.swift Sources/LuminaNode
-cp ../../../target/swift-uniffi-bindings/*.h Sources/LuminaNodeHeaders
-cat ../../../target/swift-uniffi-bindings/*.modulemap > Sources/LuminaNodeHeaders/module.modulemap
+cp "$target_dir"/debug/liblumina_node_uniffi.a lib
+cp "$target_dir"/swift-uniffi-bindings/*.swift Sources/LuminaNode
+cp "$target_dir"/swift-uniffi-bindings/*.h Sources/LuminaNodeHeaders
+cat "$target_dir"/swift-uniffi-bindings/*.modulemap > Sources/LuminaNodeHeaders/module.modulemap
 
 if [ -n "${CI:-}" ]; then
   # On CI there is an issue with permissions as runner has non-standard user & group ids
@@ -44,5 +49,5 @@ $SUDO docker run \
   --user "$user" \
   --volume "$PWD":/app \
   --workdir /app \
-  swift:6.0.3 \
+  swift:6 \
   swift test
