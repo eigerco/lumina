@@ -19,7 +19,7 @@ use blockstore::Blockstore;
 use celestia_types::hash::Hash;
 use celestia_types::nmt::Namespace;
 use celestia_types::row::Row;
-use celestia_types::row_namespace_data::RowNamespaceData;
+use celestia_types::row_namespace_data::{NamespaceData, RowNamespaceData};
 use celestia_types::sample::Sample;
 use celestia_types::{Blob, ExtendedHeader};
 use lumina_utils::executor::{JoinHandle, spawn, spawn_cancellable};
@@ -29,6 +29,9 @@ use crate::daser::{
     DEFAULT_ADDITIONAL_HEADER_SUB_CONCURENCY, DEFAULT_CONCURENCY_LIMIT, Daser, DaserArgs,
 };
 use crate::events::{EventChannel, EventSubscriber, NodeEvent};
+use crate::node::subscriptions::{
+    SubscriptionError, forward_new_blobs, forward_new_headers, forward_new_shares,
+};
 use crate::p2p::shwap::sample_cid;
 use crate::p2p::{P2p, P2pArgs};
 use crate::pruner::{Pruner, PrunerArgs};
@@ -36,6 +39,7 @@ use crate::store::{InMemoryStore, SamplingMetadata, Store, StoreError};
 use crate::syncer::{Syncer, SyncerArgs};
 
 mod builder;
+pub mod subscriptions;
 
 pub use self::builder::{
     DEFAULT_PRUNING_WINDOW, DEFAULT_PRUNING_WINDOW_IN_MEMORY, NodeBuilder, NodeBuilderError,
@@ -501,22 +505,10 @@ where
         }
     }
 
-    fn height_stream(&self) -> Result<ReceiverStream<Result<u64, SubscriptionError>>> {
-        let store = self
-            .store
-            .as_ref()
-            .cloned()
-            .expect("store should be present");
-
-        //let (tx, rx)
-        spawn(async move { loop {} });
-        todo!()
-    }
-
     /// Return a stream which will yield all the headers, as they are being received by the node,
     /// starting from the first header received after the call. Stream is guaranteed to return either
     /// header or error for each height, in order.
-    pub async fn header_subscribe(
+    pub fn header_subscribe(
         &self,
     ) -> Result<ReceiverStream<Result<ExtendedHeader, SubscriptionError>>> {
         let store = self
@@ -524,29 +516,13 @@ where
             .as_ref()
             .cloned()
             .expect("store should be present");
-        let mut prev_head = store.head_height().await?;
 
+        // We're keeping a small buffer of headers, so that new headers are cached eagerly
+        // as they come in, giving consumer additional buffer of time before they are no longer
+        // available. This is mostly relevant for cases where pruning window is set to zero.
         let (tx, rx) = mpsc::channel(16);
 
-        spawn(async move {
-            loop {
-                let new_head = store.wait_new_head().await;
-                for height in (prev_head + 1)..=new_head {
-                    let header_or_error =
-                        store
-                            .get_by_height(height)
-                            .await
-                            .map_err(|e| SubscriptionError {
-                                height,
-                                source: NodeError::Store(e),
-                            });
-                    if tx.send(header_or_error).await.is_err() {
-                        return; // receiver dropped
-                    }
-                    prev_head = new_head;
-                }
-            }
-        });
+        spawn(async move { forward_new_headers(store, tx).await });
 
         Ok(ReceiverStream::new(rx))
     }
@@ -554,7 +530,7 @@ where
     /// Return a stream which will yield all the blobs from the namespace, as the new headers
     /// are being received by the node starting from the first header received after the call.
     /// Stream is guaranteed to return all blobs (possibly zero) or error for each height, in order.
-    pub async fn blob_subscribe(
+    pub fn blob_subscribe(
         &self,
         namespace: Namespace,
     ) -> Result<ReceiverStream<Result<(u64, Vec<Blob>), SubscriptionError>>> {
@@ -565,46 +541,36 @@ where
             .expect("store should be present");
         let p2p = self.p2p.as_ref().cloned().expect("p2p should be present");
 
-        let mut prev_head = store.head_height().await?;
+        // We're keeping a small buffer of headers, so that new headers are cached eagerly
+        // as they come in, giving consumer additional buffer of time before they are no longer
+        // available. This is mostly relevant for cases where pruning window is set to zero.
+        let (tx, rx) = mpsc::channel(16);
+
+        spawn(async move { forward_new_blobs(namespace, tx, store, p2p).await });
+
+        Ok(ReceiverStream::new(rx))
+    }
+
+    pub async fn share_subscribe(
+        &self,
+        namespace: Namespace,
+    ) -> Result<ReceiverStream<Result<(u64, NamespaceData), SubscriptionError>>> {
+        let store = self
+            .store
+            .as_ref()
+            .cloned()
+            .expect("store should be present");
+        let p2p = self.p2p.as_ref().cloned().expect("p2p should be present");
 
         // We're keeping a small buffer of headers, so that new headers are cached eagerly
         // as they come in, giving consumer additional buffer of time before they are no longer
         // available. This is mostly relevant for cases where pruning window is set to zero.
         let (tx, rx) = mpsc::channel(16);
-        spawn(async move {
-            loop {
-                let new_head = store.wait_new_head().await;
-                for height in (prev_head + 1)..=new_head {
-                    let blobs_or_error = p2p
-                        .get_all_blobs(namespace, height, None, store.as_ref())
-                        .await
-                        .map(|blobs| (height, blobs))
-                        .map_err(|e| SubscriptionError {
-                            height,
-                            source: NodeError::P2p(e),
-                        });
 
-                    if tx.send(blobs_or_error).await.is_err() {
-                        return; // receiver dropped
-                    }
-                }
-                prev_head = new_head;
-            }
-        });
+        spawn(async move { forward_new_shares(namespace, tx, store, p2p).await });
 
         Ok(ReceiverStream::new(rx))
     }
-}
-
-/// Error thrown while processing subscription
-#[derive(Debug, thiserror::Error)]
-#[error("Unable to receive subscription item at {height}: {source}")]
-pub struct SubscriptionError {
-    /// Height of the subscription item
-    pub height: u64,
-    /// Error that occured
-    #[source]
-    pub source: NodeError,
 }
 
 impl<B, S> Drop for Node<B, S>

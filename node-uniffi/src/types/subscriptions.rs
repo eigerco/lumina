@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use celestia_types::{Blob, ExtendedHeader};
 use futures::StreamExt;
-use lumina_node::node::SubscriptionError as NodeSubscriptionError;
+use lumina_node::node::subscriptions::SubscriptionError as NodeSubscriptionError;
 use tokio::sync::Mutex;
 use tokio_stream::wrappers::ReceiverStream;
 use uniffi::Object;
