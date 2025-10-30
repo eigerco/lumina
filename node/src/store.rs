@@ -16,7 +16,6 @@ use prost::Message;
 use serde::{Deserialize, Serialize};
 use tendermint_proto::Protobuf;
 use thiserror::Error;
-use tokio::sync::broadcast::Receiver;
 #[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
 use wasm_bindgen::prelude::*;
 

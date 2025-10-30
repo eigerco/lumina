@@ -39,6 +39,7 @@ pub(crate) enum WorkerCommand {
 pub(crate) enum SubscriptionCommand {
     Headers,
     Blobs(Namespace),
+    Shares(Namespace),
 }
 
 #[allow(clippy::large_enum_variant)]

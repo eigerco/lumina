@@ -1,6 +1,5 @@
 use std::time::Duration;
 
-use futures::StreamExt;
 use libp2p::{Multiaddr, PeerId};
 use serde::Serialize;
 use serde_wasm_bindgen::to_value;
@@ -23,7 +22,7 @@ use crate::commands::{
     WorkerCommand, WorkerError, WorkerResponse, WorkerResult,
 };
 use crate::error::{Context, Error, Result};
-use crate::subscriptions::{BlobsAtHeight, forward_stream_to_message_port};
+use crate::subscriptions::forward_stream_to_message_port;
 use crate::utils::random_id;
 use crate::worker_server::WorkerServer;
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
@@ -119,8 +118,7 @@ impl NodeWorker {
                     .node
                     .as_mut()
                     .ok_or(WorkerError::NodeNotRunning)?
-                    .process_subscription(command)
-                    .await?;
+                    .process_subscription(command)?;
                 WorkerResponse::Subscribed(Some(port.into()))
             }
         })
@@ -293,23 +291,19 @@ impl NodeWorkerInstance {
         })
     }
 
-    async fn process_subscription(
-        &mut self,
-        subscription: SubscriptionCommand,
-    ) -> Result<MessagePort> {
+    fn process_subscription(&mut self, subscription: SubscriptionCommand) -> Result<MessagePort> {
         match subscription {
             SubscriptionCommand::Headers => {
-                let stream = self.node.header_subscribe().await?;
+                let stream = self.node.header_subscribe()?;
                 forward_stream_to_message_port(stream)
             }
             SubscriptionCommand::Blobs(namespace) => {
-                let stream = self.node.blob_subscribe(namespace).await?;
-
-                forward_stream_to_message_port(
-                    stream.map(|result| {
-                        result.map(|(height, blobs)| BlobsAtHeight { height, blobs })
-                    }),
-                )
+                let stream = self.node.blob_subscribe(namespace)?;
+                forward_stream_to_message_port(stream)
+            }
+            SubscriptionCommand::Shares(namespace) => {
+                let stream = self.node.share_subscribe(namespace)?;
+                forward_stream_to_message_port(stream)
             }
         }
     }

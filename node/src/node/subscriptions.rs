@@ -1,9 +1,9 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use celestia_types::blob::BlobsAtHeight;
 use celestia_types::nmt::Namespace;
-use celestia_types::row_namespace_data::NamespaceData;
-use celestia_types::{Blob, ExtendedHeader};
+use celestia_types::{ExtendedHeader, SharesAtHeight};
 use tokio::sync::mpsc;
 
 use crate::NodeError;
@@ -51,7 +51,7 @@ pub(crate) async fn forward_new_headers<S: Store>(
 
 pub(crate) async fn forward_new_blobs<S: Store>(
     namespace: Namespace,
-    tx: mpsc::Sender<Result<(u64, Vec<Blob>), SubscriptionError>>,
+    tx: mpsc::Sender<Result<BlobsAtHeight, SubscriptionError>>,
     store: Arc<S>,
     p2p: Arc<P2p>,
 ) {
@@ -63,7 +63,7 @@ pub(crate) async fn forward_new_blobs<S: Store>(
             let blobs_or_error = p2p
                 .get_all_blobs(namespace, height, Some(SHWAP_FETCH_TIMEOUT), store.as_ref())
                 .await
-                .map(|blobs| (height, blobs))
+                .map(|blobs| BlobsAtHeight { height, blobs })
                 .map_err(|e| SubscriptionError {
                     height,
                     source: NodeError::P2p(e),
@@ -79,7 +79,7 @@ pub(crate) async fn forward_new_blobs<S: Store>(
 
 pub(crate) async fn forward_new_shares<S: Store>(
     namespace: Namespace,
-    tx: mpsc::Sender<Result<(u64, NamespaceData), SubscriptionError>>,
+    tx: mpsc::Sender<Result<SharesAtHeight, SubscriptionError>>,
     store: Arc<S>,
     p2p: Arc<P2p>,
 ) {
@@ -112,7 +112,14 @@ pub(crate) async fn forward_new_shares<S: Store>(
                     store.as_ref(),
                 )
                 .await
-                .map(|blobs| (height, blobs))
+                .map(|data| SharesAtHeight {
+                    height,
+                    shares: data
+                        .rows
+                        .into_iter()
+                        .flat_map(|row| row.shares.into_iter())
+                        .collect(),
+                })
                 .map_err(|e| SubscriptionError {
                     height,
                     source: NodeError::P2p(e),

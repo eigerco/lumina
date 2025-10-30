@@ -3,6 +3,7 @@
 use std::time::Duration;
 
 use blockstore::EitherBlockstore;
+use celestia_types::blob::BlobsAtHeight;
 use js_sys::{Array, AsyncIterator};
 use libp2p::Multiaddr;
 use libp2p::identity::Keypair;
@@ -12,7 +13,7 @@ use wasm_bindgen::prelude::*;
 use web_sys::BroadcastChannel;
 
 use celestia_types::nmt::Namespace;
-use celestia_types::{Blob, ExtendedHeader};
+use celestia_types::{Blob, ExtendedHeader, SharesAtHeight};
 use lumina_node::blockstore::{InMemoryBlockstore, IndexedDbBlockstore};
 use lumina_node::network;
 use lumina_node::node::{DEFAULT_PRUNING_WINDOW_IN_MEMORY, NodeBuilder};
@@ -22,7 +23,7 @@ use crate::commands::{
     NodeCommand, SingleHeaderQuery, SubscriptionCommand, WorkerCommand, WorkerError, WorkerResponse,
 };
 use crate::error::{Context, Result};
-use crate::subscriptions::{BlobsAtHeight, into_async_iterator};
+use crate::subscriptions::into_async_iterator;
 use crate::utils::{
     Network, is_safari, js_value_from_display, request_storage_persistence, timeout,
 };
@@ -412,12 +413,20 @@ impl NodeClient {
         into_async_iterator::<ExtendedHeader>(port)
     }
 
-    #[wasm_bindgen(js_name = blobSubscribe)]
-    pub async fn blob_subscribe(&self, namespace: Namespace) -> Result<AsyncIterator> {
+    #[wasm_bindgen(js_name = blobsSubscribe)]
+    pub async fn blobs_subscribe(&self, namespace: Namespace) -> Result<AsyncIterator> {
         let command = SubscriptionCommand::Blobs(namespace);
         let port = self.worker.subscribe(command).await?;
 
         into_async_iterator::<BlobsAtHeight>(port)
+    }
+
+    #[wasm_bindgen(js_name = sharesSubscribe)]
+    pub async fn shares_subscribe(&self, namespace: Namespace) -> Result<AsyncIterator> {
+        let command = SubscriptionCommand::Shares(namespace);
+        let port = self.worker.subscribe(command).await?;
+
+        into_async_iterator::<SharesAtHeight>(port)
     }
 }
 

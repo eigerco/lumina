@@ -23,7 +23,7 @@ use tokio::sync::{Mutex, RwLock};
 use uniffi::Object;
 
 use crate::error::{LuminaError, Result};
-use crate::types::{BlobStream, HeaderStream};
+use crate::types::{BlobsStream, HeaderStream, SharesStream};
 use crate::types::{NetworkInfo, NodeConfig, NodeEvent, PeerId, SyncingInfo};
 
 uniffi::setup_scaffolding!();
@@ -307,10 +307,20 @@ impl LuminaNode {
     /// Return a stream which will yield all the blobs from the namespace, as the new headers
     /// are being received by the node starting from the first header received after the call.
     /// Stream is guaranteed to return all blobs (possibly zero) or error for each height, in order.
-    pub async fn blob_subscribe(&self, namespace: Arc<Namespace>) -> Result<BlobStream> {
+    pub async fn blobs_subscribe(&self, namespace: Arc<Namespace>) -> Result<BlobsStream> {
         let node = self.node.read().await;
         let node = node.as_ref().ok_or(LuminaError::NodeNotRunning)?;
         let stream = node.blob_subscribe(*namespace.as_ref())?;
-        Ok(BlobStream::new(stream))
+        Ok(BlobsStream::new(stream))
+    }
+
+    /// Return a stream which will yield all the shares from the namespace, as the new headers
+    /// are being received by the node starting from the first header received after the call.
+    /// Stream is guaranteed to return all shares (possibly zero) or error for each height, in order.
+    pub async fn shares_subscribe(&self, namespace: Arc<Namespace>) -> Result<SharesStream> {
+        let node = self.node.read().await;
+        let node = node.as_ref().ok_or(LuminaError::NodeNotRunning)?;
+        let stream = node.share_subscribe(*namespace.as_ref())?;
+        Ok(SharesStream::new(stream))
     }
 }

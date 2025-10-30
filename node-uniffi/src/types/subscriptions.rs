@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
-use celestia_types::{Blob, ExtendedHeader};
+use celestia_types::blob::{Blob, BlobsAtHeight as RustBlobsAtHeight};
+use celestia_types::{ExtendedHeader, Share, SharesAtHeight as RustSharesAtHeight};
 use futures::StreamExt;
 use lumina_node::node::subscriptions::SubscriptionError as NodeSubscriptionError;
 use tokio::sync::Mutex;
@@ -10,7 +11,8 @@ use uniffi::Object;
 use crate::error::LuminaError;
 
 type HeaderSubscriptionItem = Result<ExtendedHeader, NodeSubscriptionError>;
-type BlobSubscriptionItem = Result<(u64, Vec<Blob>), NodeSubscriptionError>;
+type BlobsSubscriptionItem = Result<RustBlobsAtHeight, NodeSubscriptionError>;
+type SharesSubscriptionItem = Result<RustSharesAtHeight, NodeSubscriptionError>;
 
 #[derive(uniffi::Error, Debug, thiserror::Error)]
 pub enum SubscriptionError {
@@ -48,33 +50,29 @@ impl HeaderStream {
 }
 
 #[derive(Object)]
-pub struct BlobStream(Mutex<ReceiverStream<BlobSubscriptionItem>>);
+pub struct BlobsStream(Mutex<ReceiverStream<BlobsSubscriptionItem>>);
 
-impl BlobStream {
-    pub(crate) fn new(stream: ReceiverStream<BlobSubscriptionItem>) -> Self {
-        BlobStream(Mutex::new(stream))
+impl BlobsStream {
+    pub(crate) fn new(stream: ReceiverStream<BlobsSubscriptionItem>) -> Self {
+        BlobsStream(Mutex::new(stream))
     }
 }
 
 #[uniffi::export]
-impl BlobStream {
+impl BlobsStream {
     pub async fn next(&self) -> Result<BlobsAtHeight, SubscriptionError> {
-        let (height, blobs) = self
-            .0
+        self.0
             .lock()
             .await
             .next()
             .await
             .ok_or(SubscriptionError::StreamEnded)?
-            .map_err(SubscriptionError::from)?;
-
-        let blobs = blobs.into_iter().map(Arc::new).collect();
-
-        Ok(BlobsAtHeight { height, blobs })
+            .map(BlobsAtHeight::from)
+            .map_err(SubscriptionError::from)
     }
 }
 
-#[derive(Debug, Clone, uniffi::Object)]
+#[derive(Debug, Clone, Object)]
 pub struct BlobsAtHeight {
     pub height: u64,
     pub blobs: Vec<Arc<Blob>>,
@@ -88,6 +86,64 @@ impl BlobsAtHeight {
 
     fn blobs(self: Arc<Self>) -> Vec<Arc<Blob>> {
         self.blobs.iter().map(Arc::clone).collect()
+    }
+}
+
+impl From<RustBlobsAtHeight> for BlobsAtHeight {
+    fn from(value: RustBlobsAtHeight) -> Self {
+        BlobsAtHeight {
+            height: value.height,
+            blobs: value.blobs.into_iter().map(Arc::new).collect(),
+        }
+    }
+}
+
+#[derive(Object)]
+pub struct SharesStream(Mutex<ReceiverStream<SharesSubscriptionItem>>);
+
+impl SharesStream {
+    pub(crate) fn new(stream: ReceiverStream<SharesSubscriptionItem>) -> SharesStream {
+        SharesStream(Mutex::new(stream))
+    }
+}
+
+#[uniffi::export]
+impl SharesStream {
+    pub async fn next(&self) -> Result<SharesAtHeight, SubscriptionError> {
+        self.0
+            .lock()
+            .await
+            .next()
+            .await
+            .ok_or(SubscriptionError::StreamEnded)?
+            .map(SharesAtHeight::from)
+            .map_err(SubscriptionError::from)
+    }
+}
+
+#[derive(Debug, Clone, Object)]
+pub struct SharesAtHeight {
+    pub height: u64,
+    pub shares: Vec<Arc<Share>>,
+}
+
+#[uniffi::export]
+impl SharesAtHeight {
+    fn height(&self) -> u64 {
+        self.height
+    }
+
+    fn shares(self: Arc<Self>) -> Vec<Arc<Share>> {
+        self.shares.iter().map(Arc::clone).collect()
+    }
+}
+
+impl From<RustSharesAtHeight> for SharesAtHeight {
+    fn from(value: RustSharesAtHeight) -> Self {
+        SharesAtHeight {
+            height: value.height,
+            shares: value.shares.into_iter().map(Arc::new).collect(),
+        }
     }
 }
 

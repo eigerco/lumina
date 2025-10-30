@@ -7,6 +7,7 @@ use std::ops::RangeBounds;
 use std::sync::Arc;
 use std::time::Duration;
 
+use celestia_types::blob::BlobsAtHeight;
 use libp2p::identity::Keypair;
 use libp2p::swarm::NetworkInfo;
 use libp2p::{Multiaddr, PeerId};
@@ -19,9 +20,9 @@ use blockstore::Blockstore;
 use celestia_types::hash::Hash;
 use celestia_types::nmt::Namespace;
 use celestia_types::row::Row;
-use celestia_types::row_namespace_data::{NamespaceData, RowNamespaceData};
+use celestia_types::row_namespace_data::RowNamespaceData;
 use celestia_types::sample::Sample;
-use celestia_types::{Blob, ExtendedHeader};
+use celestia_types::{Blob, ExtendedHeader, SharesAtHeight};
 use lumina_utils::executor::{JoinHandle, spawn, spawn_cancellable};
 
 use crate::blockstore::{InMemoryBlockstore, SampleBlockstore};
@@ -533,7 +534,7 @@ where
     pub fn blob_subscribe(
         &self,
         namespace: Namespace,
-    ) -> Result<ReceiverStream<Result<(u64, Vec<Blob>), SubscriptionError>>> {
+    ) -> Result<ReceiverStream<Result<BlobsAtHeight, SubscriptionError>>> {
         let store = self
             .store
             .as_ref()
@@ -551,10 +552,10 @@ where
         Ok(ReceiverStream::new(rx))
     }
 
-    pub async fn share_subscribe(
+    pub fn share_subscribe(
         &self,
         namespace: Namespace,
-    ) -> Result<ReceiverStream<Result<(u64, NamespaceData), SubscriptionError>>> {
+    ) -> Result<ReceiverStream<Result<SharesAtHeight, SubscriptionError>>> {
         let store = self
             .store
             .as_ref()

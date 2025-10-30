@@ -3,11 +3,10 @@ use std::pin::Pin;
 use std::rc::Rc;
 use std::task::{Context, Poll};
 
-use celestia_types::Blob;
 use futures::stream::LocalBoxStream;
 use futures::{Stream, StreamExt};
 use js_sys::{AsyncIterator, Boolean, Object, Promise, Reflect, Symbol};
-use lumina_node::node::SubscriptionError;
+use lumina_node::node::subscriptions::SubscriptionError;
 use lumina_utils::executor::spawn;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -29,13 +28,6 @@ pub struct JsSubscriptionError {
     pub height: Option<u64>,
     /// error message
     pub error: String,
-}
-
-#[wasm_bindgen(getter_with_clone)]
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct BlobsAtHeight {
-    pub height: u64,
-    pub blobs: Vec<Blob>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -96,6 +88,8 @@ impl<S> Clone for SubscriptionStream<S> {
     }
 }
 
+// Wrap provided port into SubscriptionStream and prepare it to be used as
+// js AsyncIterator. Assumes provided port was prepared with [`forward_stream_to_message_port`]
 pub(crate) fn into_async_iterator<S>(port: MessagePortLike) -> Result<AsyncIterator>
 where
     S: DeserializeOwned + Into<JsValue> + 'static,
