@@ -1,6 +1,6 @@
 use std::{array::from_ref, time::Duration};
 
-use celestia_types::{Blob, nmt::Namespace};
+use celestia_types::{Blob, blob::BlobsAtHeight, nmt::Namespace};
 use futures::stream::StreamExt;
 use lumina_utils::time::sleep;
 
@@ -12,7 +12,7 @@ mod utils;
 async fn header_subscription() {
     let (node, _) = new_connected_node().await;
 
-    let mut header_stream = node.header_subscribe().await.unwrap();
+    let mut header_stream = node.header_subscribe().unwrap();
     let current_head = node.get_local_head_header().await.unwrap();
 
     let h0 = header_stream.next().await.unwrap().unwrap();
@@ -44,23 +44,23 @@ async fn blob_subscription() {
     )
     .unwrap();
 
-    let mut blob_stream = node.blob_subscribe(namespace).await.unwrap();
+    let mut blob_stream = node.blob_subscribe(namespace).unwrap();
 
     let submitted_at = blob_submit(&client, from_ref(&blob)).await;
 
     sleep(Duration::from_secs(2)).await;
 
     let blobs = loop {
-        let (h, bs) = blob_stream.next().await.unwrap().unwrap();
-        if h == submitted_at {
-            break bs;
+        let BlobsAtHeight { height, blobs } = blob_stream.next().await.unwrap().unwrap();
+        if height == submitted_at {
+            break blobs;
         }
-        assert!(h < submitted_at);
-        assert!(bs.is_empty());
+        assert!(height < submitted_at);
+        assert!(blobs.is_empty());
     };
 
     assert_eq!(&blobs, from_ref(&blob));
 
-    let (_h, bs) = blob_stream.next().await.unwrap().unwrap();
-    assert_eq!(bs, vec![]);
+    let BlobsAtHeight { blobs, .. } = blob_stream.next().await.unwrap().unwrap();
+    assert_eq!(blobs, vec![]);
 }

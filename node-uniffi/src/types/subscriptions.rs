@@ -16,10 +16,16 @@ type SharesSubscriptionItem = Result<RustSharesAtHeight, NodeSubscriptionError>;
 
 #[derive(uniffi::Error, Debug, thiserror::Error)]
 pub enum SubscriptionError {
+    /// Error retreiving subscription item
     #[error("Unable to receive subscription item at {height}: {error}")]
     NodeError { height: u64, error: LuminaError },
+    /// Receiver lagged too far behind and the subscription will restart from the current head
+    #[error("Subscription item height already pruned from the store, skipping {0} items")]
+    Lagged(u64),
+    /// Unexpected node subscription stream close
     #[error("Subscription stream ended")]
     StreamEnded,
+    /// Error serializing header
     #[error("Unable to serialize header: {0}")]
     Serialization(String),
 }
@@ -149,9 +155,12 @@ impl From<RustSharesAtHeight> for SharesAtHeight {
 
 impl From<NodeSubscriptionError> for SubscriptionError {
     fn from(error: NodeSubscriptionError) -> Self {
-        SubscriptionError::NodeError {
-            height: error.height,
-            error: error.source.into(),
+        match error {
+            NodeSubscriptionError::Node { height, source } => SubscriptionError::NodeError {
+                height,
+                error: source.into(),
+            },
+            NodeSubscriptionError::Lagged(skipped) => SubscriptionError::Lagged(skipped),
         }
     }
 }

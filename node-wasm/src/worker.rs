@@ -302,7 +302,7 @@ impl NodeWorkerInstance {
                 forward_stream_to_message_port(stream)
             }
             SubscriptionCommand::Shares(namespace) => {
-                let stream = self.node.share_subscribe(namespace)?;
+                let stream = self.node.namespace_subscribe(namespace)?;
                 forward_stream_to_message_port(stream)
             }
         }

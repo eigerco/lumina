@@ -7,8 +7,6 @@ use multihash::Multihash;
 use nmt_rs::NamespaceMerkleHasher;
 use nmt_rs::simple_merkle::tree::MerkleHash;
 use serde::{Deserialize, Serialize};
-#[cfg(feature = "uniffi")]
-use uniffi::Object;
 #[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
 use wasm_bindgen::prelude::*;
 

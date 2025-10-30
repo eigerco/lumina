@@ -413,16 +413,16 @@ impl NodeClient {
         into_async_iterator::<ExtendedHeader>(port)
     }
 
-    #[wasm_bindgen(js_name = blobsSubscribe)]
-    pub async fn blobs_subscribe(&self, namespace: Namespace) -> Result<AsyncIterator> {
+    #[wasm_bindgen(js_name = blobSubscribe)]
+    pub async fn blob_subscribe(&self, namespace: Namespace) -> Result<AsyncIterator> {
         let command = SubscriptionCommand::Blobs(namespace);
         let port = self.worker.subscribe(command).await?;
 
         into_async_iterator::<BlobsAtHeight>(port)
     }
 
-    #[wasm_bindgen(js_name = sharesSubscribe)]
-    pub async fn shares_subscribe(&self, namespace: Namespace) -> Result<AsyncIterator> {
+    #[wasm_bindgen(js_name = namespaceSubscribe)]
+    pub async fn namespace_subscribe(&self, namespace: Namespace) -> Result<AsyncIterator> {
         let command = SubscriptionCommand::Shares(namespace);
         let port = self.worker.subscribe(command).await?;
 

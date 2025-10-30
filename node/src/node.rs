@@ -552,7 +552,7 @@ where
         Ok(ReceiverStream::new(rx))
     }
 
-    pub fn share_subscribe(
+    pub fn namespace_subscribe(
         &self,
         namespace: Namespace,
     ) -> Result<ReceiverStream<Result<SharesAtHeight, SubscriptionError>>> {
