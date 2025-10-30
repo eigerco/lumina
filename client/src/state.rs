@@ -374,7 +374,7 @@ impl StateApi {
         validator_address: &ValAddress,
     ) -> AsyncGrpcCall<QueryDelegationResponse> {
         let this = StateApi::new(self.inner.clone());
-        let validator_address = validator_address.clone();
+        let validator_address = *validator_address;
 
         AsyncGrpcCall::new(move |context| async move {
             let delegator_address = this.inner.address()?;
@@ -394,7 +394,7 @@ impl StateApi {
         validator_address: &ValAddress,
     ) -> AsyncGrpcCall<QueryUnbondingDelegationResponse> {
         let this = StateApi::new(self.inner.clone());
-        let validator_address = validator_address.clone();
+        let validator_address = *validator_address;
 
         AsyncGrpcCall::new(move |context| async move {
             let delegator_address = this.inner.address()?;
@@ -415,8 +415,8 @@ impl StateApi {
         dest_validator_address: &ValAddress,
     ) -> AsyncGrpcCall<QueryRedelegationsResponse> {
         let this = StateApi::new(self.inner.clone());
-        let src_validator_address = src_validator_address.clone();
-        let dest_validator_address = dest_validator_address.clone();
+        let src_validator_address = *src_validator_address;
+        let dest_validator_address = *dest_validator_address;
 
         AsyncGrpcCall::new(move |context| async move {
             let delegator_address = this.inner.address()?;
