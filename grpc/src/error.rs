@@ -116,6 +116,12 @@ pub enum GrpcClientBuilderError {
     /// Error related to the metadata
     #[error(transparent)]
     Metadata(#[from] MetadataError),
+
+    /// Tls support is not enabled but requested
+    #[error(
+        "Tls support is not enabled but requested via url, please enable it using proper feature flags"
+    )]
+    TlsNotSupported,
 }
 
 #[derive(thiserror::Error, Debug)]
