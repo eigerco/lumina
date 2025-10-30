@@ -776,6 +776,24 @@ impl GrpcClient {
                         ));
                     }
                 }
+                // If some transaction was rejected when creating a block, then it means that its
+                // sequence wasn't used. This will cause all the following transactions in the
+                // same block to also be rejected due to the sequence mismatch.
+                // To recover, we roll back the sequence to the one of rejected transaction, but
+                // only if rejection didn't happen due to the sequence mismatch. That way we should
+                // always revert the sequence to the one of the first rejected transaction.
+                TxStatus::Rejected => {
+                    if !is_wrong_sequence(tx_status.execution_code) {
+                        let mut acc = self.lock_account(context).await?;
+                        acc.base.sequence = sequence;
+                    }
+
+                    return Err(Error::TxRejected(
+                        hash,
+                        tx_status.execution_code,
+                        tx_status.error,
+                    ));
+                }
                 // Evicted transaction should be retransmitted without ever trying to re-sign it
                 // to prevent double spending, because some nodes may have it in a mempool and some not.
                 // If we would re-sign it and both old and new one are confirmed, it'd double spend.
@@ -803,16 +821,6 @@ impl GrpcClient {
                         return Err(Error::TxEvicted(hash));
                     }
                 }
-                // we need to revert the account sequence to that of the rejected tx.
-                TxStatus::Rejected => {
-                    let mut acc = self.lock_account(context).await?;
-                    acc.base.sequence = sequence;
-                    return Err(Error::TxRejected(
-                        hash,
-                        tx_status.execution_code,
-                        tx_status.error,
-                    ));
-                }
                 // this case should never happen for node that accepted a broadcast
                 // however we handle it the same as evicted for extra safety
                 TxStatus::Unknown => {
@@ -831,6 +839,10 @@ impl fmt::Debug for GrpcClient {
     }
 }
 
+fn is_wrong_sequence(code: ErrorCode) -> bool {
+    code == ErrorCode::InvalidSequence || code == ErrorCode::WrongSequence
+}
+
 /// Returns Some if error is related to the wrong sequence.
 /// Inner result is the outcome of the parsing operation.
 fn extract_sequence_on_mismatch(err: &Error) -> Option<Result<u64>> {
@@ -838,11 +850,7 @@ fn extract_sequence_on_mismatch(err: &Error) -> Option<Result<u64>> {
         Error::TonicError(status) if status.message().contains(SEQUENCE_ERROR_PAT) => {
             status.message()
         }
-        Error::TxBroadcastFailed(_, code, message)
-            if code == &ErrorCode::InvalidSequence || code == &ErrorCode::WrongSequence =>
-        {
-            message.as_str()
-        }
+        Error::TxBroadcastFailed(_, code, message) if is_wrong_sequence(*code) => message.as_str(),
         _ => return None,
     };
 
