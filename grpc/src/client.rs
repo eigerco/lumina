@@ -569,30 +569,21 @@ impl GrpcClient {
             return Ok((gas_limit, gas_price));
         }
 
-        let GasEstimate { price, usage } = loop {
-            let tx = sign_tx(
-                tx_body.clone(),
-                chain_id.clone(),
-                &account.base,
-                account.pubkey,
-                account.signer,
-                0,
-                1,
-            )
+        let tx = sign_tx(
+            tx_body.clone(),
+            chain_id.clone(),
+            &account.base,
+            account.pubkey,
+            account.signer,
+            0,
+            1,
+        )
+        .await?;
+
+        let GasEstimate { price, usage } = self
+            .estimate_gas_price_and_usage(cfg.priority, tx.encode_to_vec())
+            .context(context)
             .await?;
-
-            let res = self
-                .estimate_gas_price_and_usage(cfg.priority, tx.encode_to_vec())
-                .context(context)
-                .await;
-
-            if let Some(new_sequence) = res.as_ref().err().and_then(extract_sequence_on_mismatch) {
-                account.base.sequence = new_sequence?;
-                continue;
-            }
-
-            break res?;
-        };
 
         Ok((usage, cfg.gas_price.unwrap_or(price)))
     }
@@ -616,14 +607,29 @@ impl GrpcClient {
         };
         let blobs: Vec<_> = blobs.into_iter().map(Into::into).collect();
 
-        let (gas_limit, gas_price) = self
-            .calculate_transaction_gas_params(&pfb, &cfg, chain_id.clone(), &mut account, context)
-            .await?;
-        let fee = (gas_limit as f64 * gas_price).ceil() as u64;
-
         // in case parallel submission failed because of the sequence mismatch,
         // we update the account, resign and broadcast transaction
         loop {
+            let res = self
+                .calculate_transaction_gas_params(
+                    &pfb,
+                    &cfg,
+                    chain_id.clone(),
+                    &mut account,
+                    context,
+                )
+                .await;
+
+            // if gas limit is not provided, we simulate the transaction
+            // which can also signal that sequence is wrong
+            if let Some(new_sequence) = res.as_ref().err().and_then(extract_sequence_on_mismatch) {
+                account.base.sequence = new_sequence?;
+                continue;
+            }
+
+            let (gas_limit, gas_price) = res?;
+            let fee = (gas_limit as f64 * gas_price).ceil() as u64;
+
             let tx = sign_tx(
                 pfb.clone(),
                 chain_id.clone(),
@@ -667,15 +673,29 @@ impl GrpcClient {
         // because node requires all transactions to be sequenced by account.sequence
         let mut account = self.lock_account(context).await?;
 
-        let (gas_limit, gas_price) = self
-            .calculate_transaction_gas_params(&tx, &cfg, chain_id.clone(), &mut account, context)
-            .await?;
-
-        let fee = (gas_limit as f64 * gas_price).ceil();
-
         // in case parallel submission failed because of the sequence mismatch,
         // we update the account, resign and broadcast transaction
         loop {
+            let res = self
+                .calculate_transaction_gas_params(
+                    &tx,
+                    &cfg,
+                    chain_id.clone(),
+                    &mut account,
+                    context,
+                )
+                .await;
+
+            // if gas limit is not provided, we simulate the transaction
+            // which can also signal that sequence is wrong
+            if let Some(new_sequence) = res.as_ref().err().and_then(extract_sequence_on_mismatch) {
+                account.base.sequence = new_sequence?;
+                continue;
+            }
+
+            let (gas_limit, gas_price) = res?;
+            let fee = (gas_limit as f64 * gas_price).ceil() as u64;
+
             let tx = sign_tx(
                 tx.clone(),
                 chain_id.clone(),
@@ -683,7 +703,7 @@ impl GrpcClient {
                 account.pubkey,
                 account.signer,
                 gas_limit,
-                fee as u64,
+                fee,
             )
             .await?;
 
