@@ -10,8 +10,8 @@ pub use imp::*;
 pub struct TestAccount {
     /// Bech32 `AccountId` of this account
     pub address: Address,
-    #[allow(dead_code)]
     /// public key
+    #[allow(dead_code)]
     pub verifying_key: VerifyingKey,
     /// private key
     pub signing_key: SigningKey,
