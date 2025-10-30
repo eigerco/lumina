@@ -353,7 +353,10 @@ impl fmt::Display for NodeEvent {
                 square_width,
                 shares,
             } => {
-                write!(f, "Sampling of block {height} started. Square: {square_width}x{square_width}, Shares: {shares:?}")
+                write!(
+                    f,
+                    "Sampling of block {height} started. Square: {square_width}x{square_width}, Shares: {shares:?}"
+                )
             }
             NodeEvent::ShareSamplingResult {
                 height,
@@ -386,7 +389,10 @@ impl fmt::Display for NodeEvent {
                 write!(f, "Fetching header of network head block started")
             }
             NodeEvent::FetchingHeadHeaderFinished { height, took } => {
-                write!(f, "Fetching header of network head block finished. Height: {height}, Took: {took:?}")
+                write!(
+                    f,
+                    "Fetching header of network head block finished. Height: {height}, Took: {took:?}"
+                )
             }
             NodeEvent::FetchingHeadersStarted {
                 from_height,
@@ -412,7 +418,10 @@ impl fmt::Display for NodeEvent {
                         "Fetching header of block {from_height} finished. Took: {took:?}"
                     )
                 } else {
-                    write!(f, "Fetching headers of blocks {from_height}-{to_height} finished. Took: {took:?}")
+                    write!(
+                        f,
+                        "Fetching headers of blocks {from_height}-{to_height} finished. Took: {took:?}"
+                    )
                 }
             }
             NodeEvent::FetchingHeadersFailed {
@@ -427,7 +436,10 @@ impl fmt::Display for NodeEvent {
                         "Fetching header of block {from_height} failed. Took: {took:?}, Error: {error}"
                     )
                 } else {
-                    write!(f, "Fetching headers of blocks {from_height}-{to_height} failed. Took: {took:?}, Error: {error}")
+                    write!(
+                        f,
+                        "Fetching headers of blocks {from_height}-{to_height} failed. Took: {took:?}, Error: {error}"
+                    )
                 }
             }
             NodeEvent::FatalSyncerError { error } => {
@@ -448,7 +460,10 @@ impl fmt::Display for NodeEvent {
             }
             NodeEvent::NetworkCompromised => {
                 write!(f, "The network is compromised and should not be trusted. ")?;
-                write!(f, "Node stopped synchronizing and sampling, but you can still make some queries to the network.")
+                write!(
+                    f,
+                    "Node stopped synchronizing and sampling, but you can still make some queries to the network."
+                )
             }
             NodeEvent::NodeStopped => {
                 write!(f, "Node stopped")

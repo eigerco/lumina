@@ -2,7 +2,7 @@
 //!
 //! This is a workaround for [serde's issue 1852](https://github.com/serde-rs/serde/issues/1852).
 
-use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use std::borrow::{Cow, ToOwned};
 use std::fmt::{self, Debug, Display, Formatter};
 use std::ops::Deref;

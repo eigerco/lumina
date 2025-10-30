@@ -8,7 +8,7 @@ use wasm_bindgen::prelude::*;
 use web_sys::MessageEvent;
 
 use crate::error::{Context, Error, Result};
-use crate::utils::{to_json_value, MessageEventExt};
+use crate::utils::{MessageEventExt, to_json_value};
 
 pub(crate) type Transferable = Option<JsValue>;
 

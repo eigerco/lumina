@@ -2,12 +2,12 @@
 
 use std::slice;
 
-use celestia_types::consts::appconsts::AppVersion;
 use celestia_types::Blob;
+use celestia_types::consts::appconsts::AppVersion;
 
 pub mod utils;
 
-use crate::utils::client::{blob_submit, new_test_client_with_url, AuthLevel};
+use crate::utils::client::{AuthLevel, blob_submit, new_test_client_with_url};
 use crate::utils::{random_bytes, random_ns};
 
 // Use node-1 (bridge node) as the RPC URL

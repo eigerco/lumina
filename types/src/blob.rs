@@ -15,7 +15,7 @@ use crate::consts::appconsts::AppVersion;
 use crate::error::UniffiResult;
 use crate::nmt::Namespace;
 use crate::state::{AccAddress, AddressTrait};
-use crate::{bail_validation, Error, Result, Share};
+use crate::{Error, Result, Share, bail_validation};
 
 pub use self::commitment::Commitment;
 pub use self::msg_pay_for_blobs::MsgPayForBlobs;
@@ -574,7 +574,7 @@ mod custom_serde {
     use crate::state::{AccAddress, AddressTrait};
     use crate::{Error, Result};
 
-    use super::{commitment, Blob, Commitment};
+    use super::{Blob, Commitment, commitment};
 
     mod index_serde {
         use super::*;

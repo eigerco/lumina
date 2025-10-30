@@ -2,13 +2,13 @@ use std::sync::Arc;
 
 use celestia_rpc::ShareClient;
 
+use crate::Result;
 use crate::api::share::{GetRangeResponse, GetRowResponse, SampleCoordinates};
 use crate::client::ClientInner;
 use crate::types::nmt::Namespace;
 use crate::types::row_namespace_data::NamespaceData;
 use crate::types::sample::Sample;
 use crate::types::{ExtendedDataSquare, Share};
-use crate::Result;
 
 /// Share API for quering bridge nodes.
 pub struct ShareApi {

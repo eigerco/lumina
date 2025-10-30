@@ -12,7 +12,7 @@ use serde_wasm_bindgen::to_value;
 use tendermint::block::header::Header;
 use tendermint::block::{Commit, Height};
 use tendermint::chain::id::Id;
-use tendermint::{validator, Time};
+use tendermint::{Time, validator};
 use tendermint_proto::Protobuf;
 #[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
 use wasm_bindgen::prelude::*;
@@ -22,8 +22,8 @@ use crate::hash::Hash;
 use crate::trust_level::DEFAULT_TRUST_LEVEL;
 use crate::validator_set::ValidatorSetExt;
 use crate::{
-    bail_validation, bail_verification, DataAvailabilityHeader, Error, Result, ValidateBasic,
-    ValidateBasicWithAppVersion,
+    DataAvailabilityHeader, Error, Result, ValidateBasic, ValidateBasicWithAppVersion,
+    bail_validation, bail_verification,
 };
 
 /// Information about a tendermint validator.

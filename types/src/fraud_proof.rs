@@ -4,7 +4,7 @@
 
 use std::fmt;
 
-use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use tendermint::block::Height;
 use tendermint_proto::Protobuf;
 
@@ -154,15 +154,15 @@ impl Serialize for Proof {
 #[cfg(test)]
 mod tests {
     use crate::consts::appconsts::AppVersion;
-    use crate::test_utils::{corrupt_eds, generate_dummy_eds, ExtendedHeaderGenerator};
+    use crate::test_utils::{ExtendedHeaderGenerator, corrupt_eds, generate_dummy_eds};
 
     use super::*;
 
     #[test]
     fn befp_serde() {
-        let mut gen = ExtendedHeaderGenerator::new();
+        let mut generator = ExtendedHeaderGenerator::new();
         let mut eds = generate_dummy_eds(8, AppVersion::V2);
-        let (_, proof) = corrupt_eds(&mut gen, &mut eds);
+        let (_, proof) = corrupt_eds(&mut generator, &mut eds);
 
         let proof = Proof::BadEncoding(proof);
 

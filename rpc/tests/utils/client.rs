@@ -7,8 +7,8 @@ use anyhow::Result;
 use celestia_rpc::prelude::*;
 use celestia_rpc::{Client, TxConfig};
 use celestia_types::Blob;
-use jsonrpsee::core::client::SubscriptionClientT;
 use jsonrpsee::core::ClientError;
+use jsonrpsee::core::client::SubscriptionClientT;
 use tokio::sync::{Mutex, MutexGuard};
 
 // Use node-2 (light node) as the default RPC URL

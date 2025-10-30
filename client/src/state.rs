@@ -2,19 +2,19 @@ use std::sync::Arc;
 
 use celestia_rpc::{HeaderClient, StateClient};
 
+use crate::Error;
 use crate::client::ClientInner;
 use crate::proto::cosmos::bank::v1beta1::MsgSend;
 use crate::proto::cosmos::staking::v1beta1::{
     MsgBeginRedelegate, MsgCancelUnbondingDelegation, MsgDelegate, MsgUndelegate,
 };
 use crate::tx::{GasEstimate, IntoProtobufAny, TxConfig, TxInfo, TxPriority};
+use crate::types::Blob;
 use crate::types::state::{
     AccAddress, Address, Coin, PageRequest, QueryDelegationResponse, QueryRedelegationsResponse,
     QueryUnbondingDelegationResponse, ValAddress,
 };
-use crate::types::Blob;
 use crate::utils::height_i64;
-use crate::Error;
 
 /// An async grpc call with [`crate::Error`]
 pub type AsyncGrpcCall<Response> = celestia_grpc::grpc::AsyncGrpcCall<Response, crate::Error>;
@@ -465,11 +465,11 @@ mod tests {
     use k256::ecdsa::SigningKey;
     use lumina_utils::test_utils::async_test;
 
+    use crate::Error;
     use crate::test_utils::{
         ensure_serializable_deserializable, new_client, new_read_only_client, new_rpc_only_client,
         node0_address, validator_address,
     };
-    use crate::Error;
 
     #[async_test]
     async fn transfer() {

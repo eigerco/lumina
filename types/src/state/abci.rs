@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 
 use crate::state::ErrorCode;
-use crate::{validation_error, Error, Height};
+use crate::{Error, Height, validation_error};
 
 /// Response to a tx query
 #[derive(Debug, Clone, Serialize, Deserialize)]

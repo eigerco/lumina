@@ -9,7 +9,7 @@ use tonic::codegen::Service;
 use tonic::metadata::MetadataMap;
 use zeroize::Zeroizing;
 
-use crate::boxed::{boxed, BoxedTransport};
+use crate::boxed::{BoxedTransport, boxed};
 use crate::client::AccountState;
 use crate::grpc::Context;
 use crate::signer::BoxedDocSigner;

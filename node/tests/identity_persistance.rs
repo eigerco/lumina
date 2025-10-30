@@ -1,7 +1,7 @@
 #![cfg(not(target_arch = "wasm32"))]
 
 use libp2p::identity::Keypair;
-use lumina_node::{store::RedbStore, NodeBuilder};
+use lumina_node::{NodeBuilder, store::RedbStore};
 use tempfile::TempDir;
 
 #[tokio::test]
