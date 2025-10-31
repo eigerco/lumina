@@ -14,13 +14,14 @@ use tracing_subscriber::prelude::*;
 use tracing_web::MakeConsoleWriter;
 use wasm_bindgen::prelude::*;
 use web_sys::{
-    DedicatedWorkerGlobalScope, MessageEvent, ServiceWorker, ServiceWorkerGlobalScope,
-    SharedWorker, SharedWorkerGlobalScope, Worker,
+    DedicatedWorkerGlobalScope, MessageChannel, MessageEvent, MessagePort, ServiceWorker,
+    ServiceWorkerGlobalScope, SharedWorker, SharedWorkerGlobalScope, Worker,
 };
 
 use lumina_node::network;
 
 use crate::error::{Error, Result};
+use crate::ports::MessagePortLike;
 
 /// Supported Celestia networks.
 #[wasm_bindgen]
@@ -107,18 +108,28 @@ impl WorkerSelf for ServiceWorker {
 }
 
 pub(crate) trait MessageEventExt {
-    fn get_port(&self) -> Option<JsValue>;
+    fn get_ports(&self) -> Vec<MessagePortLike>;
 }
+
 impl MessageEventExt for MessageEvent {
-    fn get_port(&self) -> Option<JsValue> {
+    fn get_ports(&self) -> Vec<MessagePortLike> {
         let ports = self.ports();
         if ports.is_array() {
-            let port = ports.get(0);
-            if !port.is_undefined() {
-                return Some(port);
-            }
+            ports.iter().map(MessagePortLike::from).collect()
+        } else {
+            vec![]
         }
-        None
+    }
+}
+
+pub(crate) trait MessageChannelExt {
+    fn new_ports() -> Result<(MessagePort, MessagePort)>;
+}
+
+impl MessageChannelExt for MessageChannel {
+    fn new_ports() -> Result<(MessagePort, MessagePort)> {
+        let channel = MessageChannel::new()?;
+        Ok((channel.port1(), channel.port2()))
     }
 }
 

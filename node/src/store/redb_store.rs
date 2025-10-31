@@ -285,7 +285,6 @@ impl RedbStore {
             else {
                 return Ok(());
             };
-
             let mut heights_table = tx.open_table(HEIGHTS_TABLE)?;
             let mut headers_table = tx.open_table(HEADERS_TABLE)?;
             let mut ranges_table = tx.open_table(RANGES_TABLE)?;

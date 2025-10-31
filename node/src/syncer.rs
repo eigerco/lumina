@@ -13,12 +13,13 @@ use lumina_utils::time::{Instant, Interval, sleep};
 use serde::{Deserialize, Serialize};
 use tendermint::Time;
 use tokio::select;
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::{broadcast, mpsc, oneshot};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, instrument, warn};
 
 use crate::block_ranges::{BlockRange, BlockRangeExt, BlockRanges};
 use crate::events::{EventPublisher, NodeEvent};
+use crate::node::subscriptions::HeightSequencer;
 use crate::p2p::{P2p, P2pError};
 use crate::store::{Store, StoreError};
 use crate::utils::{FusedReusableFuture, OneshotSenderExt, TimeExt};
@@ -100,6 +101,9 @@ enum SyncerCmd {
     GetInfo {
         respond_to: oneshot::Sender<SyncingInfo>,
     },
+    SubscribeHeights {
+        respond_to: oneshot::Sender<broadcast::Receiver<u64>>,
+    },
     #[cfg(test)]
     TriggerFetchNextBatch,
 }
@@ -174,6 +178,20 @@ where
         Ok(rx.await?)
     }
 
+    /// Subscribe to a broadcast of new header heights as they are being synchronised
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if the [`Syncer`] has been stopped.
+    pub(crate) async fn subscribe_heights(&self) -> Result<broadcast::Receiver<u64>> {
+        let (tx, rx) = oneshot::channel();
+
+        self.send_command(SyncerCmd::SubscribeHeights { respond_to: tx })
+            .await?;
+
+        Ok(rx.await?)
+    }
+
     #[cfg(test)]
     async fn trigger_fetch_next_batch(&self) -> Result<()> {
         self.send_command(SyncerCmd::TriggerFetchNextBatch).await
@@ -205,6 +223,7 @@ where
     ongoing_batch: Ongoing,
     sampling_window: Duration,
     pruning_window: Duration,
+    height_sequencer: HeightSequencer,
 }
 
 struct Ongoing {
@@ -237,6 +256,7 @@ where
             },
             sampling_window: args.sampling_window,
             pruning_window: args.pruning_window,
+            height_sequencer: HeightSequencer::new(),
         })
     }
 
@@ -290,6 +310,7 @@ where
 
                     info!("Setting initial subjective head to {network_head_height}");
                     self.set_subjective_head_height(network_head_height);
+                    self.height_sequencer.init(network_head_height);
 
                     let (header_sub_tx, header_sub_rx) = mpsc::channel(16);
                     self.p2p.init_header_sub(network_head, header_sub_tx).await?;
@@ -402,6 +423,10 @@ where
                 let info = self.syncing_info().await?;
                 respond_to.maybe_send(info);
             }
+            SyncerCmd::SubscribeHeights { respond_to } => {
+                let receiver = self.height_sequencer.subscribe();
+                respond_to.maybe_send(receiver);
+            }
             #[cfg(test)]
             SyncerCmd::TriggerFetchNextBatch => {
                 self.fetch_next_batch().await?;
@@ -427,6 +452,8 @@ where
                         height: new_head_height,
                     });
                 }
+                self.height_sequencer
+                    .signal_inserted(new_head_height..=new_head_height);
             }
         }
 
@@ -610,6 +637,8 @@ where
             to_height,
             took,
         });
+        self.height_sequencer
+            .signal_inserted(from_height..=to_height);
 
         Ok(())
     }
@@ -1245,6 +1274,99 @@ mod tests {
 
         // With a correct resposne, syncer should update the store
         assert_syncing(&syncer, &store, &[1..=20], 20).await;
+    }
+
+    #[async_test]
+    async fn height_sequencer_smoke() {
+        let mut generator = ExtendedHeaderGenerator::new();
+        let headers = generator.next_many(20);
+        let (syncer, store, mut p2p_mock) = initialized_syncer(headers[9].clone()).await;
+
+        let mut heights_receiver = syncer.subscribe_heights().await.unwrap();
+        let (tx, mut received_heights) = mpsc::unbounded_channel();
+        spawn(async move {
+            while let Ok(height) = heights_receiver.recv().await {
+                tx.send(height).unwrap();
+            }
+        });
+
+        // header sub receiving header at height 11 (adjacent, should be added immediately)
+        p2p_mock.announce_new_head(headers[10].clone());
+        assert_syncing(&syncer, &store, &[10..=11], 11).await;
+
+        // header sub receiving header at height 15 (gap, should NOT be added immediately)
+        p2p_mock.announce_new_head(headers[14].clone());
+        assert_syncing(&syncer, &store, &[10..=11], 15).await;
+
+        // Syncer requests past header range, should be ignored by the sequencer
+        handle_session_batch(&mut p2p_mock, &headers, 2..=9, true).await;
+        handle_session_batch(&mut p2p_mock, &headers, 1..=1, true).await;
+
+        // Syncer should request the gap [12, 14]
+        handle_session_batch(&mut p2p_mock, &headers, 12..=15, true).await;
+        assert_syncing(&syncer, &store, &[1..=15], 15).await;
+
+        // header sub receives header at height 19 (gap)
+        p2p_mock.announce_new_head(headers[18].clone());
+        assert_syncing(&syncer, &store, &[1..=15], 19).await;
+
+        println!("5");
+
+        // Syncer should request the gap [16, 18]
+        handle_session_batch(&mut p2p_mock, &headers, 16..=19, true).await;
+        assert_syncing(&syncer, &store, &[1..=19], 19).await;
+        println!("6");
+
+        for i in 11..=19 {
+            let height = received_heights.recv().await.unwrap();
+            assert_eq!(height, i);
+        }
+    }
+
+    #[async_test]
+    async fn height_sequencer_handles_disconnect() {
+        let mut generator = ExtendedHeaderGenerator::new();
+        let headers = generator.next_many(20);
+        let (syncer, store, mut p2p_mock) = initialized_syncer(headers[0].clone()).await;
+        assert_syncing(&syncer, &store, &[1..=1], 1).await;
+
+        let mut heights_receiver = syncer.subscribe_heights().await.unwrap();
+        let (tx, mut received_heights) = mpsc::unbounded_channel();
+        spawn(async move {
+            while let Ok(height) = heights_receiver.recv().await {
+                tx.send(height).unwrap();
+            }
+        });
+
+        // header sub receiving header at height 2
+        p2p_mock.announce_new_head(headers[1].clone());
+        assert_syncing(&syncer, &store, &[1..=2], 2).await;
+
+        // disconnect and reconnect
+        p2p_mock.announce_all_peers_disconnected();
+        p2p_mock.expect_no_cmd().await;
+        p2p_mock.announce_trusted_peer_connected();
+
+        // Now syncer will send request for HEAD.
+        let (height, amount, respond_to) = p2p_mock.expect_header_request_for_height_cmd().await;
+        assert_eq!((height, amount), (0, 1));
+
+        // Network progressed while we were disconnected
+        respond_to.send(Ok(vec![headers[9].clone()])).unwrap();
+        let _ = p2p_mock.expect_init_header_sub().await;
+        assert_syncing(&syncer, &store, &[1..=2, 10..=10], 10).await;
+
+        handle_session_batch(&mut p2p_mock, &headers, 3..=9, true).await;
+        assert_syncing(&syncer, &store, &[1..=10], 10).await;
+
+        // header sub receives header at height 11
+        p2p_mock.announce_new_head(headers[10].clone());
+        assert_syncing(&syncer, &store, &[1..=11], 11).await;
+
+        for i in 2..=11 {
+            let height = received_heights.recv().await.unwrap();
+            assert_eq!(height, i);
+        }
     }
 
     async fn assert_syncing(

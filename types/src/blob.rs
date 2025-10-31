@@ -5,6 +5,8 @@ use std::iter;
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
+#[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
+use wasm_bindgen::prelude::*;
 
 mod commitment;
 mod msg_pay_for_blobs;
@@ -22,8 +24,6 @@ pub use self::msg_pay_for_blobs::MsgPayForBlobs;
 pub use celestia_proto::celestia::blob::v1::MsgPayForBlobs as RawMsgPayForBlobs;
 pub use celestia_proto::proto::blob::v1::BlobProto as RawBlob;
 pub use celestia_proto::proto::blob::v1::BlobTx as RawBlobTx;
-#[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
-use wasm_bindgen::prelude::*;
 
 /// Arbitrary data that can be stored in the network within certain [`Namespace`].
 // NOTE: We don't use the `serde(try_from)` pattern for this type
@@ -65,6 +65,19 @@ pub struct BlobParams {
     pub gas_per_blob_byte: u32,
     /// Max square size
     pub gov_max_square_size: u64,
+}
+
+/// List of blobs together with height they were published at
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[cfg_attr(
+    all(feature = "wasm-bindgen", target_arch = "wasm32"),
+    wasm_bindgen(getter_with_clone, inspectable)
+)]
+pub struct BlobsAtHeight {
+    /// Height the blobs were published at
+    pub height: u64,
+    /// Published blobs
+    pub blobs: Vec<Blob>,
 }
 
 impl Blob {
@@ -517,21 +530,6 @@ impl Blob {
     }
 }
 
-impl From<Blob> for RawBlob {
-    fn from(value: Blob) -> RawBlob {
-        RawBlob {
-            namespace_id: value.namespace.id().to_vec(),
-            namespace_version: value.namespace.version() as u32,
-            data: value.data,
-            share_version: value.share_version as u32,
-            signer: value
-                .signer
-                .map(|addr| addr.as_bytes().to_vec())
-                .unwrap_or_default(),
-        }
-    }
-}
-
 #[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
 #[wasm_bindgen]
 impl Blob {
@@ -549,6 +547,21 @@ impl Blob {
     #[wasm_bindgen(js_name = clone)]
     pub fn js_clone(&self) -> Blob {
         self.clone()
+    }
+}
+
+impl From<Blob> for RawBlob {
+    fn from(value: Blob) -> RawBlob {
+        RawBlob {
+            namespace_id: value.namespace.id().to_vec(),
+            namespace_version: value.namespace.version() as u32,
+            data: value.data,
+            share_version: value.share_version as u32,
+            signer: value
+                .signer
+                .map(|addr| addr.as_bytes().to_vec())
+                .unwrap_or_default(),
+        }
     }
 }
 
