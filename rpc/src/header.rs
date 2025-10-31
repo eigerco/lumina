@@ -147,7 +147,7 @@ pub trait HeaderClient: ClientT {
                         .await
                         .ok_or_else(|| custom_client_error("unexpected end of stream"))??
                 } else {
-                    rpc::HeaderClient::header_wait_for_height(self, head.height().value()).await?
+                    rpc::HeaderClient::header_wait_for_height(self, head.height().value() + 1).await?
                 };
 
                 header.validate().map_err(custom_client_error)?;
