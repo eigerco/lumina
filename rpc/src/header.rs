@@ -6,9 +6,7 @@ use async_stream::try_stream;
 use celestia_types::hash::Hash;
 use celestia_types::{ExtendedHeader, SyncState};
 use futures_util::{Stream, StreamExt};
-#[cfg(not(target_arch = "wasm32"))]
-use jsonrpsee::core::client::SubscriptionClientT;
-use jsonrpsee::core::client::{ClientT, Error};
+use jsonrpsee::core::client::{ClientT, Error, SubscriptionClientT};
 use jsonrpsee::proc_macros::rpc;
 
 use crate::custom_client_error;
@@ -47,7 +45,6 @@ mod rpc {
         async fn header_wait_for_height(&self, height: u64) -> Result<ExtendedHeader, Error>;
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
     #[rpc(client, namespace = "header", namespace_separator = ".")]
     pub trait HeaderSubscription {
         #[subscription(name = "Subscribe", unsubscribe = "Unsubscribe", item = ExtendedHeader)]
@@ -121,8 +118,8 @@ pub trait HeaderClient: ClientT {
     ///
     /// # Notes
     ///
-    /// Unsubscribe is not implemented by Celestia nodes.
-    #[cfg(not(target_arch = "wasm32"))]
+    /// If client returns [`Error::HttpNotImplemented`], the subscription will fallback to
+    /// using [`HeaderClient::header_wait_for_height`] for streaming the headers.
     fn header_subscribe<'a>(
         &'a self,
     ) -> Pin<Box<dyn Stream<Item = Result<ExtendedHeader, Error>> + Send + 'a>>
@@ -131,37 +128,28 @@ pub trait HeaderClient: ClientT {
     {
         try_stream! {
             let mut head = rpc::HeaderClient::header_local_head(self).await?;
-            let mut subscription = rpc::HeaderSubscriptionClient::header_subscribe(self).await?;
 
-            while let Some(header) = subscription.next().await {
-                let header = header?;
-                header.validate().map_err(custom_client_error)?;
-                head.verify_adjacent(&header).map_err(custom_client_error)?;
+            let subscription_res = rpc::HeaderSubscriptionClient::header_subscribe(self).await;
+            let has_real_sub = !matches!(&subscription_res, Err(Error::HttpNotImplemented));
 
-                head = header.clone();
-                yield header;
-            }
-        }
-        .boxed()
-    }
-
-    /// Subscribe to recent ExtendedHeaders from the network.
-    ///
-    /// # Notes
-    ///
-    /// Unsubscribe is not implemented by Celestia nodes.
-    #[cfg(target_arch = "wasm32")]
-    fn header_subscribe<'a>(
-        &'a self,
-    ) -> Pin<Box<dyn Stream<Item = Result<ExtendedHeader, Error>> + Send + 'a>>
-    where
-        Self: Sized + Sync,
-    {
-        try_stream! {
-            let mut head = rpc::HeaderClient::header_local_head(self).await?;
+            let mut subscription = if has_real_sub {
+                Some(subscription_res?)
+            } else {
+                None
+            };
 
             loop {
-                let header = rpc::HeaderClient::header_wait_for_height(self, head.height().value() + 1).await?;
+                let header = if has_real_sub {
+                    subscription
+                        .as_mut()
+                        .expect("must be some")
+                        .next()
+                        .await
+                        .ok_or_else(|| custom_client_error("unexpected end of stream"))??
+                } else {
+                    rpc::HeaderClient::header_wait_for_height(self, head.height().value()).await?
+                };
+
                 header.validate().map_err(custom_client_error)?;
                 head.verify_adjacent(&header).map_err(custom_client_error)?;
 

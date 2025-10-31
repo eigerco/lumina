@@ -8,15 +8,11 @@ use async_stream::try_stream;
 use celestia_types::nmt::{Namespace, NamespaceProof};
 use celestia_types::{Blob, Commitment};
 use futures_util::{Stream, StreamExt};
-#[cfg(not(target_arch = "wasm32"))]
-use jsonrpsee::core::client::SubscriptionClientT;
-use jsonrpsee::core::client::{ClientT, Error};
+use jsonrpsee::core::client::{ClientT, Error, SubscriptionClientT};
 use jsonrpsee::proc_macros::rpc;
 use serde::{Deserialize, Serialize};
 
-use crate::TxConfig;
-#[cfg(target_arch = "wasm32")]
-use crate::custom_client_error;
+use crate::{HeaderClient, TxConfig, custom_client_error};
 
 /// Response type for [`BlobClient::blob_subscribe`].
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -69,7 +65,6 @@ mod rpc {
         async fn blob_submit(&self, blobs: &[Blob], opts: TxConfig) -> Result<u64, Error>;
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
     #[rpc(client, namespace = "blob", namespace_separator = ".")]
     pub trait BlobSubscription {
         #[subscription(name = "Subscribe", unsubscribe = "Unsubscribe", item = BlobsAtHeight)]
@@ -155,8 +150,11 @@ pub trait BlobClient: ClientT {
     ///
     /// # Notes
     ///
+    /// If client returns [`Error::HttpNotImplemented`], the subscription will fallback to
+    /// using combination of [`HeaderClient::header_wait_for_height`] and
+    /// [`BlobClient::blob_get_all`] for streaming the blobs.
+    ///
     /// Unsubscribe is not implemented by Celestia nodes.
-    #[cfg(not(target_arch = "wasm32"))]
     fn blob_subscribe<'a>(
         &'a self,
         namespace: Namespace,
@@ -165,45 +163,38 @@ pub trait BlobClient: ClientT {
         Self: SubscriptionClientT + Sized + Sync,
     {
         try_stream! {
-            let mut subscription = rpc::BlobSubscriptionClient::blob_subscribe(self, namespace).await?;
+            let subscription_res = rpc::BlobSubscriptionClient::blob_subscribe(self, namespace).await;
+            let has_real_sub = !matches!(&subscription_res, Err(Error::HttpNotImplemented));
 
-            while let Some(blobs_at_height) = subscription.next().await {
-                // TODO: Should we validate blobs?
-                yield blobs_at_height?;
-            }
-        }
-        .boxed()
-    }
+            let (mut blob_sub, mut header_sub) = if has_real_sub {
+                (Some(subscription_res?), None)
+            } else {
+                (None, Some(HeaderClient::header_subscribe(self)))
+            };
 
-    /// Subscribe to published blobs from the given namespace as they are included.
-    ///
-    /// # Notes
-    ///
-    /// Unsubscribe is not implemented by Celestia nodes.
-    #[cfg(target_arch = "wasm32")]
-    fn blob_subscribe<'a>(
-        &'a self,
-        namespace: Namespace,
-    ) -> Pin<Box<dyn Stream<Item = Result<BlobsAtHeight, Error>> + Send + 'a>>
-    where
-        Self: Sized + Sync,
-    {
-        try_stream! {
-            let mut subscription = super::HeaderClient::header_subscribe(self);
+            loop {
+                yield if has_real_sub {
+                    blob_sub
+                        .as_mut()
+                        .expect("must be some")
+                        .next()
+                        .await
+                        .ok_or_else(|| custom_client_error("unexpected end of stream"))??
+                } else {
+                    let header = header_sub
+                        .as_mut()
+                        .expect("must be some")
+                        .next()
+                        .await
+                        .ok_or_else(|| custom_client_error("unexpected end of stream"))??;
+                    let height = header.height().value();
+                    let blobs = rpc::BlobClient::blob_get_all(self, height, &[namespace]).await?;
 
-            while let Some(header) = subscription.next().await {
-                let header = header?;
-                let height = header.height().value();
-                let blobs = rpc::BlobClient::blob_get_all(self, height, &[namespace]).await?;
-
-                if let Some(blobs) = &blobs {
-                    let app_version = header.app_version().map_err(custom_client_error)?;
-                    for blob in blobs {
-                        blob.validate(app_version).map_err(custom_client_error)?;
+                    BlobsAtHeight {
+                        blobs,
+                        height,
                     }
-                }
-
-                yield BlobsAtHeight { blobs, height };
+                };
             }
         }
         .boxed()
