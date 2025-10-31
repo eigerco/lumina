@@ -271,13 +271,16 @@ mod wasm {
             let id = Id::Number(self.id.fetch_add(1, Ordering::Relaxed));
             let params = params.to_rpc_params()?;
             let request = Request::borrowed(method, params.as_deref(), id.clone());
-
             let body = self.send_and_read_body(request).await?;
-            let response: Response<&JsonRawValue> = serde_json::from_slice(&body)?;
 
+            // deserialize whole jsonrpc response except the `result` field, which is
+            // kept in raw form (if it is present at all)
+            let response: Response<&JsonRawValue> = serde_json::from_slice(&body)?;
+            // bail if the response is an error
             let success = ResponseSuccess::try_from(response)?;
 
             if success.id == id {
+                // read the actual `result` field
                 let result = serde_json::from_str(success.result.get())?;
                 Ok(result)
             } else {
@@ -308,7 +311,7 @@ mod wasm {
                 batch_request.push(request);
             }
 
-            // send it and grab response
+            // send it and grab response, using the same trick with not deserializing `result` field yet
             let body = self.send_and_read_body(batch_request).await?;
             let mut resps: Vec<Response<&JsonRawValue>> = serde_json::from_slice(&body)?;
 
