@@ -507,8 +507,7 @@ where
     }
 
     /// Return a stream which will yield all the headers, as they are being received by the node,
-    /// starting from the first header received after the call. Stream is guaranteed to return either
-    /// header or error for each height, in order.
+    /// starting from the first header received after the call.
     pub fn header_subscribe(
         &self,
     ) -> Result<ReceiverStream<Result<ExtendedHeader, SubscriptionError>>> {
@@ -517,20 +516,24 @@ where
             .as_ref()
             .cloned()
             .expect("store should be present");
+        let syncer = self
+            .syncer
+            .as_ref()
+            .cloned()
+            .expect("syncer should be present");
 
         // We're keeping a small buffer of headers, so that new headers are cached eagerly
-        // as they come in, giving consumer additional buffer of time before they are no longer
-        // available. This is mostly relevant for cases where pruning window is set to zero.
+        // as they come in, giving consumer more time before they are no longer available.
+        // This is mostly relevant for cases where pruning window is set to zero.
         let (tx, rx) = mpsc::channel(16);
 
-        spawn(async move { forward_new_headers(store, tx).await });
+        spawn(async move { forward_new_headers(syncer, store, tx).await });
 
         Ok(ReceiverStream::new(rx))
     }
 
     /// Return a stream which will yield all the blobs from the namespace, as the new headers
     /// are being received by the node starting from the first header received after the call.
-    /// Stream is guaranteed to return all blobs (possibly zero) or error for each height, in order.
     pub fn blob_subscribe(
         &self,
         namespace: Namespace,
@@ -541,17 +544,24 @@ where
             .cloned()
             .expect("store should be present");
         let p2p = self.p2p.as_ref().cloned().expect("p2p should be present");
+        let syncer = self
+            .syncer
+            .as_ref()
+            .cloned()
+            .expect("syncer should be present");
 
-        // We're keeping a small buffer of headers, so that new headers are cached eagerly
-        // as they come in, giving consumer additional buffer of time before they are no longer
-        // available. This is mostly relevant for cases where pruning window is set to zero.
+        // We're keeping a small buffer of blobs, so that new headers are cached eagerly
+        // as they come in, giving consumer more time before they are no longer available.
+        // This is mostly relevant for cases where pruning window is set to zero.
         let (tx, rx) = mpsc::channel(16);
 
-        spawn(async move { forward_new_blobs(namespace, tx, store, p2p).await });
+        spawn(async move { forward_new_blobs(namespace, tx, syncer, store, p2p).await });
 
         Ok(ReceiverStream::new(rx))
     }
 
+    /// Return a stream which will yield all the shares from the namespace, as the new headers
+    /// are being received by the node starting from the first header received after the call.
     pub fn namespace_subscribe(
         &self,
         namespace: Namespace,
@@ -562,13 +572,18 @@ where
             .cloned()
             .expect("store should be present");
         let p2p = self.p2p.as_ref().cloned().expect("p2p should be present");
+        let syncer = self
+            .syncer
+            .as_ref()
+            .cloned()
+            .expect("syncer should be present");
 
-        // We're keeping a small buffer of headers, so that new headers are cached eagerly
-        // as they come in, giving consumer additional buffer of time before they are no longer
-        // available. This is mostly relevant for cases where pruning window is set to zero.
+        // We're keeping a small buffer of shares, so that new headers are cached eagerly
+        // as they come in, giving consumer more time before they are no longer available.
+        // This is mostly relevant for cases where pruning window is set to zero.
         let (tx, rx) = mpsc::channel(16);
 
-        spawn(async move { forward_new_shares(namespace, tx, store, p2p).await });
+        spawn(async move { forward_new_shares(namespace, tx, syncer, store, p2p).await });
 
         Ok(ReceiverStream::new(rx))
     }

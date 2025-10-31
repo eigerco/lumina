@@ -13,12 +13,13 @@ use lumina_utils::time::{Instant, Interval, sleep};
 use serde::{Deserialize, Serialize};
 use tendermint::Time;
 use tokio::select;
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::{broadcast, mpsc, oneshot};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, instrument, warn};
 
 use crate::block_ranges::{BlockRange, BlockRangeExt, BlockRanges};
 use crate::events::{EventPublisher, NodeEvent};
+use crate::node::subscriptions::HeightSequencer;
 use crate::p2p::{P2p, P2pError};
 use crate::store::{Store, StoreError};
 use crate::utils::{FusedReusableFuture, OneshotSenderExt, TimeExt};
@@ -100,6 +101,9 @@ enum SyncerCmd {
     GetInfo {
         respond_to: oneshot::Sender<SyncingInfo>,
     },
+    SubscribeHeights {
+        respond_to: oneshot::Sender<broadcast::Receiver<u64>>,
+    },
     #[cfg(test)]
     TriggerFetchNextBatch,
 }
@@ -174,6 +178,20 @@ where
         Ok(rx.await?)
     }
 
+    /// Subscribe to a broadcast of new header heights as they are being synchronised
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if the [`Syncer`] has been stopped.
+    pub(crate) async fn subscribe_heights(&self) -> Result<broadcast::Receiver<u64>> {
+        let (tx, rx) = oneshot::channel();
+
+        self.send_command(SyncerCmd::SubscribeHeights { respond_to: tx })
+            .await?;
+
+        Ok(rx.await?)
+    }
+
     #[cfg(test)]
     async fn trigger_fetch_next_batch(&self) -> Result<()> {
         self.send_command(SyncerCmd::TriggerFetchNextBatch).await
@@ -205,6 +223,7 @@ where
     ongoing_batch: Ongoing,
     sampling_window: Duration,
     pruning_window: Duration,
+    height_sequencer: HeightSequencer,
 }
 
 struct Ongoing {
@@ -237,6 +256,7 @@ where
             },
             sampling_window: args.sampling_window,
             pruning_window: args.pruning_window,
+            height_sequencer: HeightSequencer::new(),
         })
     }
 
@@ -290,6 +310,7 @@ where
 
                     info!("Setting initial subjective head to {network_head_height}");
                     self.set_subjective_head_height(network_head_height);
+                    self.height_sequencer.init(network_head_height);
 
                     let (header_sub_tx, header_sub_rx) = mpsc::channel(16);
                     self.p2p.init_header_sub(network_head, header_sub_tx).await?;
@@ -402,6 +423,10 @@ where
                 let info = self.syncing_info().await?;
                 respond_to.maybe_send(info);
             }
+            SyncerCmd::SubscribeHeights { respond_to } => {
+                let receiver = self.height_sequencer.subscribe();
+                respond_to.maybe_send(receiver);
+            }
             #[cfg(test)]
             SyncerCmd::TriggerFetchNextBatch => {
                 self.fetch_next_batch().await?;
@@ -427,6 +452,8 @@ where
                         height: new_head_height,
                     });
                 }
+                self.height_sequencer
+                    .signal_inserted(new_head_height..=new_head_height);
             }
         }
 
@@ -610,6 +637,8 @@ where
             to_height,
             took,
         });
+        self.height_sequencer
+            .signal_inserted(from_height..=to_height);
 
         Ok(())
     }
