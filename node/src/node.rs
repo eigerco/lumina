@@ -506,8 +506,10 @@ where
         }
     }
 
-    /// Return a stream which will yield all the headers, as they are being received by the node,
-    /// starting from the first header received after the call.
+    /// Subscribe to new headers received by the node from the network.
+    ///
+    /// Return a stream which will yield all the headers, as they are being received by the
+    /// node, starting from the first header received after the call.
     pub fn header_subscribe(
         &self,
     ) -> Result<ReceiverStream<Result<ExtendedHeader, SubscriptionError>>> {
@@ -532,8 +534,10 @@ where
         Ok(ReceiverStream::new(rx))
     }
 
+    /// Subscribe to the shares from the namespace, as new headers are received by the node
+    ///
     /// Return a stream which will yield all the blobs from the namespace, as the new headers
-    /// are being received by the node starting from the first header received after the call.
+    /// are being received by the node, starting from the first header received after the call.
     pub fn blob_subscribe(
         &self,
         namespace: Namespace,
@@ -560,8 +564,10 @@ where
         Ok(ReceiverStream::new(rx))
     }
 
+    /// Subscribe to the blobs from the namespace, as new headers are received by the node
+    ///
     /// Return a stream which will yield all the shares from the namespace, as the new headers
-    /// are being received by the node starting from the first header received after the call.
+    /// are being received by the node, starting from the first header received after the call.
     pub fn namespace_subscribe(
         &self,
         namespace: Namespace,

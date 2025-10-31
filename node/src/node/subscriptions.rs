@@ -82,7 +82,7 @@ impl HeightSequencer {
             return;
         };
 
-        if self.sender.strong_count() == 0 {
+        if self.sender.receiver_count() == 0 {
             self.last_sent_height = Some(*range.end());
             self.pending = BlockRanges::default();
             return;

@@ -69,7 +69,6 @@ pub struct BlobParams {
 
 /// List of blobs together with height they were published at
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Object))]
 #[cfg_attr(
     all(feature = "wasm-bindgen", target_arch = "wasm32"),
     wasm_bindgen(getter_with_clone, inspectable)
