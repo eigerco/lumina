@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0](https://github.com/eigerco/lumina/compare/lumina-node-wasm-v0.11.0...lumina-node-wasm-v0.12.0) - 2025-10-31
+
+### Added
+
+- *(node)* Node identity retention for native,ios,android ([#751](https://github.com/eigerco/lumina/pull/751))
+
+### Other
+
+- [**breaking**] Migrate to Rust 2024 ([#773](https://github.com/eigerco/lumina/pull/773))
+
 ## [0.11.0](https://github.com/eigerco/lumina/compare/lumina-node-wasm-v0.10.3...lumina-node-wasm-v0.11.0) - 2025-09-25
 
 ### Added
