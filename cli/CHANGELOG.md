@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0](https://github.com/eigerco/lumina/compare/lumina-cli-v0.10.0...lumina-cli-v0.11.0) - 2025-10-31
+
+### Other
+
+- [**breaking**] Migrate to Rust 2024 ([#773](https://github.com/eigerco/lumina/pull/773))
+
 ## [0.10.0](https://github.com/eigerco/lumina/compare/lumina-cli-v0.9.3...lumina-cli-v0.10.0) - 2025-09-25
 
 ### Added
