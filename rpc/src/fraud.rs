@@ -6,10 +6,11 @@ use std::pin::Pin;
 
 use async_stream::try_stream;
 use futures_util::{Stream, StreamExt};
-#[cfg(not(target_arch = "wasm32"))]
-use jsonrpsee::core::client::SubscriptionClientT;
-use jsonrpsee::core::client::{ClientT, Error};
+use jsonrpsee::core::client::{ClientT, Error, SubscriptionClientT};
 use jsonrpsee::proc_macros::rpc;
+
+#[cfg(target_arch = "wasm32")]
+use crate::custom_client_error;
 
 pub use celestia_types::fraud_proof::{Proof, ProofType};
 
@@ -92,13 +93,18 @@ pub trait FraudClient: ClientT {
         proof_type: ProofType,
     ) -> Pin<Box<dyn Stream<Item = Result<Proof, Error>> + Send + 'a>>
     where
-        Self: Sized + Sync,
+        Self: SubscriptionClientT + Sized + Sync,
     {
         try_stream! {
             let mut subscription = super::HeaderClient::header_subscribe(self);
 
             loop {
-                subscription.next().await.expect("headers never end")?;
+                // tick; we don't care about header
+                subscription
+                    .next()
+                    .await
+                    .ok_or_else(|| custom_client_error("unexpected end of stream"))??;
+
                 let proofs = rpc::FraudClient::fraud_get(self, proof_type).await?;
 
                 if !proofs.is_empty() {
