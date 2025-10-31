@@ -207,9 +207,8 @@ mod wasm {
                 auth_token: auth_token.map(ToOwned::to_owned),
             })
         }
-    }
 
-    impl Client {
+        // TODO: Add request timeouts
         async fn send<T: Serialize>(&self, request: T) -> Result<JsResponse, ClientError> {
             let fut = {
                 let mut req = JsRequest::post(&self.url);
