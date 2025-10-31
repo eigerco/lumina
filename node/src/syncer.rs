@@ -1276,6 +1276,99 @@ mod tests {
         assert_syncing(&syncer, &store, &[1..=20], 20).await;
     }
 
+    #[async_test]
+    async fn height_sequencer_smoke() {
+        let mut generator = ExtendedHeaderGenerator::new();
+        let headers = generator.next_many(20);
+        let (syncer, store, mut p2p_mock) = initialized_syncer(headers[9].clone()).await;
+
+        let mut heights_receiver = syncer.subscribe_heights().await.unwrap();
+        let (tx, mut received_heights) = mpsc::unbounded_channel();
+        spawn(async move {
+            while let Ok(height) = heights_receiver.recv().await {
+                tx.send(height).unwrap();
+            }
+        });
+
+        // header sub receiving header at height 11 (adjacent, should be added immediately)
+        p2p_mock.announce_new_head(headers[10].clone());
+        assert_syncing(&syncer, &store, &[10..=11], 11).await;
+
+        // header sub receiving header at height 15 (gap, should NOT be added immediately)
+        p2p_mock.announce_new_head(headers[14].clone());
+        assert_syncing(&syncer, &store, &[10..=11], 15).await;
+
+        // Syncer requests past header range, should be ignored by the sequencer
+        handle_session_batch(&mut p2p_mock, &headers, 2..=9, true).await;
+        handle_session_batch(&mut p2p_mock, &headers, 1..=1, true).await;
+
+        // Syncer should request the gap [12, 14]
+        handle_session_batch(&mut p2p_mock, &headers, 12..=15, true).await;
+        assert_syncing(&syncer, &store, &[1..=15], 15).await;
+
+        // header sub receives header at height 19 (gap)
+        p2p_mock.announce_new_head(headers[18].clone());
+        assert_syncing(&syncer, &store, &[1..=15], 19).await;
+
+        println!("5");
+
+        // Syncer should request the gap [16, 18]
+        handle_session_batch(&mut p2p_mock, &headers, 16..=19, true).await;
+        assert_syncing(&syncer, &store, &[1..=19], 19).await;
+        println!("6");
+
+        for i in 11..=19 {
+            let height = received_heights.recv().await.unwrap();
+            assert_eq!(height, i);
+        }
+    }
+
+    #[async_test]
+    async fn height_sequencer_handles_disconnect() {
+        let mut generator = ExtendedHeaderGenerator::new();
+        let headers = generator.next_many(20);
+        let (syncer, store, mut p2p_mock) = initialized_syncer(headers[0].clone()).await;
+        assert_syncing(&syncer, &store, &[1..=1], 1).await;
+
+        let mut heights_receiver = syncer.subscribe_heights().await.unwrap();
+        let (tx, mut received_heights) = mpsc::unbounded_channel();
+        spawn(async move {
+            while let Ok(height) = heights_receiver.recv().await {
+                tx.send(height).unwrap();
+            }
+        });
+
+        // header sub receiving header at height 2
+        p2p_mock.announce_new_head(headers[1].clone());
+        assert_syncing(&syncer, &store, &[1..=2], 2).await;
+
+        // disconnect and reconnect
+        p2p_mock.announce_all_peers_disconnected();
+        p2p_mock.expect_no_cmd().await;
+        p2p_mock.announce_trusted_peer_connected();
+
+        // Now syncer will send request for HEAD.
+        let (height, amount, respond_to) = p2p_mock.expect_header_request_for_height_cmd().await;
+        assert_eq!((height, amount), (0, 1));
+
+        // Network progressed while we were disconnected
+        respond_to.send(Ok(vec![headers[9].clone()])).unwrap();
+        let _ = p2p_mock.expect_init_header_sub().await;
+        assert_syncing(&syncer, &store, &[1..=2, 10..=10], 10).await;
+
+        handle_session_batch(&mut p2p_mock, &headers, 3..=9, true).await;
+        assert_syncing(&syncer, &store, &[1..=10], 10).await;
+
+        // header sub receives header at height 11
+        p2p_mock.announce_new_head(headers[10].clone());
+        assert_syncing(&syncer, &store, &[1..=11], 11).await;
+
+        for i in 2..=11 {
+            let height = received_heights.recv().await.unwrap();
+            assert_eq!(height, i);
+        }
+    }
+
     async fn assert_syncing(
         syncer: &Syncer<InMemoryStore>,
         store: &InMemoryStore,

@@ -55,7 +55,6 @@ impl HeightSequencer {
     }
 
     pub(crate) fn init(&mut self, height: u64) {
-        println!("init: {height}");
         if self.last_sent_height.is_none() {
             // first initialisation means syncer has acquired a network head for the first time
             // lets start from there
@@ -75,18 +74,11 @@ impl HeightSequencer {
     }
 
     pub(crate) fn signal_inserted(&mut self, range: BlockRange) {
-        println!("inserted: {range:?}");
         let Some(last_sent_height) = self.last_sent_height else {
             // header insertions before head height is initialised
             // this shouldn't happen, ignore it
             return;
         };
-
-        if self.sender.receiver_count() == 0 {
-            self.last_sent_height = Some(*range.end());
-            self.pending = BlockRanges::default();
-            return;
-        }
 
         if &last_sent_height > range.end() {
             // we don't care about past ranges syncer is fetching
