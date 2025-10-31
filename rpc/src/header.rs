@@ -128,6 +128,7 @@ pub trait HeaderClient: ClientT {
     {
         try_stream! {
             let mut head = rpc::HeaderClient::header_local_head(self).await?;
+            head.validate().map_err(custom_client_error)?;
 
             let subscription_res = rpc::HeaderSubscriptionClient::header_subscribe(self).await;
             let has_real_sub = !matches!(&subscription_res, Err(Error::HttpNotImplemented));
