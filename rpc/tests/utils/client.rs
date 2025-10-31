@@ -65,7 +65,8 @@ fn token_from_env(auth_level: AuthLevel) -> Result<Option<String>> {
         Ok(token.map(ToOwned::to_owned))
     } else {
         anyhow::bail!(
-            "CELESTIA_NODE_AUTH_TOKEN_<LEVEL> variable not found. Make sure to run 'tools/gen_auth_tokens.sh'"
+            "CELESTIA_NODE_AUTH_TOKEN_<LEVEL> for {auth_level:?} variable not found. \
+            Make sure to run 'tools/gen_auth_tokens.sh'"
         )
     }
 }
