@@ -1,18 +1,17 @@
-#![cfg(not(target_arch = "wasm32"))]
-
 use std::iter;
 
 use celestia_rpc::prelude::*;
 use celestia_types::Blob;
 use celestia_types::consts::appconsts::AppVersion;
 use celestia_types::nmt::{Namespace, NamespacedSha2Hasher};
+use lumina_utils::test_utils::async_test;
 
 pub mod utils;
 
 use crate::utils::client::{AuthLevel, blob_submit, new_test_client};
 use crate::utils::{random_bytes, random_ns, random_ns_range};
 
-#[tokio::test]
+#[async_test]
 async fn get_share() {
     let client = new_test_client(AuthLevel::Skip).await.unwrap();
     let header = client.header_network_head().await.unwrap();
@@ -28,7 +27,7 @@ async fn get_share() {
     }
 }
 
-#[tokio::test]
+#[async_test]
 async fn get_shares_by_namespace() {
     let client = new_test_client(AuthLevel::Skip).await.unwrap();
     let namespace = random_ns();
@@ -57,7 +56,7 @@ async fn get_shares_by_namespace() {
     assert_eq!(reconstructed, blobs);
 }
 
-#[tokio::test]
+#[async_test]
 async fn get_shares_by_namespace_forbidden() {
     let client = new_test_client(AuthLevel::Skip).await.unwrap();
     let header = client.header_network_head().await.unwrap();
@@ -71,7 +70,7 @@ async fn get_shares_by_namespace_forbidden() {
     }
 }
 
-#[tokio::test]
+#[async_test]
 async fn get_shares_range() {
     let client = new_test_client(AuthLevel::Skip).await.unwrap();
     let namespace = random_ns();
@@ -106,7 +105,7 @@ async fn get_shares_range() {
     }
 }
 
-#[tokio::test]
+#[async_test]
 async fn get_shares_range_not_existing() {
     let client = new_test_client(AuthLevel::Skip).await.unwrap();
     let header = client.header_network_head().await.unwrap();
@@ -122,7 +121,7 @@ async fn get_shares_range_not_existing() {
         .unwrap_err();
 }
 
-#[tokio::test]
+#[async_test]
 async fn get_shares_range_ignores_parity() {
     let client = new_test_client(AuthLevel::Skip).await.unwrap();
 
@@ -156,7 +155,7 @@ async fn get_shares_range_ignores_parity() {
     assert_eq!(first_ods_share_in_second_row, fetched_range[0]);
 }
 
-#[tokio::test]
+#[async_test]
 async fn get_shares_by_namespace_wrong_ns() {
     let client = new_test_client(AuthLevel::Skip).await.unwrap();
     let namespace = random_ns();
@@ -197,7 +196,7 @@ async fn get_shares_by_namespace_wrong_ns() {
         .unwrap();
 }
 
-#[tokio::test]
+#[async_test]
 async fn get_shares_by_namespace_wrong_ns_out_of_range() {
     let client = new_test_client(AuthLevel::Skip).await.unwrap();
     let namespace = random_ns();
@@ -223,7 +222,7 @@ async fn get_shares_by_namespace_wrong_ns_out_of_range() {
     assert!(!root_hash.contains::<NamespacedSha2Hasher>(random_ns.into()));
 }
 
-#[tokio::test]
+#[async_test]
 async fn get_shares_by_namespace_wrong_roots() {
     let client = new_test_client(AuthLevel::Skip).await.unwrap();
     let namespace = random_ns();
@@ -242,7 +241,7 @@ async fn get_shares_by_namespace_wrong_roots() {
     assert!(ns_shares.rows.is_empty());
 }
 
-#[tokio::test]
+#[async_test]
 async fn get_eds() {
     let client = new_test_client(AuthLevel::Skip).await.unwrap();
     let namespace = random_ns();
@@ -263,7 +262,7 @@ async fn get_eds() {
     }
 }
 
-#[tokio::test]
+#[async_test]
 async fn get_samples() {
     let client = new_test_client(AuthLevel::Skip).await.unwrap();
     let namespace = random_ns();
@@ -292,7 +291,7 @@ async fn get_samples() {
     }
 }
 
-#[tokio::test]
+#[async_test]
 async fn get_samples_wrong_coords() {
     let client = new_test_client(AuthLevel::Skip).await.unwrap();
     let namespace = random_ns();
@@ -317,7 +316,7 @@ async fn get_samples_wrong_coords() {
     }
 }
 
-#[tokio::test]
+#[async_test]
 async fn get_shares_by_row() {
     let client = new_test_client(AuthLevel::Skip).await.unwrap();
     let namespace = random_ns();

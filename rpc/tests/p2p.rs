@@ -1,11 +1,13 @@
-#![cfg(all(not(target_arch = "wasm32"), feature = "p2p"))]
-use crate::utils::client::{AuthLevel, new_test_client};
+#![cfg(all(feature = "p2p", not(target_arch = "wasm32")))]
+
 use celestia_rpc::prelude::*;
 use celestia_types::p2p;
 use libp2p::{PeerId, identity};
 use tokio::time::{Duration, sleep};
 
 pub mod utils;
+
+use crate::utils::client::{AuthLevel, new_test_client};
 
 #[tokio::test]
 async fn info_test() {

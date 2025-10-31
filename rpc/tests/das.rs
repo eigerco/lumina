@@ -1,13 +1,12 @@
-#![cfg(not(target_arch = "wasm32"))]
-
 use celestia_rpc::das::SamplingStats;
 use celestia_rpc::prelude::*;
+use lumina_utils::test_utils::async_test;
 
 pub mod utils;
 
 use crate::utils::client::{AuthLevel, new_test_client};
 
-#[tokio::test]
+#[async_test]
 async fn sampling_stats() {
     let client = new_test_client(AuthLevel::Skip).await.unwrap();
 
@@ -23,7 +22,7 @@ async fn sampling_stats() {
     assert!(stats2.head_of_sampled_chain >= stats1.head_of_sampled_chain);
 }
 
-#[tokio::test]
+#[async_test]
 async fn wait_catch_up() {
     let client = new_test_client(AuthLevel::Skip).await.unwrap();
 
