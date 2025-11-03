@@ -776,7 +776,7 @@ impl GrpcClient {
         context: &Context,
     ) -> Result<TxInfo> {
         let BroadcastedTx { tx, hash, sequence } = tx;
-        let mut interval = Interval::new(Duration::from_millis(500)).await;
+        let mut interval = Interval::new(Duration::from_millis(500));
 
         loop {
             let tx_status = self.tx_status(hash).context(context).await?;

@@ -139,8 +139,8 @@ where
         }
 
         let peer_tracker_info_watcher = peer_tracker.info_watcher();
-        let peer_health_check_interval = Interval::new(PEER_HEALTH_CHECK_INTERVAL).await;
-        let gc_interval = Interval::new(GC_INTERVAL).await;
+        let peer_health_check_interval = Interval::new(PEER_HEALTH_CHECK_INTERVAL);
+        let gc_interval = Interval::new(GC_INTERVAL);
 
         let mut manager = SwarmManager {
             swarm,
