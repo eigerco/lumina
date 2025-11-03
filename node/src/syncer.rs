@@ -1310,12 +1310,9 @@ mod tests {
         p2p_mock.announce_new_head(headers[18].clone());
         assert_syncing(&syncer, &store, &[1..=15], 19).await;
 
-        println!("5");
-
         // Syncer should request the gap [16, 18]
         handle_session_batch(&mut p2p_mock, &headers, 16..=19, true).await;
         assert_syncing(&syncer, &store, &[1..=19], 19).await;
-        println!("6");
 
         for i in 11..=19 {
             let height = received_heights.recv().await.unwrap();
