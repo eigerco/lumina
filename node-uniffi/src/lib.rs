@@ -20,6 +20,7 @@ use lumina_node::node::PeerTrackerInfo;
 use lumina_node::store::{EitherStore, InMemoryStore, RedbStore};
 use tendermint::hash::Hash;
 use tokio::sync::{Mutex, RwLock};
+use tokio_stream::wrappers::BroadcastStream;
 use uniffi::Object;
 
 use crate::error::{LuminaError, Result};
@@ -300,7 +301,7 @@ impl LuminaNode {
     pub async fn header_subscribe(&self) -> Result<HeaderStream> {
         let node = self.node.read().await;
         let node = node.as_ref().ok_or(LuminaError::NodeNotRunning)?;
-        let stream = node.header_subscribe()?;
+        let stream = BroadcastStream::new(node.header_subscribe());
         Ok(HeaderStream::new(stream))
     }
 
@@ -310,7 +311,7 @@ impl LuminaNode {
     pub async fn blob_subscribe(&self, namespace: Arc<Namespace>) -> Result<BlobsStream> {
         let node = self.node.read().await;
         let node = node.as_ref().ok_or(LuminaError::NodeNotRunning)?;
-        let stream = node.blob_subscribe(*namespace.as_ref())?;
+        let stream = node.blob_subscribe(*namespace.as_ref());
         Ok(BlobsStream::new(stream))
     }
 
@@ -320,7 +321,7 @@ impl LuminaNode {
     pub async fn namespace_subscribe(&self, namespace: Arc<Namespace>) -> Result<SharesStream> {
         let node = self.node.read().await;
         let node = node.as_ref().ok_or(LuminaError::NodeNotRunning)?;
-        let stream = node.namespace_subscribe(*namespace.as_ref())?;
+        let stream = node.namespace_subscribe(*namespace.as_ref());
         Ok(SharesStream::new(stream))
     }
 }

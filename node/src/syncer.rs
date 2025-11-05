@@ -13,15 +13,14 @@ use lumina_utils::time::{Instant, Interval, sleep};
 use serde::{Deserialize, Serialize};
 use tendermint::Time;
 use tokio::select;
-use tokio::sync::{broadcast, mpsc, oneshot};
+use tokio::sync::{mpsc, oneshot};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, instrument, warn};
 
 use crate::block_ranges::{BlockRange, BlockRangeExt, BlockRanges};
 use crate::events::{EventPublisher, NodeEvent};
-use crate::node::subscriptions::HeightSequencer;
 use crate::p2p::{P2p, P2pError};
-use crate::store::{Store, StoreError};
+use crate::store::{Store, StoreError, Wrapper};
 use crate::utils::{FusedReusableFuture, OneshotSenderExt, TimeExt};
 
 type Result<T, E = SyncerError> = std::result::Result<T, E>;
@@ -85,7 +84,7 @@ where
     /// Handler for the peer to peer messaging.
     pub(crate) p2p: Arc<P2p>,
     /// Headers storage.
-    pub(crate) store: Arc<S>,
+    pub(crate) store: Arc<Wrapper<S>>,
     /// Event publisher.
     pub(crate) event_pub: EventPublisher,
     /// Batch size.
@@ -100,9 +99,6 @@ where
 enum SyncerCmd {
     GetInfo {
         respond_to: oneshot::Sender<SyncingInfo>,
-    },
-    SubscribeHeights {
-        respond_to: oneshot::Sender<broadcast::Receiver<u64>>,
     },
     #[cfg(test)]
     TriggerFetchNextBatch,
@@ -178,20 +174,6 @@ where
         Ok(rx.await?)
     }
 
-    /// Subscribe to a broadcast of new header heights as they are being synchronised
-    ///
-    /// # Errors
-    ///
-    /// This function will return an error if the [`Syncer`] has been stopped.
-    pub(crate) async fn subscribe_heights(&self) -> Result<broadcast::Receiver<u64>> {
-        let (tx, rx) = oneshot::channel();
-
-        self.send_command(SyncerCmd::SubscribeHeights { respond_to: tx })
-            .await?;
-
-        Ok(rx.await?)
-    }
-
     #[cfg(test)]
     async fn trigger_fetch_next_batch(&self) -> Result<()> {
         self.send_command(SyncerCmd::TriggerFetchNextBatch).await
@@ -215,7 +197,7 @@ where
     cmd_rx: mpsc::Receiver<SyncerCmd>,
     event_pub: EventPublisher,
     p2p: Arc<P2p>,
-    store: Arc<S>,
+    store: Arc<Wrapper<S>>,
     header_sub_rx: Option<mpsc::Receiver<ExtendedHeader>>,
     subjective_head_height: Option<u64>,
     highest_slow_sync_height: Option<u64>,
@@ -223,7 +205,6 @@ where
     ongoing_batch: Ongoing,
     sampling_window: Duration,
     pruning_window: Duration,
-    height_sequencer: HeightSequencer,
 }
 
 struct Ongoing {
@@ -256,7 +237,6 @@ where
             },
             sampling_window: args.sampling_window,
             pruning_window: args.pruning_window,
-            height_sequencer: HeightSequencer::new(),
         })
     }
 
@@ -310,7 +290,6 @@ where
 
                     info!("Setting initial subjective head to {network_head_height}");
                     self.set_subjective_head_height(network_head_height);
-                    self.height_sequencer.init(network_head_height);
 
                     let (header_sub_tx, header_sub_rx) = mpsc::channel(16);
                     self.p2p.init_header_sub(network_head, header_sub_tx).await?;
@@ -423,10 +402,6 @@ where
                 let info = self.syncing_info().await?;
                 respond_to.maybe_send(info);
             }
-            SyncerCmd::SubscribeHeights { respond_to } => {
-                let receiver = self.height_sequencer.subscribe();
-                respond_to.maybe_send(receiver);
-            }
             #[cfg(test)]
             SyncerCmd::TriggerFetchNextBatch => {
                 self.fetch_next_batch().await?;
@@ -452,8 +427,6 @@ where
                         height: new_head_height,
                     });
                 }
-                self.height_sequencer
-                    .signal_inserted(new_head_height..=new_head_height);
             }
         }
 
@@ -637,8 +610,6 @@ where
             to_height,
             took,
         });
-        self.height_sequencer
-            .signal_inserted(from_height..=to_height);
 
         Ok(())
     }
@@ -680,7 +651,7 @@ fn calculate_range_to_fetch(
 #[instrument(skip_all)]
 async fn try_init_task<S>(
     p2p: Arc<P2p>,
-    store: Arc<S>,
+    store: Arc<Wrapper<S>>,
     event_pub: EventPublisher,
 ) -> Result<(ExtendedHeader, Duration)>
 where
@@ -717,7 +688,7 @@ where
 
 async fn try_init<S>(
     p2p: &P2p,
-    store: &S,
+    store: &Wrapper<S>,
     event_pub: &EventPublisher,
     event_reported: &mut bool,
 ) -> Result<ExtendedHeader>
@@ -861,7 +832,7 @@ mod tests {
 
         let _syncer = Syncer::start(SyncerArgs {
             p2p: Arc::new(mock),
-            store: Arc::new(InMemoryStore::new()),
+            store: Arc::new(Wrapper::new(InMemoryStore::new())),
             event_pub: events.publisher(),
             batch_size: 512,
             sampling_window: SAMPLING_WINDOW,
@@ -1055,7 +1026,7 @@ mod tests {
         let events = EventChannel::new();
         let (p2p, mut p2p_mock) = P2p::mocked();
         let (store, mut generator) = gen_filled_store(25).await;
-        let store = Arc::new(store);
+        let store = Arc::new(Wrapper::new(store));
 
         let mut headers = generator.next_many(520);
         let network_head = generator.next(); // height 546
@@ -1276,96 +1247,6 @@ mod tests {
         assert_syncing(&syncer, &store, &[1..=20], 20).await;
     }
 
-    #[async_test]
-    async fn height_sequencer_smoke() {
-        let mut generator = ExtendedHeaderGenerator::new();
-        let headers = generator.next_many(20);
-        let (syncer, store, mut p2p_mock) = initialized_syncer(headers[9].clone()).await;
-
-        let mut heights_receiver = syncer.subscribe_heights().await.unwrap();
-        let (tx, mut received_heights) = mpsc::unbounded_channel();
-        spawn(async move {
-            while let Ok(height) = heights_receiver.recv().await {
-                tx.send(height).unwrap();
-            }
-        });
-
-        // header sub receiving header at height 11 (adjacent, should be added immediately)
-        p2p_mock.announce_new_head(headers[10].clone());
-        assert_syncing(&syncer, &store, &[10..=11], 11).await;
-
-        // header sub receiving header at height 15 (gap, should NOT be added immediately)
-        p2p_mock.announce_new_head(headers[14].clone());
-        assert_syncing(&syncer, &store, &[10..=11], 15).await;
-
-        // Syncer requests past header range, should be ignored by the sequencer
-        handle_session_batch(&mut p2p_mock, &headers, 2..=9, true).await;
-        handle_session_batch(&mut p2p_mock, &headers, 1..=1, true).await;
-
-        // Syncer should request the gap [12, 14]
-        handle_session_batch(&mut p2p_mock, &headers, 12..=15, true).await;
-        assert_syncing(&syncer, &store, &[1..=15], 15).await;
-
-        // header sub receives header at height 19 (gap)
-        p2p_mock.announce_new_head(headers[18].clone());
-        assert_syncing(&syncer, &store, &[1..=15], 19).await;
-
-        // Syncer should request the gap [16, 18]
-        handle_session_batch(&mut p2p_mock, &headers, 16..=19, true).await;
-        assert_syncing(&syncer, &store, &[1..=19], 19).await;
-
-        for i in 11..=19 {
-            let height = received_heights.recv().await.unwrap();
-            assert_eq!(height, i);
-        }
-    }
-
-    #[async_test]
-    async fn height_sequencer_handles_disconnect() {
-        let mut generator = ExtendedHeaderGenerator::new();
-        let headers = generator.next_many(20);
-        let (syncer, store, mut p2p_mock) = initialized_syncer(headers[0].clone()).await;
-        assert_syncing(&syncer, &store, &[1..=1], 1).await;
-
-        let mut heights_receiver = syncer.subscribe_heights().await.unwrap();
-        let (tx, mut received_heights) = mpsc::unbounded_channel();
-        spawn(async move {
-            while let Ok(height) = heights_receiver.recv().await {
-                tx.send(height).unwrap();
-            }
-        });
-
-        // header sub receiving header at height 2
-        p2p_mock.announce_new_head(headers[1].clone());
-        assert_syncing(&syncer, &store, &[1..=2], 2).await;
-
-        // disconnect and reconnect
-        p2p_mock.announce_all_peers_disconnected();
-        p2p_mock.expect_no_cmd().await;
-        p2p_mock.announce_trusted_peer_connected();
-
-        // Now syncer will send request for HEAD.
-        let (height, amount, respond_to) = p2p_mock.expect_header_request_for_height_cmd().await;
-        assert_eq!((height, amount), (0, 1));
-
-        // Network progressed while we were disconnected
-        respond_to.send(Ok(vec![headers[9].clone()])).unwrap();
-        let _ = p2p_mock.expect_init_header_sub().await;
-        assert_syncing(&syncer, &store, &[1..=2, 10..=10], 10).await;
-
-        handle_session_batch(&mut p2p_mock, &headers, 3..=9, true).await;
-        assert_syncing(&syncer, &store, &[1..=10], 10).await;
-
-        // header sub receives header at height 11
-        p2p_mock.announce_new_head(headers[10].clone());
-        assert_syncing(&syncer, &store, &[1..=11], 11).await;
-
-        for i in 2..=11 {
-            let height = received_heights.recv().await.unwrap();
-            assert_eq!(height, i);
-        }
-    }
-
     async fn assert_syncing(
         syncer: &Syncer<InMemoryStore>,
         store: &InMemoryStore,
@@ -1386,7 +1267,11 @@ mod tests {
 
     async fn initialized_syncer(
         head: ExtendedHeader,
-    ) -> (Syncer<InMemoryStore>, Arc<InMemoryStore>, MockP2pHandle) {
+    ) -> (
+        Syncer<InMemoryStore>,
+        Arc<Wrapper<InMemoryStore>>,
+        MockP2pHandle,
+    ) {
         initialized_syncer_with_windows(head, SAMPLING_WINDOW, DEFAULT_PRUNING_WINDOW).await
     }
 
@@ -1394,10 +1279,14 @@ mod tests {
         head: ExtendedHeader,
         sampling_window: Duration,
         pruning_window: Duration,
-    ) -> (Syncer<InMemoryStore>, Arc<InMemoryStore>, MockP2pHandle) {
+    ) -> (
+        Syncer<InMemoryStore>,
+        Arc<Wrapper<InMemoryStore>>,
+        MockP2pHandle,
+    ) {
         let events = EventChannel::new();
         let (mock, mut handle) = P2p::mocked();
-        let store = Arc::new(InMemoryStore::new());
+        let store = Arc::new(Wrapper::new(InMemoryStore::new()));
 
         let syncer = Syncer::start(SyncerArgs {
             p2p: Arc::new(mock),

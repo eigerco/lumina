@@ -12,20 +12,20 @@ mod utils;
 async fn header_subscription() {
     let (node, _) = new_connected_node().await;
 
-    let mut header_stream = node.header_subscribe().unwrap();
+    let mut header_stream = node.header_subscribe();
     let current_head = node.get_local_head_header().await.unwrap();
 
     // we'll get either current_head, or the next header
-    let h0 = header_stream.next().await.unwrap().unwrap();
+    let h0 = header_stream.recv().await.unwrap();
     assert!(h0.height().value() - current_head.height().value() <= 1);
 
-    let h1 = header_stream.next().await.unwrap().unwrap();
+    let h1 = header_stream.recv().await.unwrap();
     assert_eq!(h0.height().value() + 1, h1.height().value());
 
-    let h2 = header_stream.next().await.unwrap().unwrap();
+    let h2 = header_stream.recv().await.unwrap();
     assert_eq!(h1.height().value() + 1, h2.height().value());
 
-    let h3 = header_stream.next().await.unwrap().unwrap();
+    let h3 = header_stream.recv().await.unwrap();
     assert_eq!(h2.height().value() + 1, h3.height().value());
 
     let tail_header = node
@@ -50,7 +50,7 @@ async fn blob_subscription() {
     )
     .unwrap();
 
-    let mut blob_stream = node.blob_subscribe(namespace).unwrap();
+    let mut blob_stream = node.blob_subscribe(namespace);
 
     sleep(Duration::from_secs(2)).await;
 

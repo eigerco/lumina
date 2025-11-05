@@ -12,6 +12,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{from_value, to_value};
 use tracing::{debug, error, trace, warn};
+use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::future_to_promise;
 use web_sys::{MessageChannel, MessagePort};
@@ -30,26 +31,21 @@ pub struct JsSubscriptionError {
     pub error: String,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-pub(crate) enum SubscriptionFeedback {
-    /// receiver has read the previous item and is ready for more
-    Ready,
-    /// receiver closed the channel
-    Close,
-}
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub(crate) struct SubscriptionReceiverReady;
 
 struct SubscriptionStream<S>(Rc<RefCell<SubscriptionStreamInner<S>>>);
 
 struct SubscriptionStreamInner<S> {
     receiver: LocalBoxStream<'static, Result<S, JsSubscriptionError>>,
-    feedback: PortSender<SubscriptionFeedback>,
+    feedback: PortSender<SubscriptionReceiverReady>,
 }
 
 impl<S> SubscriptionStream<S>
 where
     S: DeserializeOwned,
 {
-    fn new(receiver: RawPortReceier, feedback: PortSender<SubscriptionFeedback>) -> Self {
+    fn new(receiver: RawPortReceier, feedback: PortSender<SubscriptionReceiverReady>) -> Self {
         let receiver = receiver
             .map(|result| {
                 from_value::<Result<S, JsSubscriptionError>>(result.data()).map_err(|e| {
@@ -70,11 +66,14 @@ where
         self.0
             .borrow_mut()
             .feedback
-            .send(&SubscriptionFeedback::Ready, &[])
+            .send(&SubscriptionReceiverReady, &[])
     }
 }
 
-impl<S> Stream for SubscriptionStream<S> {
+impl<S> Stream for SubscriptionStream<S>
+where
+    S: std::fmt::Debug,
+{
     type Item = Result<S, JsSubscriptionError>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
@@ -88,11 +87,40 @@ impl<S> Clone for SubscriptionStream<S> {
     }
 }
 
+#[wasm_bindgen]
+#[derive(Clone)]
+struct ThisReturner {
+    next: Rc<Closure<dyn FnMut() -> Promise>>,
+}
+
+#[wasm_bindgen]
+impl ThisReturner {
+    fn new(next: Closure<dyn FnMut() -> Promise>) -> ThisReturner {
+        ThisReturner {
+            next: Rc::new(next),
+        }
+    }
+
+    pub fn next(&self) -> Promise {
+        Reflect::apply(
+            JsCast::unchecked_ref(self.next.as_ref().as_ref()),
+            &JsValue::UNDEFINED,
+            &js_sys::Array::new(),
+        )
+        .expect("apply on closure should succeed")
+        .unchecked_into()
+    }
+
+    pub fn return_self(self) -> JsValue {
+        JsValue::from(self.clone())
+    }
+}
+
 // Wrap provided port into SubscriptionStream and prepare it to be used as
 // js AsyncIterator. Assumes provided port was prepared with [`forward_stream_to_message_port`]
 pub(crate) fn into_async_iterator<S>(port: MessagePortLike) -> Result<AsyncIterator>
 where
-    S: DeserializeOwned + Into<JsValue> + 'static,
+    S: DeserializeOwned + Into<JsValue> + std::fmt::Debug + 'static,
 {
     let (feedback, receiver) = split_port(port)?;
     let stream = SubscriptionStream::<S>::new(receiver, feedback);
@@ -103,10 +131,12 @@ where
             if let Err(e) = cloned.send_ready() {
                 return Ok(to_value(&e).unwrap());
             }
-
             let next_item = match cloned.next().await.transpose() {
                 Ok(item) => item,
-                Err(e) => return Ok(to_value(&e).unwrap()),
+                Err(e) => {
+                    // TODO: format the object
+                    return Ok(to_value(&e).expect("conversion to work"));
+                }
             };
 
             let result = Object::new();
@@ -118,26 +148,26 @@ where
             }
             Ok(result.into())
         })
-    })
-    .into_js_value();
+    });
 
-    let iterator = Object::new();
-    let iterator_self = iterator.clone();
-    let iterator_return_this =
-        Closure::<dyn FnMut() -> JsValue>::new(move || iterator_self.clone().into())
-            .into_js_value();
+    let iterator: JsValue = ThisReturner::new(next).into();
 
-    Reflect::set(&iterator, &"next".into(), &next).expect("reflect shouldn't fail on Object");
-    Reflect::set(&iterator, &Symbol::async_iterator(), &iterator_return_this)
+    let return_self_method =
+        Reflect::get(&iterator, &"return_self".into()).expect("method should be present");
+    Reflect::set(&iterator, &Symbol::async_iterator(), &return_self_method)
         .expect("reflect shouldn't fail on Object");
+
     Ok(iterator.unchecked_into())
 }
 
 // spawn a task responsible for sending items from the provided stream as they become available
-// and as the receiving end signals its readiness with SubscriptionFeedback.
-pub(crate) fn forward_stream_to_message_port<T: Serialize + Unpin + 'static>(
+// and as the receiving end signals its readiness with SubscriptionReceiverReady.
+pub(crate) fn forward_stream_to_message_port<T>(
     mut stream: impl Stream<Item = Result<T, SubscriptionError>> + Unpin + 'static,
-) -> Result<MessagePort> {
+) -> Result<MessagePort>
+where
+    T: Serialize + Unpin + 'static,
+{
     let (p0, p1) = MessageChannel::new_ports()?;
 
     let (subscription_sender, event_receiver) = split_port(p0.into())?;
@@ -148,12 +178,10 @@ pub(crate) fn forward_stream_to_message_port<T: Serialize + Unpin + 'static>(
         trace!("Starting subscription");
         loop {
             let Some(feedback) = feedback_receiver.next().await else {
-                error!("unexpected feedback channel close");
                 break;
             };
             match feedback {
-                Ok(SubscriptionFeedback::Ready) => (),
-                Ok(SubscriptionFeedback::Close) => break,
+                Ok(SubscriptionReceiverReady) => (),
                 Err(e) => {
                     warn!("Error receiving subscription feedback: {e}");
                 }
@@ -200,12 +228,12 @@ mod tests {
             let msg: Result<String, JsSubscriptionError> = Ok("hello".to_string());
             tx.send(&msg, &[]).unwrap();
             let feedback = rx.next().await;
-            assert_eq!(feedback, Some(SubscriptionFeedback::Ready));
+            assert_eq!(feedback, Some(SubscriptionReceiverReady));
 
             let msg: Result<String, JsSubscriptionError> = Ok("world".to_string());
             tx.send(&msg, &[]).unwrap();
             let feedback = rx.next().await;
-            assert_eq!(feedback, Some(SubscriptionFeedback::Ready));
+            assert_eq!(feedback, Some(SubscriptionReceiverReady));
 
             drop(tx)
         });
@@ -216,5 +244,22 @@ mod tests {
             .map(|v| from_value::<String>(v).unwrap())
             .collect();
         assert_eq!(received.as_ref(), ["hello", "world"]);
+    }
+
+    #[wasm_bindgen_test]
+    async fn close() {
+        let (p0, p1) = MessageChannel::new_ports().unwrap();
+
+        let (tx, rx) = split_port::<String>(p0.into()).unwrap();
+        let async_iterator = into_async_iterator::<String>(p1.into());
+        drop(async_iterator);
+
+        tx.send(&"foo".to_string(), &[]).unwrap();
+
+        let mut rx = rx.map(|ev| from_value::<SubscriptionReceiverReady>(ev.data()).unwrap());
+        // at this point receiver would have already signaled its readiness,
+        // so we need to clear the signal from the channel first.
+        //assert_eq!(rx.next().await.unwrap(), SubscriptionReceiverReady);
+        assert!(rx.next().await.is_none());
     }
 }

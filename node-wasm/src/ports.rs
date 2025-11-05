@@ -4,7 +4,7 @@ use std::rc::Rc;
 use std::task::{Context, Poll, ready};
 
 use futures::Stream;
-use js_sys::{Array, Function, Reflect};
+use js_sys::{Array, Function, JsString, Reflect};
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::from_value;
 use tokio::sync::mpsc;
@@ -15,6 +15,9 @@ use web_sys::{MessageEvent, MessagePort};
 use crate::commands::{Command, WorkerCommand, WorkerResponse, WorkerResult};
 use crate::error::{Context as _, Error, Result};
 use crate::utils::{MessageEventExt, to_json_value};
+
+/// Magic string sent in-band to signal dropped receiver
+const CHANNEL_CLOSE_SYMBOL_NAME: &str = "co.eiger.lumina.ports.channelClose";
 
 /// Counter-style message id for matching responses with requests
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
@@ -128,6 +131,8 @@ pub(crate) fn split_port<Tx>(port: MessagePortLike) -> Result<(PortSender<Tx>, R
     Ok((sender, receiver))
 }
 
+// Sending part of a wrapped MessagePort.
+// WARN: do not use unit structs as a sent type, as they are interpreted as a
 pub(crate) struct PortSender<Tx> {
     port: Rc<MessagePortLike>,
     _sent: PhantomData<Tx>,
@@ -150,9 +155,10 @@ where
 impl<Tx> Drop for PortSender<Tx> {
     fn drop(&mut self) {
         // send a close signal and 🤞
+        let close_signal: JsValue = CHANNEL_CLOSE_SYMBOL_NAME.to_string().into();
         let _ = self
             .port
-            .post_message_with_transferable(&JsValue::NULL, &JsValue::UNDEFINED);
+            .post_message_with_transferable(&close_signal, &JsValue::UNDEFINED);
     }
 }
 
@@ -170,7 +176,12 @@ impl Stream for RawPortReceier {
         let event =
             ready!(this.receiving_channel.poll_recv(cx)).expect("forward channel should not drop");
 
-        if event.data() == JsValue::NULL {
+        if event
+            .data()
+            .dyn_ref::<JsString>()
+            .is_some_and(|s| s == CHANNEL_CLOSE_SYMBOL_NAME)
+        {
+            this.receiving_channel.close();
             return Poll::Ready(None);
         }
 
@@ -289,6 +300,20 @@ mod tests {
         let (value, ports) = rx1.next().await.unwrap();
         assert_eq!(value, 1);
         assert_eq!(ports.len(), 1);
+    }
+
+    #[wasm_bindgen_test]
+    async fn port_close() {
+        let (p0, p1) = MessageChannel::new_ports().unwrap();
+        let (tx0, _rx0) = split_port::<u32>(p0.into()).unwrap();
+        let (_tx1, mut rx1) = split_port::<()>(p1.into()).unwrap();
+
+        tx0.send(&1u32, &[]).unwrap();
+        drop(tx0);
+
+        let v: u32 = from_value(rx1.next().await.unwrap().data()).unwrap();
+        assert_eq!(v, 1);
+        assert!(rx1.next().await.is_none());
     }
 
     #[wasm_bindgen_test]

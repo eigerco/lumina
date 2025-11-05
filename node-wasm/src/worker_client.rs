@@ -19,7 +19,7 @@ use lumina_utils::executor::{JoinHandle, spawn};
 /// WorkerClient responsible for sending `Command`s and receiving `WorkerResponse`s to them over a port like
 /// object.
 pub struct WorkerClient {
-    request_tx: mpsc::UnboundedSender<CommandWithResponder>,
+    request_tx: mpsc::Sender<CommandWithResponder>,
     _worker_join_handle: JoinHandle,
     _worker_drop_guard: DropGuard,
 }
@@ -31,7 +31,7 @@ impl WorkerClient {
         let cancellation_token = CancellationToken::new();
         let mut worker = Worker::new(port.into(), cancellation_token.child_token())?;
 
-        let (request_tx, request_rx) = mpsc::unbounded_channel();
+        let (request_tx, request_rx) = mpsc::channel(16);
         let _worker_join_handle = spawn(async move {
             if let Err(e) = worker.run(request_rx).await {
                 error!("WorkerClient worker stopped because of a fatal error: {e}");
@@ -77,6 +77,7 @@ impl WorkerClient {
         let (responder, rx) = oneshot::channel();
         self.request_tx
             .send(CommandWithResponder { command, responder })
+            .await
             .context("could not forward the request to WorkerClient worker")?;
 
         rx.await.map_err(|_| WorkerError::EmptyResponse)?
@@ -115,7 +116,7 @@ impl Worker {
 
     async fn run(
         &mut self,
-        mut outgoing_requests: mpsc::UnboundedReceiver<CommandWithResponder>,
+        mut outgoing_requests: mpsc::Receiver<CommandWithResponder>,
     ) -> Result<()> {
         loop {
             select! {

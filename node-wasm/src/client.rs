@@ -534,7 +534,6 @@ mod tests {
         let client = spawn_connected_node(vec![bridge_ma.to_string()]).await;
 
         let info = client.network_info().await.expect("network info");
-        web_sys::console::log_1(&format!("{info:#?}").into());
         assert_eq!(info.num_peers, 1);
 
         let bridge_head_header = rpc_client.header_network_head().await.unwrap();
@@ -594,30 +593,15 @@ mod tests {
         let bridge_ma = fetch_bridge_webtransport_multiaddr(&rpc_client).await;
         let client = spawn_connected_node(vec![bridge_ma.to_string()]).await;
 
-        web_sys::console::log_1(&"a".into());
-
         // Wait for the `client` node to sync until the `submitted_height`.
         while client.syncer_info().await.unwrap().subjective_head < submitted_height {
-            web_sys::console::log_1(&"sleep".into());
             sleep(Duration::from_millis(100)).await;
         }
 
-        let blob_res = client
+        let mut blobs = client
             .request_all_blobs(&namespace, submitted_height, None)
             .await
-            .map_err(|e| format!(">> {e:?}"));
-
-        let mut blobs = match blob_res {
-            Ok(b) => b,
-            Err(e) => {
-                web_sys::console::log_1(&e.into());
-                panic!("AAAAAAA");
-            }
-        };
-
-        //let mut blobs = client .request_all_blobs(&namespace, submitted_height, None) .await .expect("to fetch blob");
-
-        web_sys::console::log_1(&"b".into());
+            .unwrap();
 
         assert_eq!(blobs.len(), 1);
         let blob = blobs.pop().unwrap();

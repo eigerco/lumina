@@ -5,12 +5,11 @@ use celestia_types::{ExtendedHeader, Share, SharesAtHeight as RustSharesAtHeight
 use futures::StreamExt;
 use lumina_node::node::subscriptions::SubscriptionError as NodeSubscriptionError;
 use tokio::sync::Mutex;
-use tokio_stream::wrappers::ReceiverStream;
+use tokio_stream::wrappers::{BroadcastStream, ReceiverStream};
 use uniffi::Object;
 
 use crate::error::LuminaError;
 
-type HeaderSubscriptionItem = Result<ExtendedHeader, NodeSubscriptionError>;
 type BlobsSubscriptionItem = Result<RustBlobsAtHeight, NodeSubscriptionError>;
 type SharesSubscriptionItem = Result<RustSharesAtHeight, NodeSubscriptionError>;
 
@@ -31,10 +30,10 @@ pub enum SubscriptionError {
 }
 
 #[derive(Object)]
-pub struct HeaderStream(Mutex<ReceiverStream<HeaderSubscriptionItem>>);
+pub struct HeaderStream(Mutex<BroadcastStream<ExtendedHeader>>);
 
 impl HeaderStream {
-    pub(crate) fn new(stream: ReceiverStream<HeaderSubscriptionItem>) -> Self {
+    pub(crate) fn new(stream: BroadcastStream<ExtendedHeader>) -> Self {
         HeaderStream(Mutex::new(stream))
     }
 }
@@ -49,7 +48,8 @@ impl HeaderStream {
             .next()
             .await
             .ok_or(SubscriptionError::StreamEnded)?
-            .map_err(SubscriptionError::from)?;
+            .map_err(NodeSubscriptionError::from)?;
+
         // TODO: replace with plain ExtendedHeader, once it's uniffied
         Ok(serde_json::to_string(&header)?)
     }

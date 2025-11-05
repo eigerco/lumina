@@ -1,8 +1,10 @@
 use std::time::Duration;
 
+use futures::StreamExt;
 use libp2p::{Multiaddr, PeerId};
 use serde::Serialize;
 use serde_wasm_bindgen::to_value;
+use tokio_stream::wrappers::BroadcastStream;
 use tracing::{error, info};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
@@ -13,6 +15,7 @@ use celestia_types::nmt::Namespace;
 use celestia_types::{Blob, ExtendedHeader};
 use lumina_node::blockstore::{InMemoryBlockstore, IndexedDbBlockstore};
 use lumina_node::events::{EventSubscriber, NodeEventInfo};
+use lumina_node::node::subscriptions::SubscriptionError;
 use lumina_node::node::{Node, SyncingInfo};
 use lumina_node::store::{EitherStore, InMemoryStore, IndexedDbStore, SamplingMetadata};
 
@@ -294,15 +297,17 @@ impl NodeWorkerInstance {
     fn process_subscription(&mut self, subscription: SubscriptionCommand) -> Result<MessagePort> {
         match subscription {
             SubscriptionCommand::Headers => {
-                let stream = self.node.header_subscribe()?;
+                let stream = BroadcastStream::new(self.node.header_subscribe())
+                    .map(|header_or_error| header_or_error.map_err(SubscriptionError::from));
+
                 forward_stream_to_message_port(stream)
             }
             SubscriptionCommand::Blobs(namespace) => {
-                let stream = self.node.blob_subscribe(namespace)?;
+                let stream = self.node.blob_subscribe(namespace);
                 forward_stream_to_message_port(stream)
             }
             SubscriptionCommand::Shares(namespace) => {
-                let stream = self.node.namespace_subscribe(namespace)?;
+                let stream = self.node.namespace_subscribe(namespace);
                 forward_stream_to_message_port(stream)
             }
         }
