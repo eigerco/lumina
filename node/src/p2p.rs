@@ -629,16 +629,9 @@ impl P2p {
             }
             Err(e) => return Err(e.into()),
         };
-        let namespace_data = match self
+        let namespace_data = self
             .get_namespace_data(namespace, &header, timeout, store)
-            .await
-        {
-            Ok(data) => data,
-            Err(P2pError::BitswapQueryTimeout) if !store.has_at(block_height).await => {
-                return Err(P2pError::HeaderPruned(block_height));
-            }
-            Err(e) => return Err(e),
-        };
+            .await?;
 
         let shares = namespace_data.rows.iter().flat_map(|row| row.shares.iter());
 
