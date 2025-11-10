@@ -25,12 +25,12 @@ pub enum SubscriptionError {
     Node {
         /// Height of the subscription item
         height: u64,
-        /// Error that occured
+        /// Error that occurred
         #[source]
         source: NodeError,
     },
     /// Receiver lagged too far behind and the subscription will restart from the current head
-    #[error("Subscription item height already pruned from the store, skipping {0} items")]
+    #[error("Receiver lagged too far behind, skipping {0} items")]
     Lagged(u64),
 }
 

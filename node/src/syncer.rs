@@ -20,7 +20,7 @@ use tracing::{debug, error, info, instrument, warn};
 use crate::block_ranges::{BlockRange, BlockRangeExt, BlockRanges};
 use crate::events::{EventPublisher, NodeEvent};
 use crate::p2p::{P2p, P2pError};
-use crate::store::{Store, StoreError, Wrapper};
+use crate::store::{Store, StoreError};
 use crate::utils::{FusedReusableFuture, OneshotSenderExt, TimeExt};
 
 type Result<T, E = SyncerError> = std::result::Result<T, E>;
@@ -84,7 +84,7 @@ where
     /// Handler for the peer to peer messaging.
     pub(crate) p2p: Arc<P2p>,
     /// Headers storage.
-    pub(crate) store: Arc<Wrapper<S>>,
+    pub(crate) store: Arc<S>,
     /// Event publisher.
     pub(crate) event_pub: EventPublisher,
     /// Batch size.
@@ -197,7 +197,7 @@ where
     cmd_rx: mpsc::Receiver<SyncerCmd>,
     event_pub: EventPublisher,
     p2p: Arc<P2p>,
-    store: Arc<Wrapper<S>>,
+    store: Arc<S>,
     header_sub_rx: Option<mpsc::Receiver<ExtendedHeader>>,
     subjective_head_height: Option<u64>,
     highest_slow_sync_height: Option<u64>,
@@ -651,7 +651,7 @@ fn calculate_range_to_fetch(
 #[instrument(skip_all)]
 async fn try_init_task<S>(
     p2p: Arc<P2p>,
-    store: Arc<Wrapper<S>>,
+    store: Arc<S>,
     event_pub: EventPublisher,
 ) -> Result<(ExtendedHeader, Duration)>
 where
@@ -688,7 +688,7 @@ where
 
 async fn try_init<S>(
     p2p: &P2p,
-    store: &Wrapper<S>,
+    store: &S,
     event_pub: &EventPublisher,
     event_reported: &mut bool,
 ) -> Result<ExtendedHeader>
@@ -832,7 +832,7 @@ mod tests {
 
         let _syncer = Syncer::start(SyncerArgs {
             p2p: Arc::new(mock),
-            store: Arc::new(Wrapper::new(InMemoryStore::new())),
+            store: Arc::new(InMemoryStore::new()),
             event_pub: events.publisher(),
             batch_size: 512,
             sampling_window: SAMPLING_WINDOW,
@@ -1026,7 +1026,7 @@ mod tests {
         let events = EventChannel::new();
         let (p2p, mut p2p_mock) = P2p::mocked();
         let (store, mut generator) = gen_filled_store(25).await;
-        let store = Arc::new(Wrapper::new(store));
+        let store = Arc::new(store);
 
         let mut headers = generator.next_many(520);
         let network_head = generator.next(); // height 546
@@ -1267,11 +1267,7 @@ mod tests {
 
     async fn initialized_syncer(
         head: ExtendedHeader,
-    ) -> (
-        Syncer<InMemoryStore>,
-        Arc<Wrapper<InMemoryStore>>,
-        MockP2pHandle,
-    ) {
+    ) -> (Syncer<InMemoryStore>, Arc<InMemoryStore>, MockP2pHandle) {
         initialized_syncer_with_windows(head, SAMPLING_WINDOW, DEFAULT_PRUNING_WINDOW).await
     }
 
@@ -1279,14 +1275,10 @@ mod tests {
         head: ExtendedHeader,
         sampling_window: Duration,
         pruning_window: Duration,
-    ) -> (
-        Syncer<InMemoryStore>,
-        Arc<Wrapper<InMemoryStore>>,
-        MockP2pHandle,
-    ) {
+    ) -> (Syncer<InMemoryStore>, Arc<InMemoryStore>, MockP2pHandle) {
         let events = EventChannel::new();
         let (mock, mut handle) = P2p::mocked();
-        let store = Arc::new(Wrapper::new(InMemoryStore::new()));
+        let store = Arc::new(InMemoryStore::new());
 
         let syncer = Syncer::start(SyncerArgs {
             p2p: Arc::new(mock),

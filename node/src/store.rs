@@ -12,6 +12,7 @@ use celestia_types::ExtendedHeader;
 use celestia_types::hash::Hash;
 use cid::Cid;
 use libp2p::identity::Keypair;
+use lumina_utils::executor::yield_now;
 use prost::Message;
 use serde::{Deserialize, Serialize};
 use tendermint_proto::Protobuf;
@@ -444,6 +445,7 @@ impl<S: Store> Store for Wrapper<S> {
         for header in headers_to_broadcast {
             // Ignore send errors - if there are no receivers, that's fine
             let _ = self.broadcast_tx.send(header);
+            yield_now().await;
         }
 
         Ok(())

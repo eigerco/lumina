@@ -7,7 +7,6 @@ use std::ops::RangeBounds;
 use std::sync::Arc;
 use std::time::Duration;
 
-use celestia_types::blob::BlobsAtHeight;
 use libp2p::identity::Keypair;
 use libp2p::swarm::NetworkInfo;
 use libp2p::{Multiaddr, PeerId};
@@ -17,6 +16,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::warn;
 
 use blockstore::Blockstore;
+use celestia_types::blob::BlobsAtHeight;
 use celestia_types::hash::Hash;
 use celestia_types::nmt::Namespace;
 use celestia_types::row::Row;
@@ -106,7 +106,7 @@ where
     p2p: Option<Arc<P2p>>,
     blockstore: Option<Arc<SampleBlockstore<B>>>,
     store: Option<Arc<Wrapper<S>>>,
-    syncer: Option<Arc<Syncer<S>>>,
+    syncer: Option<Arc<Syncer<Wrapper<S>>>>,
     daser: Option<Arc<Daser>>,
     pruner: Option<Arc<Pruner>>,
     tasks_cancellation_token: CancellationToken,
@@ -274,7 +274,7 @@ where
         self.event_channel.publisher().send(NodeEvent::NodeStopped);
     }
 
-    fn syncer(&self) -> &Syncer<S> {
+    fn syncer(&self) -> &Syncer<Wrapper<S>> {
         self.syncer.as_ref().expect("Syncer not initialized")
     }
 

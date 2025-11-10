@@ -436,15 +436,6 @@ impl BlockRanges {
         Some(tail)
     }
 
-    /// Returns the tail (lowest) range and removes it from the ranges
-    pub fn pop_tail_range(&mut self) -> Option<BlockRange> {
-        if self.0.is_empty() {
-            return None;
-        }
-
-        Some(self.0.remove(0))
-    }
-
     /// Insert a new range.
     ///
     /// This fails only if `range` is not valid. It allows inserting an overlapping range.

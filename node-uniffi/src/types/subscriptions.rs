@@ -90,8 +90,8 @@ impl BlobsAtHeight {
         self.height
     }
 
-    fn blobs(self: Arc<Self>) -> Vec<Arc<Blob>> {
-        self.blobs.iter().map(Arc::clone).collect()
+    fn blobs(&self) -> Vec<Arc<Blob>> {
+        self.blobs.iter().cloned().collect()
     }
 }
 
@@ -139,8 +139,8 @@ impl SharesAtHeight {
         self.height
     }
 
-    fn shares(self: Arc<Self>) -> Vec<Arc<Share>> {
-        self.shares.iter().map(Arc::clone).collect()
+    fn shares(&self) -> Vec<Arc<Share>> {
+        self.shares.iter().cloned().collect()
     }
 }
 
