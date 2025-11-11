@@ -6,7 +6,7 @@ mod commands;
 pub mod error;
 mod ports;
 pub mod utils;
-mod worker;
+pub mod worker;
 mod wrapper;
 
 // include celestia-grpc when building lumina-node npm package

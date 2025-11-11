@@ -1,0 +1,72 @@
+use std::time::Duration;
+
+use celestia_rpc::TxConfig;
+use celestia_rpc::prelude::*;
+use celestia_types::nmt::Namespace;
+use celestia_types::p2p::PeerId;
+use celestia_types::{AppVersion, Blob, ExtendedHeader};
+use gloo_timers::future::sleep;
+use lumina_node_wasm::utils::setup_logging;
+use wasm_bindgen_test::wasm_bindgen_test;
+
+mod utils;
+
+use crate::utils::{
+    fetch_bridge_webtransport_multiaddr, new_rpc_client, remove_database, spawn_connected_node,
+};
+
+wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
+
+#[wasm_bindgen_test]
+async fn request_network_head_header() {
+    setup_logging();
+    remove_database().await.expect("failed to clear db");
+    let rpc_client = new_rpc_client().await;
+    let bridge_ma = fetch_bridge_webtransport_multiaddr(&rpc_client).await;
+
+    let client = spawn_connected_node(vec![bridge_ma.to_string()]).await;
+
+    let info = client.network_info().await.unwrap();
+    assert_eq!(info.num_peers, 1);
+
+    let bridge_head_header = rpc_client.header_network_head().await.unwrap();
+    let head_header: ExtendedHeader = client.request_head_header().await.unwrap();
+    assert_eq!(head_header, bridge_head_header);
+    rpc_client
+        .p2p_close_peer(&PeerId(
+            client.local_peer_id().await.unwrap().parse().unwrap(),
+        ))
+        .await
+        .unwrap();
+}
+
+#[wasm_bindgen_test]
+async fn get_blob() {
+    setup_logging();
+    remove_database().await.expect("failed to clear db");
+    let rpc_client = new_rpc_client().await;
+    let namespace = Namespace::new_v0(&[0xCD, 0xDC, 0xCD, 0xDC, 0xCD, 0xDC]).unwrap();
+    let data = b"Hello, World";
+    let blobs = vec![Blob::new(namespace, data.to_vec(), None, AppVersion::V3).unwrap()];
+
+    let submitted_height = rpc_client
+        .blob_submit(&blobs, TxConfig::default())
+        .await
+        .expect("successful submission");
+
+    let bridge_ma = fetch_bridge_webtransport_multiaddr(&rpc_client).await;
+    let client = spawn_connected_node(vec![bridge_ma.to_string()]).await;
+
+    // Wait for the `client` node to sync until the `submitted_height`.
+    sleep(Duration::from_secs(1)).await;
+
+    let mut blobs = client
+        .request_all_blobs(&namespace, submitted_height, None)
+        .await
+        .expect("to fetch blob");
+
+    assert_eq!(blobs.len(), 1);
+    let blob = blobs.pop().unwrap();
+    assert_eq!(blob.data, data);
+    assert_eq!(blob.namespace, namespace);
+}
