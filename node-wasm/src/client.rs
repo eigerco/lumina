@@ -119,7 +119,7 @@ impl NodeClient {
         Ok(running)
     }
 
-    /// Start a node with the provided config, if it's not running
+    /// Start the node with the provided config, if it's not running
     pub async fn start(&self, config: &WasmNodeConfig) -> Result<()> {
         let command = NodeCommand::StartNode(config.clone());
         let response = self.worker.exec(command).await?;
@@ -128,6 +128,7 @@ impl NodeClient {
         Ok(())
     }
 
+    /// Stop the node.
     pub async fn stop(&self) -> Result<()> {
         let command = NodeCommand::StopNode;
         let response = self.worker.exec(command).await?;

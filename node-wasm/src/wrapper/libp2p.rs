@@ -14,6 +14,7 @@ pub struct NetworkInfoSnapshot {
     pub connection_counters: ConnectionCountersSnapshot,
 }
 
+/// Network connection information
 #[wasm_bindgen(inspectable)]
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct ConnectionCountersSnapshot {
