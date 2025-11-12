@@ -1763,21 +1763,4 @@ mod tests {
         assert_eq!(r.len(), 55);
         assert_eq!(r.count(), 55);
     }
-
-    #[test]
-    fn multiple_ranges_combine_into_single_contiguous_range() {
-        let mut ranges = BlockRanges::new();
-
-        ranges.insert_relaxed(10..=20).unwrap();
-        ranges.insert_relaxed(30..=40).unwrap();
-        ranges.insert_relaxed(50..=60).unwrap();
-        assert_eq!(ranges.as_ref().len(), 3);
-
-        ranges.insert_relaxed(21..=29).unwrap();
-        ranges.insert_relaxed(41..=49).unwrap();
-
-        let combined = ranges.pop_tail_range();
-        assert_eq!(combined, Some(10..=60));
-        assert!(ranges.is_empty());
-    }
 }

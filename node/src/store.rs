@@ -12,12 +12,10 @@ use celestia_types::ExtendedHeader;
 use celestia_types::hash::Hash;
 use cid::Cid;
 use libp2p::identity::Keypair;
-use lumina_utils::executor::yield_now;
 use prost::Message;
 use serde::{Deserialize, Serialize};
 use tendermint_proto::Protobuf;
 use thiserror::Error;
-use tokio::sync::broadcast;
 #[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
 use wasm_bindgen::prelude::*;
 
@@ -197,7 +195,7 @@ pub enum StoreError {
     NamedLock(String),
 }
 
-/// Store insersion non-fatal errors.
+/// Store insertion non-fatal errors.
 #[derive(Error, Debug)]
 pub enum StoreInsertionError {
     /// Provided headers failed verification.
@@ -208,7 +206,7 @@ pub enum StoreInsertionError {
     #[error("Provided headers failed to be verified with existing neighbors: {0}")]
     NeighborsVerificationFailed(String),
 
-    /// Store containts are not met.
+    /// Store constants are not met.
     #[error("Contraints not met: {0}")]
     ContraintsNotMet(BlockRangesError),
 
@@ -338,142 +336,6 @@ fn to_headers_range(bounds: impl RangeBounds<u64>, last_index: u64) -> Result<Ra
     };
 
     Ok(start..=end)
-}
-
-#[derive(Debug)]
-pub(crate) struct Wrapper<S: Store> {
-    inner: S,
-    broadcast_tx: broadcast::Sender<ExtendedHeader>,
-}
-
-impl<S: Store> Wrapper<S> {
-    /// Create a new wrapper around a Store implementation.
-    pub fn new(store: S) -> Self {
-        let (broadcast_tx, _) = broadcast::channel(16);
-        Wrapper {
-            inner: store,
-            broadcast_tx,
-        }
-    }
-
-    /// Subscribe to new headers as they are being inserted into the store
-    pub fn subscribe_headers(&self) -> broadcast::Receiver<ExtendedHeader> {
-        self.broadcast_tx.subscribe()
-    }
-}
-
-impl<S: Store> std::ops::Deref for Wrapper<S> {
-    type Target = S;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
-
-#[async_trait]
-impl<S: Store> Store for Wrapper<S> {
-    async fn get_head(&self) -> Result<ExtendedHeader> {
-        self.inner.get_head().await
-    }
-
-    async fn get_by_hash(&self, hash: &Hash) -> Result<ExtendedHeader> {
-        self.inner.get_by_hash(hash).await
-    }
-
-    async fn get_by_height(&self, height: u64) -> Result<ExtendedHeader> {
-        self.inner.get_by_height(height).await
-    }
-
-    async fn wait_new_head(&self) -> u64 {
-        self.inner.wait_new_head().await
-    }
-
-    async fn wait_height(&self, height: u64) -> Result<()> {
-        self.inner.wait_height(height).await
-    }
-
-    async fn get_range<R>(&self, range: R) -> Result<Vec<ExtendedHeader>>
-    where
-        R: RangeBounds<u64> + Send,
-    {
-        self.inner.get_range(range).await
-    }
-
-    async fn head_height(&self) -> Result<u64> {
-        self.inner.head_height().await
-    }
-
-    async fn has(&self, hash: &Hash) -> bool {
-        self.inner.has(hash).await
-    }
-
-    async fn has_at(&self, height: u64) -> bool {
-        self.inner.has_at(height).await
-    }
-
-    async fn update_sampling_metadata(&self, height: u64, cids: Vec<Cid>) -> Result<()> {
-        self.inner.update_sampling_metadata(height, cids).await
-    }
-
-    async fn get_sampling_metadata(&self, height: u64) -> Result<Option<SamplingMetadata>> {
-        self.inner.get_sampling_metadata(height).await
-    }
-
-    async fn mark_as_sampled(&self, height: u64) -> Result<()> {
-        self.inner.mark_as_sampled(height).await
-    }
-
-    async fn insert<R>(&self, headers: R) -> Result<()>
-    where
-        R: TryInto<VerifiedExtendedHeaders> + Send,
-        <R as TryInto<VerifiedExtendedHeaders>>::Error: Display,
-    {
-        // Convert headers to VerifiedExtendedHeaders to get access to the headers
-        let verified_headers: VerifiedExtendedHeaders = headers.try_into().map_err(|e| {
-            StoreError::InsertionFailed(StoreInsertionError::HeadersVerificationFailed(
-                e.to_string(),
-            ))
-        })?;
-
-        // Clone headers before inserting since we need them for broadcasting
-        let headers_to_broadcast: Vec<ExtendedHeader> = verified_headers.as_ref().to_vec();
-
-        // Insert into the store
-        self.inner.insert(verified_headers).await?;
-
-        // Broadcast each header after successful insertion
-        for header in headers_to_broadcast {
-            // Ignore send errors - if there are no receivers, that's fine
-            let _ = self.broadcast_tx.send(header);
-            yield_now().await;
-        }
-
-        Ok(())
-    }
-
-    async fn get_stored_header_ranges(&self) -> Result<BlockRanges> {
-        self.inner.get_stored_header_ranges().await
-    }
-
-    async fn get_sampled_ranges(&self) -> Result<BlockRanges> {
-        self.inner.get_sampled_ranges().await
-    }
-
-    async fn get_pruned_ranges(&self) -> Result<BlockRanges> {
-        self.inner.get_pruned_ranges().await
-    }
-
-    async fn remove_height(&self, height: u64) -> Result<()> {
-        self.inner.remove_height(height).await
-    }
-
-    async fn get_identity(&self) -> Result<Keypair> {
-        self.inner.get_identity().await
-    }
-
-    async fn close(self) -> Result<()> {
-        self.inner.close().await
-    }
 }
 
 #[cfg(test)]

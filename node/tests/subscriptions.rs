@@ -12,7 +12,7 @@ mod utils;
 async fn header_subscription() {
     let (node, _) = new_connected_node().await;
 
-    let mut header_stream = node.header_subscribe();
+    let mut header_stream = node.header_subscribe().await.unwrap();
     let current_head = node.get_local_head_header().await.unwrap();
 
     // we'll get either current_head, or the next header
@@ -50,7 +50,7 @@ async fn blob_subscription() {
     )
     .unwrap();
 
-    let mut blob_stream = node.blob_subscribe(namespace);
+    let mut blob_stream = node.blob_subscribe(namespace).await.unwrap();
 
     sleep(Duration::from_secs(2)).await;
 

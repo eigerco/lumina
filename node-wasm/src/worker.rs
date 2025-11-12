@@ -121,7 +121,8 @@ impl NodeWorker {
                     .node
                     .as_mut()
                     .ok_or(WorkerError::NodeNotRunning)?
-                    .process_subscription(command)?;
+                    .process_subscription(command)
+                    .await?;
                 WorkerResponse::Subscribed(Some(port.into()))
             }
         })
@@ -294,20 +295,23 @@ impl NodeWorkerInstance {
         })
     }
 
-    fn process_subscription(&mut self, subscription: SubscriptionCommand) -> Result<MessagePort> {
+    async fn process_subscription(
+        &mut self,
+        subscription: SubscriptionCommand,
+    ) -> Result<MessagePort> {
         match subscription {
             SubscriptionCommand::Headers => {
-                let stream = BroadcastStream::new(self.node.header_subscribe())
+                let stream = BroadcastStream::new(self.node.header_subscribe().await?)
                     .map(|header_or_error| header_or_error.map_err(SubscriptionError::from));
 
                 forward_stream_to_message_port(stream)
             }
             SubscriptionCommand::Blobs(namespace) => {
-                let stream = self.node.blob_subscribe(namespace);
+                let stream = self.node.blob_subscribe(namespace).await?;
                 forward_stream_to_message_port(stream)
             }
             SubscriptionCommand::Shares(namespace) => {
-                let stream = self.node.namespace_subscribe(namespace);
+                let stream = self.node.namespace_subscribe(namespace).await?;
                 forward_stream_to_message_port(stream)
             }
         }

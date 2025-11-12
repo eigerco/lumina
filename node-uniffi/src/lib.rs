@@ -301,7 +301,7 @@ impl LuminaNode {
     pub async fn header_subscribe(&self) -> Result<HeaderStream> {
         let node = self.node.read().await;
         let node = node.as_ref().ok_or(LuminaError::NodeNotRunning)?;
-        let stream = BroadcastStream::new(node.header_subscribe());
+        let stream = BroadcastStream::new(node.header_subscribe().await?);
         Ok(HeaderStream::new(stream))
     }
 
@@ -311,7 +311,7 @@ impl LuminaNode {
     pub async fn blob_subscribe(&self, namespace: Arc<Namespace>) -> Result<BlobsStream> {
         let node = self.node.read().await;
         let node = node.as_ref().ok_or(LuminaError::NodeNotRunning)?;
-        let stream = node.blob_subscribe(*namespace.as_ref());
+        let stream = node.blob_subscribe(*namespace.as_ref()).await?;
         Ok(BlobsStream::new(stream))
     }
 
@@ -321,7 +321,7 @@ impl LuminaNode {
     pub async fn namespace_subscribe(&self, namespace: Arc<Namespace>) -> Result<SharesStream> {
         let node = self.node.read().await;
         let node = node.as_ref().ok_or(LuminaError::NodeNotRunning)?;
-        let stream = node.namespace_subscribe(*namespace.as_ref());
+        let stream = node.namespace_subscribe(*namespace.as_ref()).await?;
         Ok(SharesStream::new(stream))
     }
 }

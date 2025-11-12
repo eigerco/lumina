@@ -34,7 +34,7 @@ use crate::node::subscriptions::{SubscriptionError, forward_new_blobs, forward_n
 use crate::p2p::shwap::sample_cid;
 use crate::p2p::{P2p, P2pArgs};
 use crate::pruner::{Pruner, PrunerArgs};
-use crate::store::{InMemoryStore, SamplingMetadata, Store, StoreError, Wrapper};
+use crate::store::{InMemoryStore, SamplingMetadata, Store, StoreError};
 use crate::syncer::{Syncer, SyncerArgs};
 
 mod builder;
@@ -105,8 +105,8 @@ where
     event_channel: EventChannel,
     p2p: Option<Arc<P2p>>,
     blockstore: Option<Arc<SampleBlockstore<B>>>,
-    store: Option<Arc<Wrapper<S>>>,
-    syncer: Option<Arc<Syncer<Wrapper<S>>>>,
+    store: Option<Arc<S>>,
+    syncer: Option<Arc<Syncer<S>>>,
     daser: Option<Arc<Daser>>,
     pruner: Option<Arc<Pruner>>,
     tasks_cancellation_token: CancellationToken,
@@ -147,7 +147,7 @@ where
     async fn start(config: NodeConfig<B, S>) -> Result<(Self, EventSubscriber)> {
         let event_channel = EventChannel::new();
         let event_sub = event_channel.subscribe();
-        let store = Arc::new(Wrapper::new(config.store));
+        let store = Arc::new(config.store);
         let blockstore = Arc::new(SampleBlockstore::new(config.blockstore));
 
         let p2p = Arc::new(
@@ -274,7 +274,7 @@ where
         self.event_channel.publisher().send(NodeEvent::NodeStopped);
     }
 
-    fn syncer(&self) -> &Syncer<Wrapper<S>> {
+    fn syncer(&self) -> &Syncer<S> {
         self.syncer.as_ref().expect("Syncer not initialized")
     }
 
@@ -508,21 +508,24 @@ where
     ///
     /// Return a stream which will yield all the headers, as they are being received by the
     /// node, starting from the first header received after the call.
-    pub fn header_subscribe(&self) -> broadcast::Receiver<ExtendedHeader> {
-        self.store
+    pub async fn header_subscribe(&self) -> Result<broadcast::Receiver<ExtendedHeader>> {
+        Ok(self
+            .syncer
             .as_ref()
             .expect("store should be present")
             .subscribe_headers()
+            .await?)
     }
 
     /// Subscribe to the shares from the namespace, as new headers are received by the node
     ///
     /// Return a stream which will yield all the blobs from the namespace, as the new headers
     /// are being received by the node, starting from the first header received after the call.
-    pub fn blob_subscribe(
+    pub async fn blob_subscribe(
         &self,
         namespace: Namespace,
-    ) -> ReceiverStream<Result<BlobsAtHeight, SubscriptionError>> {
+    ) -> Result<ReceiverStream<Result<BlobsAtHeight, SubscriptionError>>> {
+        let header_receiver = self.header_subscribe().await?;
         let store = self
             .store
             .as_ref()
@@ -535,19 +538,20 @@ where
         // This is mostly relevant for cases where pruning window is set to zero.
         let (tx, rx) = mpsc::channel(16);
 
-        spawn(async move { forward_new_blobs(namespace, tx, store, p2p).await });
+        spawn(async move { forward_new_blobs(namespace, tx, header_receiver, store, p2p).await });
 
-        ReceiverStream::new(rx)
+        Ok(ReceiverStream::new(rx))
     }
 
     /// Subscribe to the blobs from the namespace, as new headers are received by the node
     ///
     /// Return a stream which will yield all the shares from the namespace, as the new headers
     /// are being received by the node, starting from the first header received after the call.
-    pub fn namespace_subscribe(
+    pub async fn namespace_subscribe(
         &self,
         namespace: Namespace,
-    ) -> ReceiverStream<Result<SharesAtHeight, SubscriptionError>> {
+    ) -> Result<ReceiverStream<Result<SharesAtHeight, SubscriptionError>>> {
+        let header_receiver = self.header_subscribe().await?;
         let store = self
             .store
             .as_ref()
@@ -560,9 +564,9 @@ where
         // This is mostly relevant for cases where pruning window is set to zero.
         let (tx, rx) = mpsc::channel(16);
 
-        spawn(async move { forward_new_shares(namespace, tx, store, p2p).await });
+        spawn(async move { forward_new_shares(namespace, tx, header_receiver, store, p2p).await });
 
-        ReceiverStream::new(rx)
+        Ok(ReceiverStream::new(rx))
     }
 }
 
