@@ -16,7 +16,7 @@ use crate::utils::{
 
 wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
-// NOTE: This test is splitted from the rest because when it runs in the same
+// NOTE: This test is split from the rest because when it runs in the same
 // browser session with others it may randomly fail. We couldn't identify the
 // issue yet, but we believe it's in the WebTransport layer of Chromium or libp2p.
 //
