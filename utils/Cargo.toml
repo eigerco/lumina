@@ -45,13 +45,15 @@ time = ["dep:gloo-timers", "dep:tokio", "tokio/time", "dep:send_wrapper", "dep:f
 test-utils = ["dep:tokio", "tokio/macros", "dep:wasm-bindgen-test"]
 make-object = ["dep:js-sys"]
 
-# Workaround is required, because we want to pass through `tls-*-roots` feature flags
-# to tonic, to allow tls root configuration, but setting any of these flags breaks the
-# wasm32 build (tonic pulls incompatible deps). It works by passing the flags though
+# Workaround is required, because we want to pass through `tls-*` feature flags to tonic,
+# to allow tls roots and crypto provider configuration, but setting any of these flags breaks
+# the wasm32 build (tonic pulls incompatible deps). It works by passing the flags though
 # this crate, which has tonic as dependency only for non-wasm32 targets. This effectively
 # emulates missing `[target.'cfg(not(target = "wasm32"))'.features]` functionality.
 tonic-tls-native-roots-except-wasm32 = ["dep:tonic", "tonic/tls-native-roots"]
 tonic-tls-webpki-roots-except-wasm32 = ["dep:tonic", "tonic/tls-webpki-roots"]
+tonic-tls-ring-except-wasm32 = ["dep:tonic", "tonic/tls-ring"]
+tonic-tls-aws-lc-except-wasm32 = ["dep:tonic", "tonic/tls-aws-lc"]
 
 [package.metadata.cargo-udeps.ignore]
 normal = ["tonic"]

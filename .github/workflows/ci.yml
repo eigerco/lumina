@@ -5,6 +5,9 @@ on:
       - main
   pull_request:
 
+permissions:
+  contents: read
+
 # Automatically cancels a job if a new commit is pushed to the same PR, branch, or tag.
 # Source: <https://stackoverflow.com/a/72408109/5148606>
 concurrency:
@@ -195,6 +198,7 @@ jobs:
 
   build-ios:
     runs-on: macos-latest
+
     steps:
     - uses: actions/checkout@v4
 
@@ -264,6 +268,7 @@ jobs:
 
   build-android:
     runs-on: ubuntu-latest
+
     steps:
     - uses: actions/checkout@v4
 
@@ -304,6 +309,7 @@ jobs:
 
   fmt:
     runs-on: ubuntu-latest
+
     steps:
     - uses: actions/checkout@v4
     - name: Run fmt
@@ -312,6 +318,7 @@ jobs:
 
   docs:
     runs-on: ubuntu-latest
+
     steps:
     - uses: actions/checkout@v4
 
@@ -338,6 +345,7 @@ jobs:
 
   unused-deps:
     runs-on: ubuntu-latest
+
     name: unused dependencies
     steps:
     - name: Checkout sources
@@ -359,6 +367,7 @@ jobs:
 
   minimal-versions:
     runs-on: ubuntu-latest
+
     name: minimal versions of dependencies
     steps:
     - uses: actions/checkout@v4
@@ -439,6 +448,7 @@ jobs:
 
   required:
     runs-on: ubuntu-latest
+
     name: Required checks
     if: ${{ !cancelled() }}
     needs:

@@ -64,8 +64,24 @@ wasm-bindgen-test.workspace = true
 
 [features]
 default = ['tls-native-roots']
+# Add system trust roots to `rustls` in `tonic`.
+#
+# Selecting this feature enables TLS support in grpc client.
 tls-native-roots = ["celestia-grpc/tls-native-roots"]
+# Add the standard trust roots from webpki to `rustls` in `tonic`
+#
+# Selecting this feature enables TLS support in grpc client.
 tls-webpki-roots = ["celestia-grpc/tls-webpki-roots"]
+# Select the `ring` crypto provider for `rustls` in `tonic`
+#
+# Selecting this feature doesn't enable tls support in the client, it only guides
+# `tonic` which provider to use if tls is enabled.
+tls-ring = ["celestia-grpc/tls-ring"]
+# Select the `aws-lc` crypto provider for `rustls` in `tonic`
+#
+# Selecting this feature doesn't enable tls support in the client, it only guides
+# `tonic` which provider to use if tls is enabled.
+tls-aws-lc = ["celestia-grpc/tls-aws-lc"]
 
 [package.metadata.docs.rs]
 rustdoc-args = ["--cfg", "docsrs"]

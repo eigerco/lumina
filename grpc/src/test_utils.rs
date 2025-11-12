@@ -11,6 +11,7 @@ pub struct TestAccount {
     /// Bech32 `AccountId` of this account
     pub address: Address,
     /// public key
+    #[allow(dead_code)]
     pub verifying_key: VerifyingKey,
     /// private key
     pub signing_key: SigningKey,
@@ -41,29 +42,20 @@ impl TestAccount {
 }
 
 pub fn load_account() -> TestAccount {
-    let address = include_str!("../../../ci/credentials/node-0.addr");
-    let hex_key = include_str!("../../../ci/credentials/node-0.plaintext-key");
+    let hex_key = include_str!("../../ci/credentials/node-0.plaintext-key").trim();
 
-    let signing_key =
-        SigningKey::from_slice(&hex::decode(hex_key.trim()).expect("valid hex representation"))
-            .expect("valid key material");
-
-    TestAccount {
-        address: address.trim().parse().expect("valid address"),
-        verifying_key: *signing_key.verifying_key(),
-        signing_key,
-    }
+    TestAccount::from_pk(&hex::decode(hex_key).expect("valid hex representation"))
 }
 
 #[cfg(not(target_arch = "wasm32"))]
 mod imp {
     use std::{future::Future, sync::OnceLock};
 
-    use celestia_grpc::GrpcClient;
     use celestia_rpc::Client;
     use tokio::sync::{Mutex, MutexGuard};
 
     use super::*;
+    use crate::GrpcClient;
 
     pub const CELESTIA_GRPC_URL: &str = "http://localhost:19090";
     pub const CELESTIA_RPC_URL: &str = "ws://localhost:46658";
@@ -108,12 +100,12 @@ mod imp {
 mod imp {
     use std::future::Future;
 
-    use celestia_grpc::GrpcClient;
     use celestia_rpc::Client as RpcClient;
     use tokio::sync::oneshot;
     use wasm_bindgen_futures::spawn_local;
 
     use super::*;
+    use crate::GrpcClient;
 
     const CELESTIA_GRPCWEB_PROXY_URL: &str = "http://localhost:18080";
     pub const CELESTIA_RPC_URL: &str = "ws://localhost:46658";

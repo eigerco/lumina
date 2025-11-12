@@ -1,3 +1,5 @@
+//! Worker component
+
 use std::fmt::Debug;
 use std::time::Duration;
 
@@ -29,6 +31,7 @@ use crate::wrapper::libp2p::NetworkInfoSnapshot;
 pub(crate) type WasmBlockstore = EitherBlockstore<InMemoryBlockstore, IndexedDbBlockstore>;
 pub(crate) type WasmStore = EitherStore<InMemoryStore, IndexedDbStore>;
 
+/// Errors produced by `NodeWorker`
 #[derive(Debug, Serialize, Deserialize, Error)]
 pub enum WorkerError {
     /// Worker is initialised, but the node has not been started yet. Use [`NodeDriver::start`].
@@ -64,6 +67,7 @@ struct NodeWorkerInstance {
 
 #[wasm_bindgen]
 impl NodeWorker {
+    /// Create a new `NodeWorker` with a port-like JS object.
     #[wasm_bindgen(constructor)]
     pub fn new(port_like_object: JsValue) -> Self {
         info!("Created lumina worker");
@@ -82,6 +86,7 @@ impl NodeWorker {
         }
     }
 
+    /// Run `NodeWorker` main loop.
     pub async fn run(&mut self) -> Result<(), Error> {
         loop {
             let (command, responder) = self.request_server.recv().await?;
