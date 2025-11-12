@@ -172,6 +172,8 @@ pub trait BlobClient: ClientT {
                 (None, Some(HeaderClient::header_subscribe(self)))
             };
 
+            // TODO: should we validate blobs? we could do it in fallback,
+            // but we don't know the app version for real sub
             loop {
                 yield if has_real_sub {
                     blob_sub
