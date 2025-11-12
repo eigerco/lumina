@@ -13,7 +13,7 @@ mkdir -p ./bindings/Headers
 
 cargo build -p lumina-node-uniffi
 
-cargo run --bin uniffi-bindgen \
+cargo run -p uniffi-bindgen \
   generate \
   --library ../target/debug/liblumina_node_uniffi.dylib \
   --language swift \
