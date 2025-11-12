@@ -4,6 +4,7 @@ pub use self::imp::{
 
 #[cfg(not(target_arch = "wasm32"))]
 mod imp {
+    use std::task::{Context, Poll};
     use std::time::Duration;
 
     pub use std::time::{Instant, SystemTime, SystemTimeError};
@@ -15,13 +16,16 @@ mod imp {
 
     impl Interval {
         /// Create a new `Interval` with provided duration between firings
-        pub async fn new(dur: Duration) -> Self {
+        pub fn new(dur: Duration) -> Self {
             let mut inner = tokio::time::interval(dur);
 
-            // In Tokio the first tick returns immediately, so we
-            // consume to it to create an identical cross-platform
-            // behavior.
-            inner.tick().await;
+            // In Tokio the first tick returns immediately, in order to
+            // create an identical cross-platform behavior the first tick
+            // needs to be after the specified duration.
+            //
+            // We have two ways of doing this: `tick` once, which requires
+            // `.await`, or call `reset`.
+            inner.reset();
 
             Interval(inner)
         }
@@ -29,6 +33,11 @@ mod imp {
         /// Completes when the next instant in the interval has been reached.
         pub async fn tick(&mut self) {
             self.0.tick().await;
+        }
+
+        /// Polls for the next instant in the interval to be reached.
+        pub fn poll_tick(&mut self, cx: &mut Context) -> Poll<()> {
+            self.0.poll_tick(cx).map(drop)
         }
     }
 }
@@ -52,7 +61,7 @@ mod imp {
 
     impl Interval {
         /// Create a new `Interval` with provided duration between firings
-        pub async fn new(dur: Duration) -> Self {
+        pub fn new(dur: Duration) -> Self {
             // If duration was less than a millisecond, then make
             // it 1 millisecond.
             let millis = u32::try_from(dur.as_millis().max(1)).unwrap_or(u32::MAX);
@@ -63,6 +72,11 @@ mod imp {
         /// Completes when the next instant in the interval has been reached.
         pub async fn tick(&mut self) {
             self.0.next().await;
+        }
+
+        /// Polls for the next instant in the interval to be reached.
+        pub fn poll_tick(&mut self, cx: &mut Context) -> Poll<()> {
+            self.0.poll_next_unpin(cx).map(drop)
         }
     }
 
@@ -164,5 +178,26 @@ mod imp {
             value: future,
             timeout: sleep(duration),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_utils::async_test;
+    use std::time::Duration;
+
+    #[async_test]
+    async fn interval() {
+        let now = Instant::now();
+        let mut interval = Interval::new(Duration::from_millis(100));
+
+        interval.tick().await;
+        let elapsed = now.elapsed();
+        assert!(elapsed > Duration::from_millis(100) && elapsed < Duration::from_millis(102));
+
+        interval.tick().await;
+        let elapsed = now.elapsed();
+        assert!(elapsed > Duration::from_millis(200) && elapsed < Duration::from_millis(202));
     }
 }

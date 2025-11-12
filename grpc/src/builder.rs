@@ -205,7 +205,7 @@ mod imp {
 
     use tonic::transport::{ClientTlsConfig, Endpoint};
 
-    pub(super) fn build_transport(url: String) -> Result<BoxedTransport, tonic::transport::Error> {
+    pub(super) fn build_transport(url: String) -> Result<BoxedTransport, GrpcClientBuilderError> {
         let tls_config = ClientTlsConfig::new().with_enabled_roots();
 
         let channel = Endpoint::from_shared(url)?
@@ -224,7 +224,14 @@ mod imp {
 
     use tonic::transport::Endpoint;
 
-    pub(super) fn build_transport(url: String) -> Result<BoxedTransport, tonic::transport::Error> {
+    pub(super) fn build_transport(url: String) -> Result<BoxedTransport, GrpcClientBuilderError> {
+        if url
+            .split_once(':')
+            .is_some_and(|(scheme, _)| scheme == "https")
+        {
+            return Err(GrpcClientBuilderError::TlsNotSupported);
+        }
+
         let channel = Endpoint::from_shared(url)?
             .user_agent("celestia-grpc")?
             .connect_lazy();
