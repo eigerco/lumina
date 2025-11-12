@@ -219,10 +219,18 @@ jobs:
 
     - name: create and boot simulator
       run: |
-        set +x
-        xcrun simctl shutdown all || true
-        xcrun simctl erase all || true
-        xcrun simctl delete CI-iPhone || true
+        # booting the simulator often hangs
+        # https://github.com/actions/runner-images/issues/12777#issuecomment-3431315347
+        # so we work this around by killing it and retrying
+        # based on:
+        # https://github.com/bitwarden/ios/blob/5dc773e7530566702e672b6795bbed0baca51926/.github/workflows/test.yml#L126
+
+        # install 'gtimeout'
+        brew update
+        brew install coreutils
+
+        # Update the shared cache, not sure if it is needed
+        xcrun simctl runtime dyld_shared_cache update --all
 
         # Run `xcrun simctl list devicetypes` for more
         DEVTYPE=com.apple.CoreSimulator.SimDeviceType.iPhone-16
@@ -231,20 +239,34 @@ jobs:
 
         # Create simulator
         UDID=$(xcrun simctl create CI-iPhone "$DEVTYPE" "$RUNTIME")
-        # Boot it
-        xcrun simctl boot "$UDID"
-        # Wait until fully booted
-        xcrun simctl bootstatus "$UDID" -b
 
-        # Set env for the next steps
-        echo "SIM_UDID=$UDID" >> "$GITHUB_ENV"
+        attempt=1
+        while [ $attempt -le 5 ]; do
+          echo "booting simulator (attempt $attempt)"
+
+          # according to bitwarden, successful boot always takes under 2 mins
+          # but from what I saw it usually takes ~45s
+          if gtimeout -s SIGKILL 90s xcrun simctl bootstatus "$UDID" -b; then
+            # Set env for the next steps
+            echo "SIM_UDID=$UDID" >> "$GITHUB_ENV"
+            exit 0
+          else
+            echo "simulator boot timed out"
+            xcrun simctl shutdown "$UDID" || true # prevents "Unable to shutdown device in current state: Shutdown" error
+            attempt=$((attempt + 1))
+            sleep 2
+          fi
+        done
+
+        echo "all boot attempts failed"
+        exit 1
 
     - name: xcode clean build
       working-directory: examples/ios/LuminaDemo
       env:
         NSUnbufferedIO: "YES"
       run: |
-        xcodebuild \
+        xcrun xcodebuild \
           -scheme LuminaDemo \
           -destination "id=${SIM_UDID}" \
           CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
@@ -256,7 +278,7 @@ jobs:
         NSUnbufferedIO: "YES"
       run: |
         # `-parallel-testing-enabled NO` avoids creating clones of the simulator
-        xcodebuild \
+        xcrun xcodebuild \
           -scheme LuminaDemo \
           -sdk iphonesimulator \
           -destination "id=${SIM_UDID}" \
