@@ -9,8 +9,7 @@ use futures_util::{Stream, StreamExt};
 use jsonrpsee::core::client::{ClientT, Error, SubscriptionClientT};
 use jsonrpsee::proc_macros::rpc;
 
-#[cfg(target_arch = "wasm32")]
-use crate::custom_client_error;
+use crate::{HeaderClient, custom_client_error};
 
 pub use celestia_types::fraud_proof::{Proof, ProofType};
 
@@ -23,7 +22,6 @@ mod rpc {
         async fn fraud_get(&self, proof_type: ProofType) -> Result<Vec<Proof>, Error>;
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
     #[rpc(client, namespace = "fraud", namespace_separator = ".")]
     pub trait FraudSubscription {
         #[subscription(name = "Subscribe", unsubscribe = "Unsubscribe", item = Proof)]
@@ -49,15 +47,12 @@ pub trait FraudClient: ClientT {
     ///
     /// # Notes
     ///
-    /// On native this method forwards all the proofs that were submitted to the corresponding
-    /// libp2p pubsub topic, regardless if the proof would pass the verification by
-    /// node or not.
-    ///
-    /// On wasm this method will wait for any proofs to be successfully verified and stored by
-    /// the node. Then it will return all the proofs node stored and the stream will be closed.
+    /// If client returns [`Error::HttpNotImplemented`], the subscription will fallback to
+    /// using combination of [`HeaderClient::header_wait_for_height`] and
+    /// [`FraudClient::fraud_get`] for streaming the proofs. The fallback stream will end
+    /// after the first batch of proofs is returned.
     ///
     /// Unsubscribe is not implemented by Celestia nodes.
-    #[cfg(not(target_arch = "wasm32"))]
     fn fraud_subscribe<'a>(
         &'a self,
         proof_type: ProofType,
@@ -66,53 +61,44 @@ pub trait FraudClient: ClientT {
         Self: SubscriptionClientT + Sized + Sync,
     {
         try_stream! {
-            let mut subscription = rpc::FraudSubscriptionClient::fraud_subscribe(self, proof_type).await?;
+            let subscription_res = rpc::FraudSubscriptionClient::fraud_subscribe(self, proof_type).await;
+            let has_real_sub = !matches!(&subscription_res, Err(Error::HttpNotImplemented));
 
-            while let Some(proof) = subscription.next().await {
-                yield proof?;
-            }
-        }
-        .boxed()
-    }
-
-    /// Subscribe to fraud proof by its type.
-    ///
-    /// # Notes
-    ///
-    /// On native this method forwards all the proofs that were submitted to the corresponding
-    /// libp2p pubsub topic, regardless if the proof would pass the verification by
-    /// node or not.
-    ///
-    /// On wasm this method will wait for any proofs to be successfully verified and stored by
-    /// the node. Then it will return all the proofs node stored and the stream will be closed.
-    ///
-    /// Unsubscribe is not implemented by Celestia nodes.
-    #[cfg(target_arch = "wasm32")]
-    fn fraud_subscribe<'a>(
-        &'a self,
-        proof_type: ProofType,
-    ) -> Pin<Box<dyn Stream<Item = Result<Proof, Error>> + Send + 'a>>
-    where
-        Self: SubscriptionClientT + Sized + Sync,
-    {
-        try_stream! {
-            let mut subscription = super::HeaderClient::header_subscribe(self);
+            let (mut fraud_sub, mut header_sub) = if has_real_sub {
+                (Some(subscription_res?), None)
+            } else {
+                (None, Some(HeaderClient::header_subscribe(self)))
+            };
 
             loop {
-                // tick; we don't care about header
-                subscription
-                    .next()
-                    .await
-                    .ok_or_else(|| custom_client_error("unexpected end of stream"))??;
+                if has_real_sub {
+                    yield fraud_sub
+                        .as_mut()
+                        .expect("must be some")
+                        .next()
+                        .await
+                        .ok_or_else(|| custom_client_error("unexpected end of stream"))??;
+                } else {
+                    // tick; we don't care about the header
+                    header_sub
+                        .as_mut()
+                        .expect("must be some")
+                        .next()
+                        .await
+                        .ok_or_else(|| custom_client_error("unexpected end of stream"))??;
 
-                let proofs = rpc::FraudClient::fraud_get(self, proof_type).await?;
+                    let proofs = rpc::FraudClient::fraud_get(self, proof_type).await?;
+                    if !proofs.is_empty() {
+                        for proof in proofs {
+                            yield proof;
+                        }
 
-                if !proofs.is_empty() {
-                    for proof in proofs {
-                        yield proof;
+                        // after we got some proofs from the node, it would
+                        // keep giving us the same proofs again and again,
+                        // so we just end the stream here
+                        break;
                     }
-                    break;
-                }
+                };
             }
         }
         .boxed()
