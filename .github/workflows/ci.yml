@@ -202,6 +202,9 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    # remove heavy processes from github macos runner
+    - uses: bitwarden/ios/.github/actions/macos-runner-tuneup@5dc773e7530566702e672b6795bbed0baca51926
+
     - name: Setup toolchain
       uses: actions-rust-lang/setup-rust-toolchain@v1
       with:
