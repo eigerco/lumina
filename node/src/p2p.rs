@@ -100,10 +100,6 @@ pub enum P2pError {
     #[error("Channel closed unexpectedly")]
     ChannelClosedUnexpectedly,
 
-    /// Not connected to any peers.
-    #[error("Not connected to any peers")]
-    NoConnectedPeers,
-
     /// An error propagated from the `header-ex`.
     #[error("HeaderEx: {0}")]
     HeaderEx(#[from] HeaderExError),
@@ -161,8 +157,7 @@ impl P2pError {
             | P2pError::WorkerDied
             | P2pError::ChannelClosedUnexpectedly
             | P2pError::BootnodeAddrsWithoutPeerId(_) => true,
-            P2pError::NoConnectedPeers
-            | P2pError::HeaderEx(_)
+            P2pError::HeaderEx(_)
             | P2pError::Bitswap(_)
             | P2pError::ProtoDecodeFailed(_)
             | P2pError::Cid(_)
@@ -251,6 +246,9 @@ pub(crate) enum P2pCmd {
     SetPeerTrust {
         peer_id: PeerId,
         is_trusted: bool,
+    },
+    MarkAsArchival {
+        peer_id: PeerId,
     },
     GetShwapCid {
         cid: Cid,
@@ -651,6 +649,10 @@ impl P2p {
         .await
     }
 
+    pub(crate) async fn mark_as_archival(&self, peer_id: PeerId) -> Result<()> {
+        self.send_command(P2pCmd::MarkAsArchival { peer_id }).await
+    }
+
     /// Get the cancellation token which will be cancelled when the network gets compromised.
     ///
     /// After this token is cancelled, the network should be treated as insincere
@@ -823,7 +825,7 @@ where
         match ev {
             BehaviourEvent::Gossipsub(ev) => self.on_gossip_sub_event(ev).await,
             BehaviourEvent::Bitswap(ev) => self.on_bitswap_event(ev).await,
-            BehaviourEvent::HeaderEx(_) => {}
+            BehaviourEvent::HeaderEx(ev) => self.on_header_ex_event(ev).await,
         }
 
         Ok(())
@@ -838,10 +840,11 @@ where
                 request,
                 respond_to,
             } => {
-                let ctx = self.swarm.context();
-                ctx.behaviour
+                self.swarm
+                    .context()
+                    .behaviour
                     .header_ex
-                    .send_request(request, respond_to, ctx.peer_tracker);
+                    .send_request(request, respond_to);
             }
             P2pCmd::Listeners { respond_to } => {
                 respond_to.maybe_send(self.swarm.listeners());
@@ -870,6 +873,9 @@ where
                 is_trusted,
             } => {
                 self.swarm.set_peer_trust(&peer_id, is_trusted);
+            }
+            P2pCmd::MarkAsArchival { peer_id } => {
+                self.swarm.mark_as_archival(&peer_id);
             }
             P2pCmd::GetShwapCid { cid, respond_to } => {
                 self.on_get_shwap_cid(cid, respond_to);
@@ -958,6 +964,25 @@ where
                     let error: P2pError = error.into();
                     respond_to.maybe_send_err(error);
                 }
+            }
+        }
+    }
+
+    #[instrument(level = "trace", skip(self))]
+    async fn on_header_ex_event(&mut self, ev: header_ex::Event) {
+        match ev {
+            header_ex::Event::SchedulePendingRequests => {
+                let ctx = self.swarm.context();
+
+                ctx.behaviour
+                    .header_ex
+                    .schedule_pending_requests(ctx.peer_tracker);
+            }
+            header_ex::Event::NeedTrustedPeers => {
+                self.swarm.connect_to_bootnodes();
+            }
+            header_ex::Event::NeedArchivalPeers => {
+                self.swarm.start_archival_node_kad_query();
             }
         }
     }
