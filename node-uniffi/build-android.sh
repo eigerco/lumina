@@ -9,7 +9,7 @@ if [ "$(uname)" == "Darwin" ]; then
   so_ext="dylib"
 fi
 
-cargo build -p lumina-node-uniffi
+cargo build
 
 cargo ndk \
   -o ./app/src/main/jniLibs \
