@@ -68,7 +68,7 @@ impl TryFrom<MessageEvent> for MultiplexMessage<WorkerResult> {
         let MultiplexMessage::<WorkerResult> { id, mut payload } =
             from_value(ev.data()).context("could not deserialize message")?;
 
-        if let Some(port) = ev.get_ports().into_iter().take(1).last() {
+        if let Some(port) = ev.get_ports().into_iter().next() {
             if let Ok(WorkerResponse::Subscribed(maybe_port)) = &mut payload {
                 let _ = maybe_port.insert(port);
             }
@@ -158,7 +158,7 @@ impl<Tx> Drop for PortSender<Tx> {
         let close_signal: JsValue = CHANNEL_CLOSE_SYMBOL_NAME.to_string().into();
         let _ = self
             .port
-            .post_message_with_transferable(&close_signal, &JsValue::UNDEFINED);
+            .post_message(&close_signal);
     }
 }
 
@@ -176,11 +176,7 @@ impl Stream for RawPortReceier {
         let event =
             ready!(this.receiving_channel.poll_recv(cx)).expect("forward channel should not drop");
 
-        if event
-            .data()
-            .dyn_ref::<JsString>()
-            .is_some_and(|s| s == CHANNEL_CLOSE_SYMBOL_NAME)
-        {
+        if event.data() == CHANNEL_CLOSE_SYMBOL_NAME {
             this.receiving_channel.close();
             return Poll::Ready(None);
         }

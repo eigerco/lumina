@@ -55,7 +55,7 @@ impl IteratorResultObject {
     }
 }
 
-#[wasm_bindgen]
+#[wasm_bindgen(skip_typescript)]
 #[derive(Clone)]
 pub struct AsyncIteratorImpl {
     #[wasm_bindgen(skip)]
