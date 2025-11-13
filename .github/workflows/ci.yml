@@ -244,19 +244,17 @@ jobs:
         UDID=$(xcrun simctl create CI-iPhone "$DEVTYPE" "$RUNTIME")
         echo "SIM_UDID=$UDID" >> "$GITHUB_ENV"
 
-        attempt=1
-        while [ $attempt -le 5 ]; do
+        for attempt in $(seq 1 5); do
           echo "booting simulator (attempt $attempt)"
 
           # according to bitwarden, successful boot always takes under 2 mins
-          # but from what I saw it usually takes ~45s
-          if gtimeout -s SIGKILL 90s xcrun simctl bootstatus "$UDID" -b; then
+          # but we call `create` on simulator beforehand and then it usually takes ~45s
+          if gtimeout -s SIGKILL 75s xcrun simctl bootstatus "$UDID" -b; then
             exit 0
           else
             echo "simulator boot timed out"
             xcrun simctl shutdown "$UDID" || true # prevents "Unable to shutdown device in current state: Shutdown" error
-            attempt=$((attempt + 1))
-            sleep 2
+            sleep 1
           fi
         done
 
