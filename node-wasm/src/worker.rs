@@ -1,3 +1,5 @@
+//! Worker component
+
 use std::time::Duration;
 
 use futures::StreamExt;
@@ -50,6 +52,7 @@ struct NodeWorkerInstance {
 
 #[wasm_bindgen]
 impl NodeWorker {
+    /// Create a new `NodeWorker` with a port-like JS object.
     #[wasm_bindgen(constructor)]
     pub fn new(port_like_object: JsValue) -> Self {
         info!("Created lumina worker");
@@ -68,6 +71,7 @@ impl NodeWorker {
         }
     }
 
+    /// Run `NodeWorker` main loop.
     pub async fn run(&mut self) -> Result<(), Error> {
         loop {
             let CommandWithResponder { command, responder } = self.request_server.recv().await?;

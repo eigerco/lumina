@@ -82,5 +82,21 @@ wasm-bindgen-test.workspace = true
 default = ['tls-native-roots']
 wasm-bindgen = ["celestia-types/wasm-bindgen", "dep:js-sys", "dep:wasm-bindgen", "dep:wasm-bindgen-futures"]
 uniffi = ["dep:async-trait", "dep:uniffi", "dep:serde_json", "celestia-types/uniffi"]
+# Add system trust roots to `rustls` in `tonic`.
+#
+# Selecting this feature enables TLS support in grpc client.
 tls-native-roots = ["lumina-utils/tonic-tls-native-roots-except-wasm32"]
+# Add the standard trust roots from webpki to `rustls` in `tonic`
+#
+# Selecting this feature enables TLS support in grpc client.
 tls-webpki-roots = ["lumina-utils/tonic-tls-webpki-roots-except-wasm32"]
+# Select the `ring` crypto provider for `rustls` in `tonic`
+#
+# Selecting this feature doesn't enable tls support in the client, it only guides
+# `tonic` which provider to use if tls is enabled.
+tls-ring = ["lumina-utils/tonic-tls-ring-except-wasm32"]
+# Select the `aws-lc` crypto provider for `rustls` in `tonic`
+#
+# Selecting this feature doesn't enable tls support in the client, it only guides
+# `tonic` which provider to use if tls is enabled.
+tls-aws-lc = ["lumina-utils/tonic-tls-ring-except-wasm32"]

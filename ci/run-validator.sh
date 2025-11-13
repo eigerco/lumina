@@ -6,11 +6,11 @@ set -euxo pipefail
 # or 1 if not provided
 NODE_COUNT="${NODE_COUNT:-1}"
 # a private local network
-P2P_NETWORK="private"
+P2P_NETWORK="${P2P_NETWORK:-"private"}"
 # a validator node configuration directory
 CONFIG_DIR="$CELESTIA_HOME/.celestia-app"
 # the names of the keys
-NODE_NAME=validator-0
+NODE_NAME="validator-0"
 # amounts of the coins for the keys
 NODE_COINS="200000000000000utia"
 VALIDATOR_COINS="1000000000000000utia"
@@ -18,7 +18,7 @@ VALIDATOR_COINS="1000000000000000utia"
 CREDENTIALS_DIR="/credentials"
 # directory where validator will write the genesis hash
 GENESIS_DIR="/genesis"
-GENESIS_HASH_FILE="$GENESIS_DIR/genesis_hash"
+GENESIS_HASH_FILE="$GENESIS_DIR/genesis-hash-$P2P_NETWORK"
 
 # Get the address of the node of given name
 node_address() {
@@ -116,7 +116,8 @@ provision_da_nodes() {
       "$peer_addr" \
       "$NODE_COINS" \
       --fees 21000utia \
-      --keyring-backend "test"
+      --keyring-backend "test" \
+      --chain-id "$P2P_NETWORK"
   done
 
   # Save the genesis hash for the DA node
@@ -159,6 +160,15 @@ setup_private_validator() {
   # enable gRPC
   dasel put -f "$CONFIG_DIR/config/app.toml" -t bool -v true grpc.enable
   dasel put -f "$CONFIG_DIR/config/app.toml" -t string -v '0.0.0.0:9090' grpc.address
+
+  # Optionally, configure the block size
+  if [ -n "${BLOCK_SIZE:-""}" ]; then
+    dasel put -f "$CONFIG_DIR/config/genesis.json" -t string -v "${BLOCK_SIZE}" consensus.params.block.max_bytes
+  fi
+  # Optionally, configure the transactions ttl in mempool
+  if [ -n "${MEMPOOL_TX_TTL:-""}" ]; then
+    dasel put -f "$CONFIG_DIR/config/config.toml" -t int -v "${MEMPOOL_TX_TTL}" mempool.ttl-num-blocks
+  fi
 
   # TODO: uncomment and remove grpcwebproxy, once CORS works with built-in grpc-web
   # enable grpc-web

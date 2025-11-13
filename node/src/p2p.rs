@@ -787,7 +787,7 @@ where
     }
 
     async fn run(&mut self) {
-        let mut report_interval = Interval::new(Duration::from_secs(60)).await;
+        let mut report_interval = Interval::new(Duration::from_secs(60));
 
         loop {
             select! {

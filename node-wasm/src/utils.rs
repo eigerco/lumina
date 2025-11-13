@@ -49,7 +49,7 @@ pub fn setup_logging() {
         .with_writer(MakeConsoleWriter) // write events to the console
         .with_filter(LevelFilter::INFO); // TODO: allow customizing the log level
 
-    tracing_subscriber::registry().with(fmt_layer).init();
+    let _ = tracing_subscriber::registry().with(fmt_layer).try_init();
 }
 
 impl From<Network> for network::Network {

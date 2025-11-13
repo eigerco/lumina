@@ -33,6 +33,12 @@ pub enum GrpcClientBuilderError {
     /// Invalid metadata
     #[error("invalid metadata")]
     Metadata(String),
+
+    /// Tls support is not enabled but requested
+    #[error(
+        "Tls support is not enabled but requested via url, please enable it using proper feature flags"
+    )]
+    TlsNotSupported,
 }
 
 /// Builder for [`GrpcClient`]
@@ -131,6 +137,9 @@ impl From<crate::GrpcClientBuilderError> for GrpcClientBuilderError {
             }
             crate::GrpcClientBuilderError::Metadata(err) => {
                 GrpcClientBuilderError::Metadata(err.to_string())
+            }
+            crate::GrpcClientBuilderError::TlsNotSupported => {
+                GrpcClientBuilderError::TlsNotSupported
             }
         }
     }

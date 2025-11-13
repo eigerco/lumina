@@ -101,3 +101,12 @@ async fn main() -> Result<()> {
 
 [`celestia-rpc`]: celestia_rpc
 [`celestia-grpc`]: celestia_grpc
+
+# TLS support
+
+Client will be configured to use TLS if at least one of the trust roots provider is enabled using the crate features
+`tls-native-roots` and `tls-webpki-roots`. The trust roots are additive, selecting both will result in both being in use.
+
+Moreover, the crypto provider for `rustls` can be configured by using `tls-ring` and `tls-aws-lc` features.
+
+Those features are re-exposed from the `tonic` crate, please refer to its documentation for more info.

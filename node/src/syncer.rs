@@ -284,7 +284,7 @@ where
     async fn connecting_event_loop(&mut self) -> Result<()> {
         debug!("Entering connecting_event_loop");
 
-        let mut report_interval = Interval::new(Duration::from_secs(60)).await;
+        let mut report_interval = Interval::new(Duration::from_secs(60));
         self.report().await?;
 
         let mut try_init_fut = pin!(try_init_task(
@@ -337,7 +337,7 @@ where
     async fn connected_event_loop(&mut self) -> Result<()> {
         debug!("Entering connected_event_loop");
 
-        let mut report_interval = Interval::new(Duration::from_secs(60)).await;
+        let mut report_interval = Interval::new(Duration::from_secs(60));
         let mut peer_tracker_info_watcher = self.p2p.peer_tracker_info_watcher();
 
         // Check if connection status changed before creating the watcher
