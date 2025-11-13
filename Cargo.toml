@@ -8,7 +8,6 @@ members = [
   "node",
   "node-wasm",
   "node-uniffi",
-  "node-uniffi/uniffi-bindgen",
   "proto",
   "rpc",
   "types",

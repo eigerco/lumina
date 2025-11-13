@@ -13,6 +13,10 @@ rust-version = "1.87"
 [lib]
 crate-type = ["lib", "staticlib", "cdylib"]
 
+[[bin]]
+name = "uniffi-bindgen"
+path = "./src/bin/uniffi-bindgen.rs"
+
 [dependencies]
 blockstore.workspace = true
 celestia-types = { workspace = true, features = ["uniffi"] }
@@ -29,7 +33,7 @@ tendermint.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["macros", "sync"] }
 tonic.workspace = true
-uniffi = { workspace = true, features = ["tokio"] }
+uniffi = { workspace = true, features = ["tokio", "cli"] }
 
 [features]
 # webpki is needed for TLS on android and iOS
