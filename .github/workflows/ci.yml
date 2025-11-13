@@ -247,8 +247,8 @@ jobs:
           echo "booting simulator (attempt $attempt)"
 
           # according to bitwarden, successful boot always takes under 2 mins
-          # but we call `create` on simulator beforehand and then it usually takes ~45s
-          if gtimeout -s SIGKILL 75s xcrun simctl bootstatus "$UDID" -b; then
+          # but we call `create` on simulator beforehand and then it takes under 1.5 mins
+          if gtimeout -s SIGKILL 90s xcrun simctl bootstatus "$UDID" -b; then
             exit 0
           else
             echo "simulator boot timed out"
