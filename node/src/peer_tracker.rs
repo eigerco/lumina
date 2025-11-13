@@ -7,9 +7,7 @@ use std::time::Duration;
 use libp2p::ping;
 use libp2p::{PeerId, swarm::ConnectionId};
 use lumina_utils::time::Instant;
-use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
-use smallvec::SmallVec;
 use tokio::sync::watch;
 use tracing::info;
 

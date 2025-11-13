@@ -2,7 +2,7 @@ use std::cmp::Reverse;
 use std::collections::{HashMap, VecDeque};
 use std::fmt::{self, Debug};
 use std::hash::Hash;
-use std::task::{Context, Poll, ready};
+use std::task::{Context, Poll};
 use std::time::Duration;
 
 use celestia_proto::p2p::pb::header_request::Data;
@@ -602,7 +602,6 @@ mod tests {
     use super::*;
     use crate::events::EventChannel;
     use crate::p2p::header_ex::utils::ExtendedHeaderExt;
-    use crate::peer_tracker;
     use celestia_proto::p2p::pb::StatusCode;
     use celestia_types::consts::HASH_SIZE;
     use celestia_types::hash::Hash;
@@ -826,7 +825,7 @@ mod tests {
 
     #[async_test]
     async fn respond_with_another_height() {
-        let mut peer_tracker = peer_tracker_with_n_peers(15);
+        let peer_tracker = peer_tracker_with_n_peers(15);
         let mut mock_req = MockReq::new();
         let mut handler = HeaderExClientHandler::<MockReq>::new();
 
