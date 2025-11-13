@@ -220,75 +220,46 @@ jobs:
         ./node-uniffi/build-ios.sh
         ./examples/ios/LuminaDemo/copy_bindings.sh
 
-    - name: create and boot simulator
+    # bitwarden's boot-simulator requires gtimeout
+    - name: install brew dependencies
       run: |
-        # booting the simulator often hangs
-        # https://github.com/actions/runner-images/issues/12777#issuecomment-3431315347
-        # so we work this around by killing it and retrying
-        # based on:
-        # https://github.com/bitwarden/ios/blob/5dc773e7530566702e672b6795bbed0baca51926/.github/workflows/test.yml#L126
-
-        # install 'gtimeout'
         brew update
         brew install coreutils
 
-        # Update the shared cache, not sure if it is needed
-        xcrun simctl runtime dyld_shared_cache update --all
-
-        # Run `xcrun simctl list devicetypes` for more
-        DEVTYPE=com.apple.CoreSimulator.SimDeviceType.iPhone-16
-        # Run `xcrun simctl list runtimes` for more
-        RUNTIME=com.apple.CoreSimulator.SimRuntime.iOS-26-0
-
-        # Create simulator
-        UDID=$(xcrun simctl create CI-iPhone "$DEVTYPE" "$RUNTIME")
-
-        attempt=1
-        while [ $attempt -le 5 ]; do
-          echo "booting simulator (attempt $attempt)"
-
-          # according to bitwarden, successful boot always takes under 2 mins
-          # but from what I saw it usually takes ~45s
-          if gtimeout -s SIGKILL 90s xcrun simctl bootstatus "$UDID" -b; then
-            # Set env for the next steps
-            echo "SIM_UDID=$UDID" >> "$GITHUB_ENV"
-            exit 0
-          else
-            echo "simulator boot timed out"
-            xcrun simctl shutdown "$UDID" || true # prevents "Unable to shutdown device in current state: Shutdown" error
-            attempt=$((attempt + 1))
-            sleep 2
-          fi
-        done
-
-        echo "all boot attempts failed"
-        exit 1
+    # booting the simulator often hangs, so it needs to be killed and restarted
+    # https://github.com/actions/runner-images/issues/12777#issuecomment-3431315347
+    - name: boot simulator
+      uses: bitwarden/ios/.github/actions/boot-simulator@5dc773e7530566702e672b6795bbed0baca51926
+      id: boot-simulator
+      with:
+        simulator-name: iPhone 17 Pro
+        simulator-version: 26.0.1
 
     - name: xcode clean build
       working-directory: examples/ios/LuminaDemo
       env:
         NSUnbufferedIO: "YES"
+        SIMULATOR_ID: ${{ steps.boot-simulator.outputs.simulator-id }}
       run: |
-        xcrun xcodebuild \
-          -scheme LuminaDemo \
-          -destination "id=${SIM_UDID}" \
+        xcrun xcodebuild build-for-testing \
           CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
-          clean build-for-testing
+          -scheme LuminaDemo \
+          -destination "id=$SIMULATOR_ID" \
+          -quiet
 
     - name: xcode sim test
       working-directory: examples/ios/LuminaDemo
       env:
         NSUnbufferedIO: "YES"
+        SIMULATOR_ID: ${{ steps.boot-simulator.outputs.simulator-id }}
       run: |
-        # `-parallel-testing-enabled NO` avoids creating clones of the simulator
-        xcrun xcodebuild \
+        xcrun xcodebuild test-without-building \
           -scheme LuminaDemo \
           -sdk iphonesimulator \
-          -destination "id=${SIM_UDID}" \
-          -parallel-testing-enabled NO \
+          -destination "id=$SIMULATOR_ID" \
           -destination-timeout 360 \
           -skip-testing LuminaDemoTests/GrpcClientTest \
-          test-without-building
+          -quiet
 
 
   build-android:
