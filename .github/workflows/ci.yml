@@ -229,7 +229,6 @@ jobs:
         # https://github.com/bitwarden/ios/blob/5dc773e7530566702e672b6795bbed0baca51926/.github/workflows/test.yml#L126
 
         # install 'gtimeout'
-        brew update
         brew install coreutils
 
         # Update the shared cache, not sure if it is needed
