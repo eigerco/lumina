@@ -310,19 +310,19 @@ impl PeerTracker {
     }
 
     pub(crate) fn on_agent_version(&mut self, peer_id: &PeerId, agent_version: &str) {
-        if let Some(peer) = self.peers.get_mut(peer_id) {
-            if peer.is_connected() {
-                peer.node_kind = NodeKind::from_agent_version(agent_version);
-                self.recount_peer_tracker_info();
-            }
+        if let Some(peer) = self.peers.get_mut(peer_id)
+            && peer.is_connected()
+        {
+            peer.node_kind = NodeKind::from_agent_version(agent_version);
+            self.recount_peer_tracker_info();
         }
     }
 
     pub(crate) fn on_ping_event(&mut self, ev: &ping::Event) {
-        if let Some(peer) = self.peers.get_mut(&ev.peer) {
-            if let Some(conn_info) = peer.connections.get_mut(&ev.connection) {
-                conn_info.ping = ev.result.as_ref().ok().copied();
-            }
+        if let Some(peer) = self.peers.get_mut(&ev.peer)
+            && let Some(conn_info) = peer.connections.get_mut(&ev.connection)
+        {
+            conn_info.ping = ev.result.as_ref().ok().copied();
         }
     }
 
@@ -356,24 +356,6 @@ impl PeerTracker {
                     .copied()
                     .map(|conn| (peer.id(), conn))
             })
-    }
-
-    /// Returns one of the best peers.
-    pub(crate) fn best_peer(&self) -> Option<PeerId> {
-        const MAX_PEER_SAMPLE: usize = 128;
-
-        // TODO: Implement peer score and return the best.
-        let mut peers = self
-            .peers
-            .iter()
-            .filter(|(_, peer)| peer.is_connected())
-            .take(MAX_PEER_SAMPLE)
-            .map(|(peer_id, _)| peer_id)
-            .collect::<SmallVec<[_; MAX_PEER_SAMPLE]>>();
-
-        peers.shuffle(&mut rand::thread_rng());
-
-        peers.first().copied().copied()
     }
 
     fn recount_peer_tracker_info(&self) {

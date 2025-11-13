@@ -331,6 +331,10 @@ where
         Ok(self.p2p().set_peer_trust(peer_id, is_trusted).await?)
     }
 
+    pub async fn mark_as_archival(&self, peer_id: PeerId) -> Result<()> {
+        Ok(self.p2p().mark_as_archival(peer_id).await?)
+    }
+
     /// Request the head header from the network.
     pub async fn request_head_header(&self) -> Result<ExtendedHeader> {
         Ok(self.p2p().get_head_header().await?)
@@ -342,8 +346,8 @@ where
     }
 
     /// Request a header for the block with a given height from the network.
-    pub async fn request_header_by_height(&self, hash: u64) -> Result<ExtendedHeader> {
-        Ok(self.p2p().get_header_by_height(hash).await?)
+    pub async fn request_header_by_height(&self, height: u64) -> Result<ExtendedHeader> {
+        Ok(self.p2p().get_header_by_height(height).await?)
     }
 
     /// Request headers in range (from, from + amount] from the network.

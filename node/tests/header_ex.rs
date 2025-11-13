@@ -75,6 +75,9 @@ async fn client_server() {
         .start()
         .await
         .unwrap();
+    client
+        .mark_as_archival(server.local_peer_id().to_owned())
+        .await;
 
     client.wait_connected().await.unwrap();
 
@@ -318,6 +321,9 @@ async fn invalidated_header_server_store() {
         .start()
         .await
         .unwrap();
+    client
+        .mark_as_archival(server.local_peer_id().to_owned())
+        .await;
 
     client.wait_connected().await.unwrap();
 

@@ -217,10 +217,8 @@ impl BlockRanges {
         for range in &ranges {
             range.validate()?;
 
-            if let Some(prev) = prev {
-                if range.start() <= prev.end() {
-                    return Err(BlockRangesError::UnsortedBlockRanges);
-                }
+            if prev.is_some_and(|prev| range.start() <= prev.end()) {
+                return Err(BlockRangesError::UnsortedBlockRanges);
             }
 
             prev = Some(range);

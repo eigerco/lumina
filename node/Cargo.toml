@@ -8,7 +8,7 @@ authors = ["Eiger <hello@eiger.co>"]
 homepage = "https://www.eiger.co"
 repository = "https://github.com/eigerco/lumina"
 readme = "README.md"
-rust-version = "1.87"
+rust-version = "1.88"
 # crates.io is limited to 5 keywords and 5 categories
 keywords = ["blockchain", "celestia", "lumina", "node"]
 # Must be one of <https://crates.io/category_slugs>

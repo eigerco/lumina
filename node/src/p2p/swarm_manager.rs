@@ -34,7 +34,8 @@ const BOOTNODE_PROTECT_TAG: u32 = 0;
 const FULL_PROTECT_TAG: u32 = 1;
 const ARCHIVAL_PROTECT_TAG: u32 = 2;
 
-const PEER_HEALTH_CHECK_INTERVAL: Duration = Duration::from_secs(60);
+const PEER_HEALTH_CHECK_INTERVAL: Duration = Duration::from_secs(10 * 60);
+const AGGRESSIVE_PEER_HEALTH_CHECK_INTERVAL: Duration = Duration::from_secs(10);
 
 #[derive(NetworkBehaviour)]
 struct SwarmBehaviour<B>
@@ -63,6 +64,7 @@ where
     listeners: Vec<ListenerId>,
     peer_health_check_interval: Interval,
     gc_interval: Interval,
+    first_connection_established: bool,
 }
 
 pub(crate) struct SwarmContext<'a, B>
@@ -139,7 +141,7 @@ where
         }
 
         let peer_tracker_info_watcher = peer_tracker.info_watcher();
-        let peer_health_check_interval = Interval::new(PEER_HEALTH_CHECK_INTERVAL);
+        let peer_health_check_interval = Interval::new(AGGRESSIVE_PEER_HEALTH_CHECK_INTERVAL);
         let gc_interval = Interval::new(GC_INTERVAL);
 
         let mut manager = SwarmManager {
@@ -151,6 +153,7 @@ where
             listeners,
             peer_health_check_interval,
             gc_interval,
+            first_connection_established: false,
         };
 
         manager.bootstrap();
@@ -166,6 +169,10 @@ where
                 _ = self.peer_tracker_info_watcher.changed() => {
                     self.peer_health_check().await;
                 }
+                // TODO: if we start the node before we connect to the internet
+                // and after that we connect, then SwarmManager (and kademlia behaviour)
+                // doesn't detect this. The node gets connected after the following
+                // timer gets triggered.
                 _ = self.peer_health_check_interval.tick() => {
                     self.peer_health_check().await;
                 }
@@ -206,10 +213,10 @@ where
             dial_opts.addresses(addresses.clone()).build()
         };
 
-        if let Err(e) = self.swarm.dial(dial_opts) {
-            if !matches!(e, DialError::DialPeerConditionFalse(_)) {
-                warn!("Failed to dial on {addresses:?}: {e}");
-            }
+        if let Err(e) = self.swarm.dial(dial_opts)
+            && !matches!(e, DialError::DialPeerConditionFalse(_))
+        {
+            warn!("Failed to dial on {addresses:?}: {e}");
         }
     }
 
@@ -260,7 +267,7 @@ where
         }
     }
 
-    fn connect_to_bootnodes(&mut self) {
+    pub(crate) fn connect_to_bootnodes(&mut self) {
         // Collect all the bootnodes that are not currently connected.
         let bootnodes = self
             .bootnodes
@@ -305,10 +312,12 @@ where
             .iter_queries()
             .any(|query| matches!(query.info(), QueryInfo::Bootstrap { .. }));
 
-        if !bootstrap_query_exists {
-            if let Err(e) = self.swarm.behaviour_mut().kademlia.bootstrap() {
-                warn!("Can't run kademlia bootstrap: {e}");
-            }
+        if bootstrap_query_exists {
+            return;
+        }
+
+        if let Err(e) = self.swarm.behaviour_mut().kademlia.bootstrap() {
+            warn!("Can't run kademlia bootstrap: {e}");
         }
     }
 
@@ -318,21 +327,23 @@ where
             |query| matches!(query.info(), QueryInfo::GetProviders { key, .. } if key == topic),
         );
 
-        if !kad_query_exists {
-            // `get_providers` reports already known providers of the
-            // `topic` and tries to discover new ones.
-            self.swarm
-                .behaviour_mut()
-                .kademlia
-                .get_providers(topic.to_owned());
+        if kad_query_exists {
+            return;
         }
+
+        // `get_providers` reports already known providers of the
+        // `topic` and tries to discover new ones.
+        self.swarm
+            .behaviour_mut()
+            .kademlia
+            .get_providers(topic.to_owned());
     }
 
-    fn start_full_node_kad_query(&mut self) {
+    pub(crate) fn start_full_node_kad_query(&mut self) {
         self.start_get_providers_kad_query(&FULL_NODE_TOPIC);
     }
 
-    fn start_archival_node_kad_query(&mut self) {
+    pub(crate) fn start_archival_node_kad_query(&mut self) {
         self.start_get_providers_kad_query(&ARCHIVAL_NODE_TOPIC);
     }
 
@@ -362,6 +373,12 @@ where
     pub(crate) fn set_peer_trust(&mut self, peer_id: &PeerId, is_trusted: bool) {
         if self.swarm.local_peer_id() != peer_id {
             self.peer_tracker.set_trusted(peer_id, is_trusted);
+        }
+    }
+
+    pub(crate) fn mark_as_archival(&mut self, peer_id: &PeerId) {
+        if self.swarm.local_peer_id() != peer_id {
+            self.peer_tracker.mark_as_archival(peer_id);
         }
     }
 
@@ -488,7 +505,7 @@ where
                 connection_id,
                 ..
             } => {
-                self.on_peer_connected(&peer_id, connection_id);
+                self.on_peer_connected(&peer_id, connection_id).await;
             }
             SwarmEvent::ConnectionClosed {
                 peer_id,
@@ -511,7 +528,7 @@ where
         debug!("Peer discovered: {peer_id}");
     }
 
-    fn on_peer_connected(&mut self, peer_id: &PeerId, connection_id: ConnectionId) {
+    async fn on_peer_connected(&mut self, peer_id: &PeerId, connection_id: ConnectionId) {
         debug!("Peer connected: {peer_id}");
         self.peer_tracker.add_connection(peer_id, connection_id);
 
@@ -521,6 +538,11 @@ where
                 .behaviour_mut()
                 .connection_control
                 .set_keep_alive(peer_id, connection_id, true);
+        }
+
+        if !self.first_connection_established {
+            self.first_connection_established = true;
+            self.peer_health_check_interval = Interval::new(PEER_HEALTH_CHECK_INTERVAL);
         }
     }
 
