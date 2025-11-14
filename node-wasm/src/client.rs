@@ -405,6 +405,10 @@ impl NodeClient {
         Ok(BroadcastChannel::new(&name).unwrap())
     }
 
+    /// Subscribe to new headers received by the node from the network.
+    ///
+    /// Return an async iterator which will yield all the headers, as they are being received by the
+    /// node, starting from the first header received after the call.
     #[wasm_bindgen(js_name = headerSubscribe, unchecked_return_type = "AsyncIterable<ExtendedHeader | SubscriptionError>")]
     pub async fn header_subscribe(&self) -> Result<AsyncIterator> {
         let command = SubscriptionCommand::Headers;
@@ -413,6 +417,10 @@ impl NodeClient {
         into_async_iterator::<ExtendedHeader>(port)
     }
 
+    /// Subscribe to the shares from the namespace, as new headers are received by the node
+    ///
+    /// Return an async iterator which will yield all the blobs from the namespace, as the new headers
+    /// are being received by the node, starting from the first header received after the call.
     #[wasm_bindgen(js_name = blobSubscribe, unchecked_return_type = "AsyncIterable<BlobsAtHeight | SubscriptionError>")]
     pub async fn blob_subscribe(&self, namespace: Namespace) -> Result<AsyncIterator> {
         let command = SubscriptionCommand::Blobs(namespace);
@@ -421,6 +429,10 @@ impl NodeClient {
         into_async_iterator::<BlobsAtHeight>(port)
     }
 
+    /// Subscribe to the blobs from the namespace, as new headers are received by the node
+    ///
+    /// Return an async iterator which will yield all the shares from the namespace, as the new headers
+    /// are being received by the node, starting from the first header received after the call.
     #[wasm_bindgen(js_name = namespaceSubscribe, unchecked_return_type = "AsyncIterable<SharesAtHeight | SubscriptionError>")]
     pub async fn namespace_subscribe(&self, namespace: Namespace) -> Result<AsyncIterator> {
         let command = SubscriptionCommand::Shares(namespace);
