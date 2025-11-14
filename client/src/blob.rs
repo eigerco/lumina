@@ -159,26 +159,24 @@ impl BlobApi {
     ///     .await?;
     ///
     /// let ns = Namespace::new_v0(b"mydata").unwrap();
-    /// let mut blobs_rx = client.blob().subscribe(ns).await;
+    /// let mut blobs_rx = client.blob().subscribe(ns);
     ///
     /// while let Some(blobs) = blobs_rx.next().await {
     ///     dbg!(blobs);
     /// }
     /// # Ok(())
     /// # }
-    pub async fn subscribe(
+    pub fn subscribe(
         &self,
         namespace: Namespace,
     ) -> Pin<Box<dyn Stream<Item = Result<BlobsAtHeight>> + Send + 'static>> {
         let inner = self.inner.clone();
 
+        // we need to re-stream it to map error and satisfy 'static
         try_stream! {
-            let mut subscription = inner.rpc.blob_subscribe(namespace).await?;
-
+            let mut subscription = inner.rpc.blob_subscribe(namespace);
             while let Some(item) = subscription.next().await {
-                let blobs = item?;
-                // TODO: Should we validate blobs?
-                yield blobs;
+                yield item?;
             }
         }
         .boxed()
@@ -273,13 +271,6 @@ mod tests {
         );
 
         let namespace = ensure_serializable_deserializable(unimplemented!());
-        ensure_serializable_deserializable(
-            api.subscribe(namespace)
-                .await
-                .next()
-                .await
-                .unwrap()
-                .unwrap(),
-        );
+        ensure_serializable_deserializable(api.subscribe(namespace).next().await.unwrap().unwrap());
     }
 }

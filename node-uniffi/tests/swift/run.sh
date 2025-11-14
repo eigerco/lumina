@@ -9,7 +9,11 @@ cargo build
 rm -rf ../target/swift-uniffi-bindings
 mkdir -p ../target/swift-uniffi-bindings
 
-cargo run --bin uniffi-bindgen generate --library ../target/debug/liblumina_node_uniffi.a --language swift --out-dir ../target/swift-uniffi-bindings
+cargo run --bin uniffi-bindgen \
+  generate \
+  --library ../target/debug/liblumina_node_uniffi.a \
+  --language swift \
+  --out-dir ../target/swift-uniffi-bindings
 
 cd tests/swift
 

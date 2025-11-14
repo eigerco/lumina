@@ -4,9 +4,6 @@
 //! allowing it to be used from iOS and Android applications.
 #![cfg(not(target_arch = "wasm32"))]
 
-mod error;
-mod types;
-
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -24,8 +21,13 @@ use tokio_stream::wrappers::BroadcastStream;
 use uniffi::Object;
 
 use crate::error::{LuminaError, Result};
-use crate::types::{BlobsStream, HeaderStream, SharesStream};
-use crate::types::{NetworkInfo, NodeConfig, NodeEvent, PeerId, SyncingInfo};
+use crate::types::{
+    BlobsStream, HeaderStream, NetworkInfo, NodeConfig, NodeEvent, PeerId, SharesStream,
+    SyncingInfo,
+};
+
+mod error;
+mod types;
 
 uniffi::setup_scaffolding!();
 

@@ -58,7 +58,7 @@ mod imp {
     use crate::GrpcClient;
 
     pub const CELESTIA_GRPC_URL: &str = "http://localhost:19090";
-    pub const CELESTIA_RPC_URL: &str = "ws://localhost:46658";
+    pub const CELESTIA_RPC_URL: &str = "ws://localhost:26658";
 
     pub fn new_grpc_client() -> GrpcClient {
         GrpcClient::builder()
@@ -108,7 +108,7 @@ mod imp {
     use crate::GrpcClient;
 
     const CELESTIA_GRPCWEB_PROXY_URL: &str = "http://localhost:18080";
-    pub const CELESTIA_RPC_URL: &str = "ws://localhost:46658";
+    pub const CELESTIA_RPC_URL: &str = "http://localhost:26658";
 
     pub fn new_grpc_client() -> GrpcClient {
         GrpcClient::builder()
@@ -118,7 +118,7 @@ mod imp {
     }
 
     pub async fn new_rpc_client() -> RpcClient {
-        RpcClient::new(CELESTIA_RPC_URL).await.unwrap()
+        RpcClient::new(CELESTIA_RPC_URL, None).await.unwrap()
     }
 
     pub async fn new_tx_client() -> ((), GrpcClient) {

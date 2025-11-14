@@ -10,10 +10,10 @@ use wasm_bindgen_futures::spawn_local;
 use web_sys::MessageChannel;
 
 // uses bridge-0, which has skip-auth enabled
-const WS_URL: &str = "ws://127.0.0.1:26658";
+const RPC_URL: &str = "http://127.0.0.1:26658";
 
 pub async fn new_rpc_client() -> Client {
-    Client::new(WS_URL).await.unwrap()
+    Client::new(RPC_URL, None).await.unwrap()
 }
 
 pub async fn spawn_connected_node(bootnodes: Vec<String>) -> NodeClient {

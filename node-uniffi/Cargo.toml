@@ -35,7 +35,7 @@ thiserror.workspace = true
 tokio = { workspace = true, features = ["macros", "sync"] }
 tokio-stream = { workspace = true, features = ["sync"] }
 tonic.workspace = true
-uniffi = { workspace = true, features = ["bindgen", "tokio", "cli"] }
+uniffi = { workspace = true, features = ["tokio", "cli"] }
 
 [features]
 # webpki is needed for TLS on android and iOS
