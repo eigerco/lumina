@@ -1,12 +1,12 @@
-#![cfg(not(target_arch = "wasm32"))]
-
 use celestia_rpc::{HeaderClient, blobstream::BlobstreamClient};
 use celestia_types::hash::Hash;
+use lumina_utils::test_utils::async_test;
+
 pub mod utils;
 
 use crate::utils::client::{AuthLevel, new_test_client};
 
-#[tokio::test]
+#[async_test]
 async fn get_data_root_tuple_root_and_proof() {
     let client = new_test_client(AuthLevel::Write).await.unwrap();
 

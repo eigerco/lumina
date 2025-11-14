@@ -112,10 +112,6 @@ pub enum Error {
     #[error("Chain id of RPC endpoint missmatch with chain id of gRPC endpoint")]
     ChainIdMissmatch,
 
-    /// RPC authentication token is not supported.
-    #[error("RPC authentication token is not supported")]
-    AuthTokenNotSupported,
-
     /// Invalid height.
     #[error("Invalid height: {0}")]
     InvalidHeight(u64),
