@@ -130,25 +130,17 @@ pub trait HeaderClient: ClientT {
             let mut head = rpc::HeaderClient::header_local_head(self).await?;
             head.validate().map_err(custom_client_error)?;
 
-            let subscription_res = rpc::HeaderSubscriptionClient::header_subscribe(self).await;
-            let has_real_sub = !matches!(&subscription_res, Err(Error::HttpNotImplemented));
-
-            let mut subscription = if has_real_sub {
-                Some(subscription_res?)
-            } else {
-                None
-            };
+            let mut real_subscription = match rpc::HeaderSubscriptionClient::header_subscribe(self).await {
+                Ok(subscription) => Ok(Some(subscription)),
+                Err(Error::HttpNotImplemented) => Ok(None),
+                Err(e) => Err(e)
+            }?;
 
             loop {
-                let header = if has_real_sub {
-                    subscription
-                        .as_mut()
-                        .expect("must be some")
-                        .next()
-                        .await
-                        .ok_or_else(|| custom_client_error("unexpected end of stream"))??
-                } else {
-                    rpc::HeaderClient::header_wait_for_height(self, head.height().value() + 1).await?
+                let header = match &mut real_subscription {
+                    Some(subscription) => subscription.next().await
+                        .ok_or_else(|| custom_client_error("unexpected end of stream"))??,
+                    None => rpc::HeaderClient::header_wait_for_height(self, head.height().value() + 1).await?,
                 };
 
                 header.validate().map_err(custom_client_error)?;

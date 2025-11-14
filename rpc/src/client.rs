@@ -190,7 +190,7 @@ mod wasm {
     impl Client {
         /// Create a new Json RPC client.
         ///
-        /// Only the 'http\[s\]' protocols are supported because javascirpt
+        /// Only the 'http\[s\]' protocols are supported because JavaScript
         /// doesn't allow setting headers with websocket. If you want to
         /// use the websocket client anyway, you can use the one from the
         /// `jsonrpsee` directly, but you need a node with `--rpc.skip-auth`.

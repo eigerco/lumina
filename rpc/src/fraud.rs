@@ -61,45 +61,35 @@ pub trait FraudClient: ClientT {
         Self: SubscriptionClientT + Sized + Sync,
     {
         try_stream! {
-            let subscription_res = rpc::FraudSubscriptionClient::fraud_subscribe(self, proof_type).await;
-            let has_real_sub = !matches!(&subscription_res, Err(Error::HttpNotImplemented));
-
-            let (mut fraud_sub, mut header_sub) = if has_real_sub {
-                (Some(subscription_res?), None)
-            } else {
-                (None, Some(HeaderClient::header_subscribe(self)))
-            };
-
-            loop {
-                if has_real_sub {
-                    yield fraud_sub
-                        .as_mut()
-                        .expect("must be some")
-                        .next()
-                        .await
+            match rpc::FraudSubscriptionClient::fraud_subscribe(self, proof_type).await {
+                Ok(mut fraud_sub) => loop {
+                    yield fraud_sub.next().await
                         .ok_or_else(|| custom_client_error("unexpected end of stream"))??;
-                } else {
-                    // tick; we don't care about the header
-                    header_sub
-                        .as_mut()
-                        .expect("must be some")
-                        .next()
-                        .await
-                        .ok_or_else(|| custom_client_error("unexpected end of stream"))??;
+                },
+                Err(Error::HttpNotImplemented) => {
+                    let mut header_sub = HeaderClient::header_subscribe(self);
+                    loop {
+                        // tick; we don't care about the header
+                        header_sub
+                            .next()
+                            .await
+                            .ok_or_else(|| custom_client_error("unexpected end of stream"))??;
 
-                    let proofs = rpc::FraudClient::fraud_get(self, proof_type).await?;
-                    if !proofs.is_empty() {
-                        for proof in proofs {
-                            yield proof;
+                        let proofs = rpc::FraudClient::fraud_get(self, proof_type).await?;
+                        if !proofs.is_empty() {
+                            for proof in proofs {
+                                yield proof;
+                            }
+
+                            // after we got some proofs from the node, it would
+                            // keep giving us the same proofs again and again,
+                            // so we just end the stream here
+                            break;
                         }
-
-                        // after we got some proofs from the node, it would
-                        // keep giving us the same proofs again and again,
-                        // so we just end the stream here
-                        break;
                     }
-                };
-            }
+                }
+                other => {other?;}
+            };
         }
         .boxed()
     }
