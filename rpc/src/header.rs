@@ -138,7 +138,9 @@ pub trait HeaderClient: ClientT {
 
             loop {
                 let header = match &mut real_subscription {
-                    Some(subscription) => subscription.next().await
+                    Some(subscription) => subscription
+                        .next()
+                        .await
                         .ok_or_else(|| custom_client_error("unexpected end of stream"))??,
                     None => rpc::HeaderClient::header_wait_for_height(self, head.height().value() + 1).await?,
                 };

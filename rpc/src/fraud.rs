@@ -63,7 +63,9 @@ pub trait FraudClient: ClientT {
         try_stream! {
             match rpc::FraudSubscriptionClient::fraud_subscribe(self, proof_type).await {
                 Ok(mut fraud_sub) => loop {
-                    yield fraud_sub.next().await
+                    yield fraud_sub
+                        .next()
+                        .await
                         .ok_or_else(|| custom_client_error("unexpected end of stream"))??;
                 },
                 Err(Error::HttpNotImplemented) => {
@@ -88,7 +90,9 @@ pub trait FraudClient: ClientT {
                         }
                     }
                 }
-                other => {other?;}
+                err => {
+                    err?;
+                }
             };
         }
         .boxed()
