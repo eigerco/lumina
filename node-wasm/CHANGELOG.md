@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0](https://github.com/eigerco/lumina/compare/lumina-node-wasm-v0.11.0...lumina-node-wasm-v0.12.0) - 2025-11-14
+
+### Added
+
+- *(client,rpc)* [**breaking**] support auth in wasm rpc client ([#780](https://github.com/eigerco/lumina/pull/780))
+- *(node)* Node identity retention for native,ios,android ([#751](https://github.com/eigerco/lumina/pull/751))
+
+### Fixed
+
+- *(ci)* Workaround `discover_network_peers` test of `lumina-node-wasm` ([#801](https://github.com/eigerco/lumina/pull/801))
+
+### Other
+
+- [**breaking**] Migrate to Rust 2024 ([#773](https://github.com/eigerco/lumina/pull/773))
+
 ## [0.11.0](https://github.com/eigerco/lumina/compare/lumina-node-wasm-v0.10.3...lumina-node-wasm-v0.11.0) - 2025-09-25
 
 ### Added
