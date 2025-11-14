@@ -83,8 +83,8 @@ pub trait FraudClient: ClientT {
                                 yield proof;
                             }
 
-                            // after we got some proofs from the node, it would
-                            // keep giving us the same proofs again and again,
+                            // after we get any proofs from the node, it will
+                            // keep giving us the same proofs on each request,
                             // so we just end the stream here
                             break;
                         }
