@@ -4,20 +4,19 @@ use std::time::Duration;
 
 use blockstore::EitherBlockstore;
 use celestia_types::blob::BlobsAtHeight;
+use celestia_types::nmt::Namespace;
+use celestia_types::{Blob, ExtendedHeader, SharesAtHeight};
 use js_sys::{Array, AsyncIterator};
 use libp2p::Multiaddr;
 use libp2p::identity::Keypair;
-use serde::{Deserialize, Serialize};
-use tracing::{debug, error};
-use wasm_bindgen::prelude::*;
-use web_sys::BroadcastChannel;
-
-use celestia_types::nmt::Namespace;
-use celestia_types::{Blob, ExtendedHeader, SharesAtHeight};
 use lumina_node::blockstore::{InMemoryBlockstore, IndexedDbBlockstore};
 use lumina_node::network;
 use lumina_node::node::{DEFAULT_PRUNING_WINDOW_IN_MEMORY, NodeBuilder};
 use lumina_node::store::{EitherStore, InMemoryStore, IndexedDbStore, SamplingMetadata};
+use serde::{Deserialize, Serialize};
+use tracing::{debug, error};
+use wasm_bindgen::prelude::*;
+use web_sys::BroadcastChannel;
 
 use crate::commands::{
     NodeCommand, SingleHeaderQuery, SubscriptionCommand, WorkerCommand, WorkerError, WorkerResponse,
@@ -406,7 +405,7 @@ impl NodeClient {
         Ok(BroadcastChannel::new(&name).unwrap())
     }
 
-    #[wasm_bindgen(js_name = headerSubscribe)]
+    #[wasm_bindgen(js_name = headerSubscribe, unchecked_return_type = "AsyncIterable<ExtendedHeader | SubscriptionError>")]
     pub async fn header_subscribe(&self) -> Result<AsyncIterator> {
         let command = SubscriptionCommand::Headers;
         let port = self.worker.subscribe(command).await?;
@@ -414,7 +413,7 @@ impl NodeClient {
         into_async_iterator::<ExtendedHeader>(port)
     }
 
-    #[wasm_bindgen(js_name = blobSubscribe)]
+    #[wasm_bindgen(js_name = blobSubscribe, unchecked_return_type = "AsyncIterable<BlobsAtHeight | SubscriptionError>")]
     pub async fn blob_subscribe(&self, namespace: Namespace) -> Result<AsyncIterator> {
         let command = SubscriptionCommand::Blobs(namespace);
         let port = self.worker.subscribe(command).await?;
@@ -422,7 +421,7 @@ impl NodeClient {
         into_async_iterator::<BlobsAtHeight>(port)
     }
 
-    #[wasm_bindgen(js_name = namespaceSubscribe)]
+    #[wasm_bindgen(js_name = namespaceSubscribe, unchecked_return_type = "AsyncIterable<SharesAtHeight | SubscriptionError>")]
     pub async fn namespace_subscribe(&self, namespace: Namespace) -> Result<AsyncIterator> {
         let command = SubscriptionCommand::Shares(namespace);
         let port = self.worker.subscribe(command).await?;

@@ -1,10 +1,9 @@
-use std::marker::PhantomData;
 use std::pin::Pin;
 use std::rc::Rc;
 use std::task::{Context, Poll, ready};
 
 use futures::Stream;
-use js_sys::{Array, Function, JsString, Reflect};
+use js_sys::{Array, Function, Reflect};
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::from_value;
 use tokio::sync::mpsc;
@@ -104,7 +103,7 @@ impl From<MessagePort> for MessagePortLike {
     }
 }
 
-pub(crate) fn split_port<Tx>(port: MessagePortLike) -> Result<(PortSender<Tx>, RawPortReceier)> {
+pub(crate) fn split_port(port: MessagePortLike) -> Result<(PortSender, RawPortReceier)> {
     let _post_message: Function = Reflect::get(&port, &"postMessage".into())?
         .dyn_into()
         .context("could not get object's postMessage")?;
@@ -117,12 +116,9 @@ pub(crate) fn split_port<Tx>(port: MessagePortLike) -> Result<(PortSender<Tx>, R
             error!("forwarding message from port failed, no receiver waiting");
         }
     });
-    register_onmessage_callback(port.as_ref(), &onmessage)?;
+    register_onmessage(port.as_ref(), &onmessage)?;
 
-    let sender = PortSender::<Tx> {
-        port: port.clone(),
-        _sent: PhantomData,
-    };
+    let sender = PortSender { port: port.clone() };
     let receiver = RawPortReceier {
         port,
         receiving_channel,
@@ -132,17 +128,15 @@ pub(crate) fn split_port<Tx>(port: MessagePortLike) -> Result<(PortSender<Tx>, R
 }
 
 // Sending part of a wrapped MessagePort.
-// WARN: do not use unit structs as a sent type, as they are interpreted as a
-pub(crate) struct PortSender<Tx> {
+pub(crate) struct PortSender {
     port: Rc<MessagePortLike>,
-    _sent: PhantomData<Tx>,
 }
 
-impl<Tx> PortSender<Tx>
-where
-    Tx: Serialize,
-{
-    pub(crate) fn send(&self, value: &Tx, ports: &[MessagePortLike]) -> Result<()> {
+impl PortSender {
+    pub(crate) fn send<Tx>(&self, value: &Tx, ports: &[MessagePortLike]) -> Result<()>
+    where
+        Tx: Serialize,
+    {
         let value = to_json_value(&value).context("error converting to JsValue")?;
         let ports: Array = ports.iter().collect();
 
@@ -152,13 +146,11 @@ where
     }
 }
 
-impl<Tx> Drop for PortSender<Tx> {
+impl Drop for PortSender {
     fn drop(&mut self) {
         // send a close signal and 🤞
         let close_signal: JsValue = CHANNEL_CLOSE_SYMBOL_NAME.to_string().into();
-        let _ = self
-            .port
-            .post_message(&close_signal);
+        let _ = self.port.post_message(&close_signal);
     }
 }
 
@@ -193,7 +185,7 @@ impl Drop for RawPortReceier {
 
 // helper to hide slight differences in message passing between runtime.Port used by browser
 // extensions and everything else
-pub(crate) fn register_onmessage_callback<F>(
+pub(crate) fn register_onmessage<F>(
     port: &MessagePortLike,
     callback: &Closure<F>,
 ) -> Result<(), Error>
@@ -284,7 +276,7 @@ mod tests {
     async fn port_smoke() {
         let (p0, p1) = MessageChannel::new_ports().unwrap();
         let (tx0, _rx0) = split_port(p0.into()).unwrap();
-        let (_tx1, rx1) = split_port::<()>(p1.into()).unwrap();
+        let (_tx1, rx1) = split_port(p1.into()).unwrap();
         let mut rx1 = rx1.map(|e| {
             let v: u32 = from_value(e.data()).unwrap();
             let p = e.get_ports();
@@ -301,8 +293,8 @@ mod tests {
     #[wasm_bindgen_test]
     async fn port_close() {
         let (p0, p1) = MessageChannel::new_ports().unwrap();
-        let (tx0, _rx0) = split_port::<u32>(p0.into()).unwrap();
-        let (_tx1, mut rx1) = split_port::<()>(p1.into()).unwrap();
+        let (tx0, _rx0) = split_port(p0.into()).unwrap();
+        let (_tx1, mut rx1) = split_port(p1.into()).unwrap();
 
         tx0.send(&1u32, &[]).unwrap();
         drop(tx0);

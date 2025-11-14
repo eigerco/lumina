@@ -7,7 +7,7 @@ pub mod error;
 mod ports;
 pub(crate) mod subscriptions;
 pub mod utils;
-mod worker;
+pub mod worker;
 mod worker_client;
 mod worker_server;
 mod wrapper;

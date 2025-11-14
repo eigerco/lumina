@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use futures::StreamExt;
 use futures::stream::LocalBoxStream;
+use lumina_utils::executor::{JoinHandle, spawn};
 use tokio::select;
 use tokio::sync::{mpsc, oneshot};
 use tokio_util::sync::{CancellationToken, DropGuard};
@@ -14,7 +15,6 @@ use crate::commands::{
 };
 use crate::error::{Context, Error, Result};
 use crate::ports::{MessageId, MessagePortLike, MultiplexMessage, PortSender, split_port};
-use lumina_utils::executor::{JoinHandle, spawn};
 
 /// WorkerClient responsible for sending `Command`s and receiving `WorkerResponse`s to them over a port like
 /// object.
@@ -86,7 +86,7 @@ impl WorkerClient {
 
 struct Worker {
     /// Channel to send multiplexed commands over
-    command_sender: PortSender<MultiplexMessage<Command>>,
+    command_sender: PortSender,
     /// Channel to receive multiplexed responses
     response_receiver: LocalBoxStream<'static, Result<MultiplexMessage<WorkerResult>>>,
     /// Map of message ids waiting for response to oneshot channels to send the response over

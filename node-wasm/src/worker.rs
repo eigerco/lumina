@@ -2,8 +2,16 @@
 
 use std::time::Duration;
 
+use blockstore::EitherBlockstore;
+use celestia_types::nmt::Namespace;
+use celestia_types::{Blob, ExtendedHeader};
 use futures::StreamExt;
 use libp2p::{Multiaddr, PeerId};
+use lumina_node::blockstore::{InMemoryBlockstore, IndexedDbBlockstore};
+use lumina_node::events::{EventSubscriber, NodeEventInfo};
+use lumina_node::node::subscriptions::SubscriptionError;
+use lumina_node::node::{Node, SyncingInfo};
+use lumina_node::store::{EitherStore, InMemoryStore, IndexedDbStore, SamplingMetadata};
 use serde::Serialize;
 use serde_wasm_bindgen::to_value;
 use tokio_stream::wrappers::BroadcastStream;
@@ -11,15 +19,6 @@ use tracing::{error, info};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
 use web_sys::{BroadcastChannel, MessagePort};
-
-use blockstore::EitherBlockstore;
-use celestia_types::nmt::Namespace;
-use celestia_types::{Blob, ExtendedHeader};
-use lumina_node::blockstore::{InMemoryBlockstore, IndexedDbBlockstore};
-use lumina_node::events::{EventSubscriber, NodeEventInfo};
-use lumina_node::node::subscriptions::SubscriptionError;
-use lumina_node::node::{Node, SyncingInfo};
-use lumina_node::store::{EitherStore, InMemoryStore, IndexedDbStore, SamplingMetadata};
 
 use crate::client::WasmNodeConfig;
 use crate::commands::{

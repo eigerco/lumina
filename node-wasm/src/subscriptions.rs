@@ -8,7 +8,7 @@ use lumina_utils::executor::spawn;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::{from_value, to_value};
-use tokio::sync::RwLock;
+use tokio::sync::Mutex;
 use tracing::{debug, error, warn};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::future_to_promise;
@@ -68,9 +68,7 @@ impl AsyncIteratorImpl {
         Reflect::set(iterator, &Symbol::async_iterator(), &return_self_method)?;
         Ok(())
     }
-}
 
-impl AsyncIteratorImpl {
     pub fn into_raw(self) -> JsValue {
         self.into()
     }
@@ -88,7 +86,7 @@ impl AsyncIteratorImpl {
         .unchecked_into()
     }
 
-    pub fn return_self(self) -> JsValue {
+    pub fn return_self(&self) -> JsValue {
         JsValue::from(self.clone())
     }
 }
@@ -110,7 +108,7 @@ where
     let (feedback, receiver) = split_port(port)?;
 
     let feedback = Rc::new(RefCell::new(feedback));
-    let receiver = Rc::new(RwLock::new(
+    let receiver = Rc::new(Mutex::new(
         receiver
             .map(|result| {
                 from_value::<Result<S, JsSubscriptionError>>(result.data()).map_err(|e| {
@@ -130,7 +128,7 @@ where
                 return Err(to_value(&e).unwrap());
             }
 
-            let Some(next) = receiver.write().await.next().await else {
+            let Some(next) = receiver.lock().await.next().await else {
                 return Ok(IteratorResultObject::done().into());
             };
 
@@ -235,7 +233,7 @@ mod tests {
     async fn close() {
         let (p0, p1) = MessageChannel::new_ports().unwrap();
 
-        let (tx, rx) = split_port::<String>(p0.into()).unwrap();
+        let (tx, rx) = split_port(p0.into()).unwrap();
         let async_iterator = into_async_iterator::<String>(p1.into());
         drop(async_iterator);
 

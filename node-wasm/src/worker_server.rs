@@ -1,5 +1,6 @@
 use futures::future::{FutureExt, LocalBoxFuture};
 use futures::stream::{FuturesUnordered, LocalBoxStream, StreamExt};
+use lumina_utils::executor::spawn;
 use tokio::select;
 use tokio::sync::{mpsc, oneshot};
 use tokio_util::sync::{CancellationToken, DropGuard};
@@ -9,7 +10,6 @@ use wasm_bindgen::prelude::*;
 use crate::commands::{Command, CommandWithResponder, HasMessagePort, WorkerError, WorkerResult};
 use crate::error::{Context, Error, Result};
 use crate::ports::{MessagePortLike, MultiplexMessage, PortSender, split_port};
-use lumina_utils::executor::spawn;
 
 /// `WorkerServer` aggregates multiple existing [`ServerConnection`]s, receiving `Command`s
 /// from the connected clients, as well as handles new [`Client`]s connecting.
@@ -75,7 +75,7 @@ struct ConnectionWorker {
     /// Channel to receive multiplexed comands
     command_receiver: LocalBoxStream<'static, Result<MultiplexMessage<Command>>>,
     /// Channel to send multiplexed responses over
-    response_sender: PortSender<MultiplexMessage<WorkerResult>>,
+    response_sender: PortSender,
     /// Futures waiting for completion to be send as responses
     pending_responses_map:
         FuturesUnordered<LocalBoxFuture<'static, MultiplexMessage<WorkerResult>>>,
