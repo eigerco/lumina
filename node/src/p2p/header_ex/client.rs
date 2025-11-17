@@ -177,15 +177,17 @@ where
         }
     }
 
-    pub(super) fn has_pending_requests(&self) -> bool {
+    fn has_pending_requests(&self) -> bool {
         (!self.head_reqs.is_empty() && !self.head_req_scheduled)
             || self.pending_reqs.values().any(|reqs| !reqs.is_empty())
     }
 
     fn needs_trusted_peers(&self) -> bool {
-        self.pending_reqs
-            .get(&PeerKind::Trusted)
-            .is_some_and(|reqs| !reqs.is_empty())
+        (!self.head_reqs.is_empty() && !self.head_req_scheduled)
+            || self
+                .pending_reqs
+                .get(&PeerKind::Trusted)
+                .is_some_and(|reqs| !reqs.is_empty())
             || self
                 .pending_reqs
                 .get(&PeerKind::TrustedArchival)
@@ -301,7 +303,6 @@ where
             .collect::<SmallVec<[_; MAX_PEERS]>>();
 
         if peers.is_empty() {
-            // TODO: Tell to swarm manager to connect to trusted peers!
             return;
         }
 
@@ -625,9 +626,7 @@ mod tests {
 
         let (tx, rx) = oneshot::channel();
 
-        assert!(!handler.has_pending_requests());
         handler.on_send_request(HeaderRequest::with_origin(5, 1), tx);
-        assert!(handler.has_pending_requests());
 
         let mut generator = ExtendedHeaderGenerator::new_from_height(5);
         let expected_header = generator.next();
@@ -640,7 +639,6 @@ mod tests {
             .unwrap();
         assert_eq!(result.len(), 1);
         assert_eq!(result[0], expected_header);
-        assert!(!handler.has_pending_requests());
     }
 
     #[async_test]
@@ -1592,8 +1590,184 @@ mod tests {
         mock_req.clear_pending_requests();
     }
 
-    //    #[async_test]
-    //    async fn has_pending_requests() {
+    #[async_test]
+    async fn pending_request() {
+        let empty_peer_tracker = peer_tracker_with_n_peers(0);
+        let peer_tracker = peer_tracker_with_n_peers(1);
+
+        let mut mock_req = MockReq::new();
+        let mut handler = HeaderExClientHandler::<MockReq>::new();
+
+        let (tx, rx) = oneshot::channel();
+
+        assert!(!handler.has_pending_requests());
+        handler.on_send_request(HeaderRequest::with_origin(5, 1), tx);
+        assert!(handler.has_pending_requests());
+
+        // Try poll without peers
+        let ev = poll_client(&mut handler, &mut mock_req, &empty_peer_tracker).await;
+        // `SchedulePendingRequests` is generated when there are pending requests.
+        // Since we have no peers, the requests are still pending.
+        assert!(matches!(ev, Event::SchedulePendingRequests));
+        assert!(handler.has_pending_requests());
+
+        // Poll again a peer
+        poll_client_for(
+            &mut handler,
+            &mut mock_req,
+            &peer_tracker,
+            Duration::from_millis(10),
+        )
+        .await;
+        // Request is now scheduled (i.e. not pending)
+        assert!(!handler.has_pending_requests());
+
+        // Responde with failure
+        mock_req.send_n_failures(1, OutboundFailure::ConnectionClosed);
+        poll_client_for(
+            &mut handler,
+            &mut mock_req,
+            &peer_tracker,
+            Duration::from_millis(10),
+        )
+        .await;
+        // Request is back to pending
+        assert!(handler.has_pending_requests());
+
+        let mut generator = ExtendedHeaderGenerator::new_from_height(5);
+        let expected_header = generator.next();
+        let expected = expected_header.to_header_response();
+
+        // Schedule response and poll again
+        mock_req.send_n_responses(1, vec![expected]);
+
+        let result = poll_client_and_receiver(&mut handler, &mut mock_req, &peer_tracker, rx)
+            .await
+            .unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0], expected_header);
+        assert!(!handler.has_pending_requests());
+    }
+
+    #[async_test]
+    async fn pending_head_request() {
+        let empty_peer_tracker = peer_tracker_with_n_peers(0);
+        let peer_tracker = peer_tracker_with_n_peers(1);
+
+        let mut mock_req = MockReq::new();
+        let mut handler = HeaderExClientHandler::<MockReq>::new();
+
+        let (tx, rx) = oneshot::channel();
+
+        assert!(!handler.has_pending_requests());
+        handler.on_send_request(HeaderRequest::head_request(), tx);
+        assert!(handler.has_pending_requests());
+
+        // Try poll without peers
+        let ev = poll_client(&mut handler, &mut mock_req, &empty_peer_tracker).await;
+        assert!(matches!(ev, Event::NeedTrustedPeers));
+        assert!(handler.has_pending_requests());
+
+        // Poll again with a trusted peer
+        poll_client_for(
+            &mut handler,
+            &mut mock_req,
+            &peer_tracker,
+            Duration::from_millis(10),
+        )
+        .await;
+        // Request is now scheduled (i.e. not pending)
+        assert!(!handler.has_pending_requests());
+
+        // Responde with failure
+        mock_req.send_n_failures(1, OutboundFailure::ConnectionClosed);
+        poll_client_for(
+            &mut handler,
+            &mut mock_req,
+            &peer_tracker,
+            Duration::from_millis(10),
+        )
+        .await;
+        // Request is back to pending
+        assert!(handler.has_pending_requests());
+
+        let mut generator = ExtendedHeaderGenerator::new_from_height(5);
+        let expected_header = generator.next();
+        let expected = expected_header.to_header_response();
+
+        // Schedule response and poll again
+        mock_req.send_n_responses(1, vec![expected]);
+
+        let result = poll_client_and_receiver(&mut handler, &mut mock_req, &peer_tracker, rx)
+            .await
+            .unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0], expected_header);
+        assert!(!handler.has_pending_requests());
+    }
+
+    #[async_test]
+    async fn pending_archival_request() {
+        let mut peer_tracker = peer_tracker_with_n_peers(0);
+
+        let peer_id = PeerId::random();
+        peer_tracker.add_connection(&peer_id, ConnectionId::new_unchecked(1));
+
+        let mut mock_req = MockReq::new();
+        let mut handler = HeaderExClientHandler::<MockReq>::new();
+
+        let (tx, rx) = oneshot::channel();
+
+        assert!(!handler.has_pending_requests());
+        handler.on_send_request(HeaderRequest::with_origin(5, 1), tx);
+
+        for _ in 0..MAX_TRIES - 1 {
+            assert!(handler.has_pending_requests());
+
+            mock_req.send_n_failures(1, OutboundFailure::ConnectionClosed);
+
+            poll_client_for(
+                &mut handler,
+                &mut mock_req,
+                &peer_tracker,
+                Duration::from_millis(20),
+            )
+            .await;
+        }
+
+        assert!(handler.has_pending_requests());
+        let ev = poll_client(&mut handler, &mut mock_req, &peer_tracker).await;
+        assert!(matches!(ev, Event::NeedArchivalPeers));
+        assert!(handler.has_pending_requests());
+
+        // Mark peer as archival
+        peer_tracker.mark_as_archival(&peer_id);
+
+        // Poll again
+        poll_client_for(
+            &mut handler,
+            &mut mock_req,
+            &peer_tracker,
+            Duration::from_millis(10),
+        )
+        .await;
+        // Request is now scheduled (i.e. not pending)
+        assert!(!handler.has_pending_requests());
+
+        let mut generator = ExtendedHeaderGenerator::new_from_height(5);
+        let expected_header = generator.next();
+        let expected = expected_header.to_header_response();
+
+        // Schedule response and poll again
+        mock_req.send_n_responses(1, vec![expected]);
+
+        let result = poll_client_and_receiver(&mut handler, &mut mock_req, &peer_tracker, rx)
+            .await
+            .unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0], expected_header);
+        assert!(!handler.has_pending_requests());
+    }
 
     #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
     struct MockReqId(u64);
@@ -1709,6 +1883,16 @@ mod tests {
         peers
     }
 
+    async fn poll_client(
+        client: &mut HeaderExClientHandler<MockReq>,
+        mock_req: &mut MockReq,
+        peer_tracker: &PeerTracker,
+    ) -> Event {
+        client.schedule_pending_requests(mock_req, peer_tracker);
+        mock_req.schedule_pending_responses(client);
+        poll_fn(|cx| client.poll(cx)).await
+    }
+
     /// Keep polling `client` until answer is received.
     async fn poll_client_and_receiver(
         client: &mut HeaderExClientHandler<MockReq>,
@@ -1717,16 +1901,8 @@ mod tests {
         mut rx: oneshot::Receiver<Result<Vec<ExtendedHeader>, P2pError>>,
     ) -> Result<Vec<ExtendedHeader>, P2pError> {
         loop {
-            client.schedule_pending_requests(mock_req, peer_tracker);
-            mock_req.schedule_pending_responses(client);
-
             select! {
-                _ = poll_fn(|cx| {
-                    let x = client.poll(cx);
-                    cx.waker().wake_by_ref();
-                    x
-                }
-                    ) => {}
+                _ = poll_client(client, mock_req, peer_tracker) => {}
                 res = &mut rx => return res.unwrap(),
             }
         }
@@ -1742,11 +1918,8 @@ mod tests {
         let mut sleep = pin!(sleep(dur));
 
         loop {
-            client.schedule_pending_requests(mock_req, peer_tracker);
-            mock_req.schedule_pending_responses(client);
-
             select! {
-                _ = poll_fn(|cx| client.poll(cx)) => {}
+                _ = poll_client(client, mock_req, peer_tracker) => {}
                 _ = &mut sleep => return,
             }
         }
