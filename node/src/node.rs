@@ -331,6 +331,7 @@ where
         Ok(self.p2p().set_peer_trust(peer_id, is_trusted).await?)
     }
 
+    /// Mark the peer as archival.
     pub async fn mark_as_archival(&self, peer_id: PeerId) -> Result<()> {
         Ok(self.p2p().mark_as_archival(peer_id).await?)
     }
