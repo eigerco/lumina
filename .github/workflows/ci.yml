@@ -202,6 +202,9 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    # remove heavy processes from github macos runner
+    - uses: bitwarden/ios/.github/actions/macos-runner-tuneup@5dc773e7530566702e672b6795bbed0baca51926
+
     - name: Setup toolchain
       uses: actions-rust-lang/setup-rust-toolchain@v1
       with:
@@ -217,52 +220,46 @@ jobs:
         ./node-uniffi/build-ios.sh
         ./examples/ios/LuminaDemo/copy_bindings.sh
 
-    - name: create and boot simulator
-      run: |
-        xcrun simctl shutdown all || true
-        xcrun simctl erase all || true
-        xcrun simctl delete CI-iPhone || true
+    # bitwarden's boot-simulator requires gtimeout
+    - name: install brew dependencies
+      run: brew install coreutils
 
-        # Run `xcrun simctl list devicetypes` for more
-        DEVTYPE=com.apple.CoreSimulator.SimDeviceType.iPhone-16
-        # Run `xcrun simctl list runtimes` for more
-        RUNTIME=com.apple.CoreSimulator.SimRuntime.iOS-26-0
-
-        # Create simulator
-        UDID=$(xcrun simctl create CI-iPhone "$DEVTYPE" "$RUNTIME")
-        # Boot it
-        xcrun simctl boot "$UDID"
-        # Wait until fully booted
-        xcrun simctl bootstatus "$UDID" -b
-
-        # Set env for the next steps
-        echo "SIM_UDID=$UDID" >> "$GITHUB_ENV"
+    # booting the simulator often hangs, so it needs to be killed and restarted
+    # https://github.com/actions/runner-images/issues/12777#issuecomment-3431315347
+    - name: boot simulator
+      uses: bitwarden/ios/.github/actions/boot-simulator@5dc773e7530566702e672b6795bbed0baca51926
+      id: boot-simulator
+      with:
+        simulator-name: iPhone 16
+        simulator-version: 26.0.1
 
     - name: xcode clean build
       working-directory: examples/ios/LuminaDemo
       env:
         NSUnbufferedIO: "YES"
+        SIMULATOR_ID: ${{ steps.boot-simulator.outputs.simulator-id }}
       run: |
-        xcodebuild \
+        xcrun xcodebuild build-for-testing \
           -scheme LuminaDemo \
-          -destination "id=${SIM_UDID}" \
+          -destination "id=${SIMULATOR_ID}" \
           CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
-          clean build
+          -quiet
 
     - name: xcode sim test
       working-directory: examples/ios/LuminaDemo
       env:
         NSUnbufferedIO: "YES"
+        SIMULATOR_ID: ${{ steps.boot-simulator.outputs.simulator-id }}
       run: |
         # `-parallel-testing-enabled NO` avoids creating clones of the simulator
-        xcodebuild \
+        xcrun xcodebuild test-without-building \
           -scheme LuminaDemo \
           -sdk iphonesimulator \
-          -destination "id=${SIM_UDID}" \
-          -parallel-testing-enabled NO \
+          -destination "id=${SIMULATOR_ID}" \
           -destination-timeout 360 \
+          -parallel-testing-enabled NO \
           -skip-testing LuminaDemoTests/GrpcClientTest \
-          test
+          -quiet
 
 
   build-android:

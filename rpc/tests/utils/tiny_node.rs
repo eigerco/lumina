@@ -2,7 +2,7 @@
 //! calls
 
 use celestia_types::p2p;
-use futures::StreamExt;
+use futures_util::StreamExt;
 use libp2p::{
     SwarmBuilder, noise,
     swarm::{NetworkBehaviour, SwarmEvent, dummy},

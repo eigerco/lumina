@@ -8,7 +8,10 @@ use crate::tx::{SigningKey, TxConfig};
 use crate::types::state::{AccAddress, ValAddress};
 
 pub(crate) const TEST_PRIV_KEY: &str = include_str!("../../ci/credentials/node-0.plaintext-key");
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) const TEST_RPC_URL: &str = "ws://localhost:26658";
+#[cfg(target_arch = "wasm32")]
+pub(crate) const TEST_RPC_URL: &str = "http://localhost:26658";
 
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) const TEST_GRPC_URL: &str = "http://localhost:19090";
