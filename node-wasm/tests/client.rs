@@ -60,7 +60,7 @@ async fn get_blob() {
     let client = spawn_connected_node(vec![bridge_ma.to_string()]).await;
 
     // Wait for the `client` node to sync until the `submitted_height`.
-    client.store().wait_height(submitted_height).await.unwrap();
+    sleep(Duration::from_secs(2)).await;
 
     let mut blobs = client
         .request_all_blobs(&namespace, submitted_height, None)
