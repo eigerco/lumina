@@ -240,9 +240,6 @@ mod tests {
         tx.send(&"foo".to_string(), &[]).unwrap();
 
         let mut rx = rx.map(|ev| from_value::<SubscriptionReceiverReady>(ev.data()).unwrap());
-        // At this point receiver would have already signaled its readiness,
-        // so we need to clear the signal from the channel first.
-        //assert_eq!(rx.next().await.unwrap(), SubscriptionReceiverReady);
         assert!(rx.next().await.is_none());
     }
 }

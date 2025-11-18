@@ -109,6 +109,10 @@ where
             return Ok(());
         };
 
+        debug_assert!(
+            range.last().map(|h| h.height().value()).unwrap() < last_sent_height
+                || lowest_range_height > last_sent_height
+        );
         if lowest_range_height < last_sent_height {
             // We know range cannot cross last_sent_height, so either both ends are before or after.
             // Ignore node syncing historical header ranges.
@@ -125,16 +129,16 @@ where
 
         let mut i = 0;
         while i < self.pending.len() {
-            if self.pending[i]
+            let last_sent_height = self
+                .last_sent_height
+                .expect("last_sent_height should be initialised here");
+            let first_pending_height = self.pending[i]
                 .first()
                 .expect("header range shouldn't be empty")
                 .height()
-                .value()
-                == self
-                    .last_sent_height
-                    .expect("last_sent_height should be initialised here")
-                    + 1
-            {
+                .value();
+
+            if last_sent_height + 1 == first_pending_height {
                 let range = self.pending.swap_remove(i);
                 self.send_range(range).await;
                 i = 0;
@@ -155,7 +159,10 @@ where
                 .value(),
         );
         for header in headers {
-            let _ = self.sender.send(header); // ok to ignore no receivers
+            if self.sender.send(header).is_err() {
+                return; // no receivers - skip sending
+            }
+            // yield to allow receivers to go before the channel fills
             yield_now().await;
         }
     }
