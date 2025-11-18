@@ -95,13 +95,14 @@ impl Port {
         T: DeserializeOwned + 'static,
     {
         Port::new(object, move |ev: MessageEvent| -> Result<()> {
-            if let Some(port) = ev.get_port() {
-                if let Some(port_channel) = &port_channel {
-                    port_channel
-                        .send(port)
-                        .context("port forwarding channel closed, shouldn't happen: {e}")?;
-                }
+            if let Some(port) = ev.get_port()
+                && let Some(port_channel) = &port_channel
+            {
+                port_channel
+                    .send(port)
+                    .context("port forwarding channel closed, shouldn't happen: {e}")?;
             }
+
             let message: T = from_value(ev.data()).context("could not deserialize message")?;
             data_channel
                 .send(message)
