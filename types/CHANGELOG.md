@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.0](https://github.com/eigerco/lumina/compare/celestia-types-v0.16.0...celestia-types-v0.17.0) - 2025-11-18
+
+### Added
+
+- *(grpc)* resigning and resubmission of transactions ([#768](https://github.com/eigerco/lumina/pull/768))
+- *(node)* Node identity retention for native,ios,android ([#751](https://github.com/eigerco/lumina/pull/751))
+
+### Fixed
+
+- *(types,grpc)* [**breaking**] Address::from_account_verifying_key spelling #764
+
+### Other
+
+- [**breaking**] Migrate to Rust 2024 ([#773](https://github.com/eigerco/lumina/pull/773))
+
 ## [0.16.0](https://github.com/eigerco/lumina/compare/celestia-types-v0.15.0...celestia-types-v0.16.0) - 2025-09-25
 
 ### Added

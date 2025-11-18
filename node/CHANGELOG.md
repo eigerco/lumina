@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.0](https://github.com/eigerco/lumina/compare/lumina-node-v0.16.0...lumina-node-v0.17.0) - 2025-11-18
+
+### Added
+
+- *(utils)* [**breaking**] Make `Interval::new` sync constructor ([#799](https://github.com/eigerco/lumina/pull/799))
+- *(node)* Node identity retention for native,ios,android ([#751](https://github.com/eigerco/lumina/pull/751))
+- *(node)* [**breaking**] Implement peer discovery based on node type ([#761](https://github.com/eigerco/lumina/pull/761))
+
+### Other
+
+- [**breaking**] Migrate to Rust 2024 ([#773](https://github.com/eigerco/lumina/pull/773))
+
 ## [0.16.0](https://github.com/eigerco/lumina/compare/lumina-node-v0.15.2...lumina-node-v0.16.0) - 2025-09-25
 
 ### Added

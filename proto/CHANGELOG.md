@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0](https://github.com/eigerco/lumina/compare/celestia-proto-v0.10.0...celestia-proto-v0.11.0) - 2025-11-18
+
+### Other
+
+- [**breaking**] Migrate to Rust 2024 ([#773](https://github.com/eigerco/lumina/pull/773))
+
 ## [0.10.0](https://github.com/eigerco/lumina/compare/celestia-proto-v0.9.1...celestia-proto-v0.10.0) - 2025-09-25
 
 ### Added
