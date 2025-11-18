@@ -512,7 +512,7 @@ where
         Ok(self
             .syncer
             .as_ref()
-            .expect("store should be present")
+            .expect("syncer should be present")
             .subscribe_headers()
             .await?)
     }
