@@ -92,14 +92,14 @@ impl NodeWorker {
             let (command, responder) = self.request_server.recv().await?;
 
             // StopNode needs special handling because `NodeWorkerInstance` needs to be consumed.
-            if matches!(&command, NodeCommand::StopNode) {
-                if let Some(node) = self.node.take() {
-                    node.stop().await;
-                    if responder.send(WorkerResponse::NodeStopped(())).is_err() {
-                        error!("Failed to send response: channel dropped");
-                    }
-                    continue;
+            if matches!(&command, NodeCommand::StopNode)
+                && let Some(node) = self.node.take()
+            {
+                node.stop().await;
+                if responder.send(WorkerResponse::NodeStopped(())).is_err() {
+                    error!("Failed to send response: channel dropped");
                 }
+                continue;
             }
 
             let response = match &mut self.node {
@@ -323,10 +323,10 @@ async fn event_forwarder_task(mut events_sub: EventSubscriber, events_channel: B
             info: ev,
         };
 
-        if let Ok(val) = to_value(&ev) {
-            if events_channel.post_message(&val).is_err() {
-                break;
-            }
+        if let Ok(val) = to_value(&ev)
+            && events_channel.post_message(&val).is_err()
+        {
+            break;
         }
     }
 }
