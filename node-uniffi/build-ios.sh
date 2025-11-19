@@ -34,6 +34,7 @@ rm -rf ./ios/lumina.xcframework
 
 cargo build -p lumina-node-uniffi \
   --release \
+  --lib \
   --target aarch64-apple-ios \
   --target aarch64-apple-ios-sim
 
