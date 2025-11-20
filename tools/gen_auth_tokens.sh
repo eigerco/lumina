@@ -1,43 +1,41 @@
 #!/usr/bin/env bash
-set -euxo pipefail
+set -euo pipefail
 
 DOTENV=".env"
 DOTENV_SAMPLE=".env.sample"
 DOCKER_COMPOSE_FILE="./ci/docker-compose.yml"
 
 wait_for_docker_setup() {
-  local services_running
   local services_expected
-  local da_nodes_ports
-
-  # we don't care about potential globs in the output. regexes guarantee that we operate on numbers
-  # shellcheck disable=2207
-  da_nodes_ports=($(docker compose -f "$DOCKER_COMPOSE_FILE" ps --format '{{.Names}}\t{{.Ports}}' |
-    grep ci-node | # we care only about `celestia-node` instances
-    grep -Eo '[0-9]+->26658' | # grab port mapping of the json rpc
-    awk -F'->' '{ print $1 }' | # get the host ports part
-    uniq))
   services_expected="$(docker compose -f "$DOCKER_COMPOSE_FILE" config --services | wc -l)"
 
-  # wait for the service to start
+  printf "Waiting for docker compose services"
+
   while :; do
-    # check if none of the services died
-    services_running="$(docker compose -f "$DOCKER_COMPOSE_FILE" ps --services | wc -l)"
-    if [[ "$services_running" != "$services_expected" ]]; then
-      echo "Not all required services running, expected $services_expected, found $services_running" >&2
+    local status
+    local healthy
+    local starting
+
+    status="$(docker compose -f "$DOCKER_COMPOSE_FILE" ps --format '{{.Health}}')"
+    healthy="$(echo "$status" | grep -c "^healthy")" || true
+    starting="$(echo "$status" | grep -c "^starting")" || true
+
+
+    if (( healthy == services_expected )); then
+      break
+    elif (( healthy + starting != services_expected )); then
+      echo ""
+      echo "Some services crashed or are unhealthy" >&2
+      docker compose -f "$DOCKER_COMPOSE_FILE" ps --all
       exit 1
     fi
 
+    printf "."
     sleep 1
-
-    # check if all da nodes have already set up json rpc
-    for port in "${da_nodes_ports[@]}"; do
-      curl "http://127.0.0.1:$port" > /dev/null 2>&1 || continue 2
-    done
-
-    # everything is up
-    break
   done
+
+  echo ""
+  echo "All services healthy"
 }
 
 ensure_dotenv_file() {
@@ -71,6 +69,8 @@ write_token() {
   auth_level="$(echo "$auth_level" | tr '[:lower:]' '[:upper:]')"
 
   local var_name="CELESTIA_NODE_AUTH_TOKEN_${auth_level}"
+
+  echo "Saving token $var_name=$token"
 
   sed -i.bak "s/.*$var_name.*/$var_name=$token/" "$DOTENV"
   # there's no compatible way to tell sed not to do a backup file

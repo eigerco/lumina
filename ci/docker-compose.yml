@@ -12,12 +12,12 @@ services:
       - 19090:9090 # grpc
       # TODO: uncomment and remove grpcwebproxy below, once CORS works with built-in grpc-web
       #- 18080:1317 # grpc-web
-    volumes:
+    volumes: &vols
       - credentials:/credentials
       - genesis:/genesis
-    healthcheck:
-      # waits until accounts are starting to be provisioned
-      test: celestia-appd query block --type height 3
+    healthcheck: &healthcheck-validator
+      # wait for validator to fund all keys
+      test: celestia-appd query block --type height 5
       interval: 1s
       timeout: 60s
       retries: 60
@@ -31,6 +31,10 @@ services:
     command: --backend_addr=validator:9090 --run_tls_server=false --allow_all_origins
     ports:
       - 18080:8080
+    # just so we can count it as healthy
+    healthcheck:
+      test: "true"
+      interval: 1s
 
   node-0:
     image: node
@@ -49,9 +53,13 @@ services:
       - SKIP_AUTH=true
     ports:
       - 26658:26658
-    volumes:
-      - credentials:/credentials
-      - genesis:/genesis
+    volumes: *vols
+    healthcheck: &healthcheck-node
+      # wait for the node to start json-rpc server
+      test: celestia header local-head
+      interval: 1s
+      timeout: 60s
+      retries: 60
 
   node-1:
     image: node
@@ -63,9 +71,8 @@ services:
       - NODE_ID=1
     ports:
       - 36658:26658
-    volumes:
-      - credentials:/credentials
-      - genesis:/genesis
+    volumes: *vols
+    healthcheck: *healthcheck-node
 
   node-2:
     image: node
@@ -79,9 +86,8 @@ services:
       - SKIP_AUTH=true
     ports:
       - 46658:26658
-    volumes:
-      - credentials:/credentials
-      - genesis:/genesis
+    volumes: *vols
+    healthcheck: *healthcheck-node
 
   # Uncomment for another nodes
   # remember to adjust services.validator.environment
@@ -95,21 +101,15 @@ services:
   #     - NODE_ID=3
   #   ports:
   #     - 46658:26658
-  #   volumes:
-  #     - credentials:/credentials
-  #     - genesis:/genesis
+  #   volumes: *vols
+  #   healthcheck: *healthcheck-node
 
   # This validator is started as a separate network, only to be able to test
   # transactions eviction cases. Thus it has low TTL and block size.
+  # This network uses the same keys for nodes as the main one.
   validator-eviction-testing:
     image: validator
     platform: "linux/amd64"
-    # we want the first validator to create keys for the main devnet accounts
-    # before this one is even started. That way we don't race over keys creation,
-    # and all keys are still funded on this network
-    depends_on:
-      validator:
-        condition: service_healthy
     build:
       context: .
       dockerfile: Dockerfile.validator
@@ -123,9 +123,8 @@ services:
       - MEMPOOL_TX_TTL=1
     ports:
       - 29090:9090
-    volumes:
-      - credentials:/credentials
-      - genesis:/genesis
+    volumes: *vols
+    healthcheck: *healthcheck-validator
 
 volumes:
   # local volume where node's credentials can persist

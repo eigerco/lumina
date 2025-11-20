@@ -21,17 +21,18 @@ async fn blob_submit_using_bridge_node() {
     let data = random_bytes(5);
     let blob = Blob::new(namespace, data, None, AppVersion::V2).unwrap();
 
-    let unauthorized_client =
-        new_test_client_with_url(AuthLevel::Skip, CELESTIA_BRIDGE_RPC_URL).await;
-    assert!(unauthorized_client.is_err());
-
-    for auth_level in [AuthLevel::Read, AuthLevel::Write, AuthLevel::Admin] {
+    for auth_level in [
+        AuthLevel::Skip,
+        AuthLevel::Read,
+        AuthLevel::Write,
+        AuthLevel::Admin,
+    ] {
         let client = new_test_client_with_url(auth_level, CELESTIA_BRIDGE_RPC_URL)
             .await
             .unwrap();
 
         match auth_level {
-            AuthLevel::Read => {
+            AuthLevel::Skip | AuthLevel::Read => {
                 blob_submit(&client, slice::from_ref(&blob))
                     .await
                     .unwrap_err();
