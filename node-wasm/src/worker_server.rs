@@ -216,7 +216,10 @@ mod tests {
             stop_rx.await.unwrap(); // wait for the test to finish before shutting the server
         });
 
-        let response = client.worker(WorkerCommand::InternalPing).await.unwrap();
+        let response = client
+            .worker_exec(WorkerCommand::InternalPing)
+            .await
+            .unwrap();
 
         assert!(matches!(response, WorkerResponse::InternalPong));
         stop_tx.send(()).unwrap();
@@ -244,7 +247,7 @@ mod tests {
         });
 
         let response = client
-            .worker(WorkerCommand::InternalPing)
+            .worker_exec(WorkerCommand::InternalPing)
             .await
             .unwrap_err();
 
@@ -282,7 +285,7 @@ mod tests {
         for i in 0..=REQUEST_NUMBER {
             let client = client.clone();
             futs.push_back(async move {
-                let response = client.node(NodeCommand::GetSamplingMetadata { height: i });
+                let response = client.node_exec(NodeCommand::GetSamplingMetadata { height: i });
                 let response = SendWrapper::new(response).await;
                 SendWrapper::new(response)
             });

@@ -341,17 +341,17 @@ mod tests {
         port_channel.send(p0.into()).unwrap();
         let client0 = WorkerClient::new(p1.into()).unwrap();
 
-        let response = client0.worker(WorkerCommand::IsRunning).await.unwrap();
+        let response = client0.worker_exec(WorkerCommand::IsRunning).await.unwrap();
         assert!(matches!(response, WorkerResponse::IsRunning(false)));
 
         let channel1 = MessageChannel::new().unwrap();
         client0
-            .worker(WorkerCommand::ConnectPort(Some(channel1.port1().into())))
+            .worker_exec(WorkerCommand::ConnectPort(Some(channel1.port1().into())))
             .await
             .unwrap();
         let client1 = WorkerClient::new(channel1.port2().into()).unwrap();
 
-        let response = client1.worker(WorkerCommand::IsRunning).await.unwrap();
+        let response = client1.worker_exec(WorkerCommand::IsRunning).await.unwrap();
         assert!(matches!(response, WorkerResponse::IsRunning(true)));
         stop_tx.send(()).unwrap();
     }
@@ -375,7 +375,10 @@ mod tests {
             stop_rx.await.unwrap(); // wait for the test to finish before shutting the server
         });
 
-        let response = client.worker(WorkerCommand::InternalPing).await.unwrap();
+        let response = client
+            .worker_exec(WorkerCommand::InternalPing)
+            .await
+            .unwrap();
         assert!(matches!(response, WorkerResponse::InternalPong));
         stop_tx.send(()).unwrap();
     }

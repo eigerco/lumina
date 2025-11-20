@@ -46,13 +46,13 @@ impl WorkerClient {
     }
 
     /// Send a `WorkerCommand`, awaiting for a `WorkerResponse`
-    pub async fn worker(&self, command: WorkerCommand) -> Result<WorkerResponse, WorkerError> {
+    pub async fn worker_exec(&self, command: WorkerCommand) -> Result<WorkerResponse, WorkerError> {
         let command = Command::Management(command);
         self.send(command).await
     }
 
     /// Send a `NodeCommand`, awaiting for a `WorkerResponse`
-    pub async fn node(&self, command: NodeCommand) -> Result<WorkerResponse, WorkerError> {
+    pub async fn node_exec(&self, command: NodeCommand) -> Result<WorkerResponse, WorkerError> {
         let command = Command::Node(command);
         self.send(command).await
     }
