@@ -8,7 +8,7 @@ authors = ["Eiger <hello@eiger.co>"]
 homepage = "https://www.eiger.co"
 repository = "https://github.com/eigerco/lumina"
 readme = "README.md"
-rust-version = "1.87"
+rust-version = "1.88"
 
 [lib]
 crate-type = ["lib", "staticlib", "cdylib"]

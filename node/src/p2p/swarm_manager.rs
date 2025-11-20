@@ -206,10 +206,10 @@ where
             dial_opts.addresses(addresses.clone()).build()
         };
 
-        if let Err(e) = self.swarm.dial(dial_opts) {
-            if !matches!(e, DialError::DialPeerConditionFalse(_)) {
-                warn!("Failed to dial on {addresses:?}: {e}");
-            }
+        if let Err(e) = self.swarm.dial(dial_opts)
+            && !matches!(e, DialError::DialPeerConditionFalse(_))
+        {
+            warn!("Failed to dial on {addresses:?}: {e}");
         }
     }
 
@@ -305,10 +305,12 @@ where
             .iter_queries()
             .any(|query| matches!(query.info(), QueryInfo::Bootstrap { .. }));
 
-        if !bootstrap_query_exists {
-            if let Err(e) = self.swarm.behaviour_mut().kademlia.bootstrap() {
-                warn!("Can't run kademlia bootstrap: {e}");
-            }
+        if bootstrap_query_exists {
+            return;
+        }
+
+        if let Err(e) = self.swarm.behaviour_mut().kademlia.bootstrap() {
+            warn!("Can't run kademlia bootstrap: {e}");
         }
     }
 
@@ -318,14 +320,16 @@ where
             |query| matches!(query.info(), QueryInfo::GetProviders { key, .. } if key == topic),
         );
 
-        if !kad_query_exists {
-            // `get_providers` reports already known providers of the
-            // `topic` and tries to discover new ones.
-            self.swarm
-                .behaviour_mut()
-                .kademlia
-                .get_providers(topic.to_owned());
+        if kad_query_exists {
+            return;
         }
+
+        // `get_providers` reports already known providers of the
+        // `topic` and tries to discover new ones.
+        self.swarm
+            .behaviour_mut()
+            .kademlia
+            .get_providers(topic.to_owned());
     }
 
     fn start_full_node_kad_query(&mut self) {

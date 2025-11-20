@@ -8,19 +8,35 @@ DOCKER_COMPOSE_FILE="./ci/docker-compose.yml"
 wait_for_docker_setup() {
   local services_running
   local services_expected
+  local da_nodes_ports
 
+  # we don't care about potential globs in the output. regexes guarantee that we operate on numbers
+  # shellcheck disable=2207
+  da_nodes_ports=($(docker compose -f "$DOCKER_COMPOSE_FILE" ps --format '{{.Names}}\t{{.Ports}}' |
+    grep ci-node | # we care only about `celestia-node` instances
+    grep -Eo '[0-9]+->26658' | # grab port mapping of the json rpc
+    awk -F'->' '{ print $1 }' | # get the host ports part
+    uniq))
   services_expected="$(docker compose -f "$DOCKER_COMPOSE_FILE" config --services | wc -l)"
-  services_running="$(docker compose -f "$DOCKER_COMPOSE_FILE" ps --services | wc -l)"
-
-  if [[ "$services_running" != "$services_expected" ]]; then
-    echo "Not all required services running, expected $services_expected, found $services_running" >&2
-    exit 1
-  fi
 
   # wait for the service to start
   while :; do
-    curl http://127.0.0.1:36658 > /dev/null 2>&1 && break
+    # check if none of the services died
+    services_running="$(docker compose -f "$DOCKER_COMPOSE_FILE" ps --services | wc -l)"
+    if [[ "$services_running" != "$services_expected" ]]; then
+      echo "Not all required services running, expected $services_expected, found $services_running" >&2
+      exit 1
+    fi
+
     sleep 1
+
+    # check if all da nodes have already set up json rpc
+    for port in "${da_nodes_ports[@]}"; do
+      curl "http://127.0.0.1:$port" > /dev/null 2>&1 || continue 2
+    done
+
+    # everything is up
+    break
   done
 }
 

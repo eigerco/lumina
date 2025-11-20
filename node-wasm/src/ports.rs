@@ -50,10 +50,10 @@ impl TryFrom<MessageEvent> for MultiplexMessage<Command> {
         let MultiplexMessage::<Command> { id, mut payload } =
             from_value(ev.data()).context("could not deserialize message")?;
 
-        if let Some(port) = ev.get_ports().into_iter().take(1).last() {
-            if let Command::Management(WorkerCommand::ConnectPort(maybe_port)) = &mut payload {
-                let _ = maybe_port.insert(port);
-            }
+        if let Some(port) = ev.get_ports().into_iter().take(1).last()
+            && let Command::Management(WorkerCommand::ConnectPort(maybe_port)) = &mut payload
+        {
+            let _ = maybe_port.insert(port);
         };
 
         Ok(MultiplexMessage { id, payload })
@@ -67,10 +67,10 @@ impl TryFrom<MessageEvent> for MultiplexMessage<WorkerResult> {
         let MultiplexMessage::<WorkerResult> { id, mut payload } =
             from_value(ev.data()).context("could not deserialize message")?;
 
-        if let Some(port) = ev.get_ports().into_iter().next() {
-            if let Ok(WorkerResponse::Subscribed(maybe_port)) = &mut payload {
-                let _ = maybe_port.insert(port);
-            }
+        if let Some(port) = ev.get_ports().into_iter().next()
+            && let Ok(WorkerResponse::Subscribed(maybe_port)) = &mut payload
+        {
+            let _ = maybe_port.insert(port);
         };
 
         Ok(MultiplexMessage { id, payload })
@@ -103,7 +103,7 @@ impl From<MessagePort> for MessagePortLike {
     }
 }
 
-pub(crate) fn split_port(port: MessagePortLike) -> Result<(PortSender, RawPortReceier)> {
+pub(crate) fn split_port(port: MessagePortLike) -> Result<(PortSender, PortReceiver)> {
     let _post_message: Function = Reflect::get(&port, &"postMessage".into())?
         .dyn_into()
         .context("could not get object's postMessage")?;
@@ -119,7 +119,7 @@ pub(crate) fn split_port(port: MessagePortLike) -> Result<(PortSender, RawPortRe
     register_onmessage(port.as_ref(), &onmessage)?;
 
     let sender = PortSender { port: port.clone() };
-    let receiver = RawPortReceier {
+    let receiver = PortReceiver {
         port,
         receiving_channel,
         onmessage,
@@ -154,13 +154,13 @@ impl Drop for PortSender {
     }
 }
 
-pub(crate) struct RawPortReceier {
+pub(crate) struct PortReceiver {
     port: Rc<MessagePortLike>,
     receiving_channel: mpsc::UnboundedReceiver<MessageEvent>,
     onmessage: Closure<dyn Fn(MessageEvent)>,
 }
 
-impl Stream for RawPortReceier {
+impl Stream for PortReceiver {
     type Item = MessageEvent;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
@@ -177,7 +177,7 @@ impl Stream for RawPortReceier {
     }
 }
 
-impl Drop for RawPortReceier {
+impl Drop for PortReceiver {
     fn drop(&mut self) {
         unregister_onmessage(self.port.as_ref(), &self.onmessage);
     }
