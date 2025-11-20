@@ -169,6 +169,10 @@ setup_private_validator() {
   if [ -n "${BLOCK_SIZE:-""}" ]; then
     dasel put -f "$CONFIG_DIR/config/genesis.json" -t string -v "${BLOCK_SIZE}" consensus.params.block.max_bytes
   fi
+  # Optionally, configure the square size
+  if [ -n "${SQUARE_SIZE:-""}" ]; then
+    dasel put -f "$CONFIG_DIR/config/genesis.json" -t string -v "${SQUARE_SIZE}" app_state.blob.params.gov_max_square_size
+  fi
   # Optionally, configure the transactions ttl in mempool
   if [ -n "${MEMPOOL_TX_TTL:-""}" ]; then
     dasel put -f "$CONFIG_DIR/config/config.toml" -t int -v "${MEMPOOL_TX_TTL}" mempool.ttl-num-blocks
@@ -189,12 +193,22 @@ main() {
   # Spawn a job to provision a bridge node later
   provision_da_nodes &
 
-  # Start the celestia-app
+  # celestia-appd overrides quite a few settings if they
+  # are not within a sane range for regular deployment.
+  # we need to bypass that if we want e.g. crazy low ttl
+  local extra_flags=()
+  if [ -n "${MEMPOOL_TX_TTL:-""}" ]; then
+    extra_flags+=(--bypass-config-overrides)
+  fi
+
+  # Start the celestia-app, with 500ms block time
   echo "Configuration finished. Running a validator node..."
   celestia-appd start \
     --api.enable \
     --grpc.enable \
-    --force-no-bbr
+    --force-no-bbr \
+    --delayed-precommit-timeout 500ms \
+    "${extra_flags[@]}"
 }
 
 main
