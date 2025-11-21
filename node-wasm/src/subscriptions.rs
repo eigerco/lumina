@@ -241,5 +241,6 @@ mod tests {
 
         let mut rx = rx.map(|ev| from_value::<SubscriptionReceiverReady>(ev.data()).unwrap());
         assert!(rx.next().await.is_none());
+        assert!(rx.next().await.is_none());
     }
 }

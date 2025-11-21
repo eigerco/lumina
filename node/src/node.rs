@@ -509,12 +509,7 @@ where
     /// Return a stream which will yield all the headers, as they are being received by the
     /// node, starting from the first header received after the call.
     pub async fn header_subscribe(&self) -> Result<broadcast::Receiver<ExtendedHeader>> {
-        Ok(self
-            .syncer
-            .as_ref()
-            .expect("syncer should be present")
-            .subscribe_headers()
-            .await?)
+        Ok(self.syncer().subscribe_headers().await?)
     }
 
     /// Subscribe to the shares from the namespace, as new headers are received by the node

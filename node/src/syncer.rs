@@ -1337,6 +1337,8 @@ mod tests {
         let (tx, mut received_headers) = mpsc::unbounded_channel();
         spawn(async move {
             loop {
+                // gather all the headers received, marking the moment disconnection
+                // happened with a None.
                 select! {
                     header = header_receiver.recv() => {
                         let header = match header {

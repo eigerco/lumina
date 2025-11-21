@@ -165,8 +165,11 @@ impl Stream for PortReceiver {
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.get_mut();
-        let event =
-            ready!(this.receiving_channel.poll_recv(cx)).expect("forward channel should not drop");
+        let event = ready!(this.receiving_channel.poll_recv(cx));
+
+        let Some(event) = event else {
+            return Poll::Ready(None);
+        };
 
         if event.data() == CHANNEL_CLOSE_SYMBOL_NAME {
             this.receiving_channel.close();
@@ -301,6 +304,7 @@ mod tests {
 
         let v: u32 = from_value(rx1.next().await.unwrap().data()).unwrap();
         assert_eq!(v, 1);
+        assert!(rx1.next().await.is_none());
         assert!(rx1.next().await.is_none());
     }
 

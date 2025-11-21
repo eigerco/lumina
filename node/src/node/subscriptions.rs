@@ -18,7 +18,7 @@ use crate::p2p::{P2p, P2pError};
 use crate::store::{Store, StoreError};
 
 const SHWAP_FETCH_TIMEOUT: Duration = Duration::from_secs(5);
-const HEIGHT_SEQUENCER_BROADCAST_CAPACITY: usize = 16;
+const HEADER_BROADCAST_CHANNEL_CAPACITY: usize = 16;
 
 /// Error thrown while processing the subscription
 #[derive(Debug, thiserror::Error)]
@@ -63,7 +63,7 @@ where
     S: Store,
 {
     pub fn new(store: Arc<S>) -> Self {
-        let (sender, _) = broadcast::channel(HEIGHT_SEQUENCER_BROADCAST_CAPACITY);
+        let (sender, _) = broadcast::channel(HEADER_BROADCAST_CHANNEL_CAPACITY);
         BroadcastingStore {
             inner: store,
             sender,
