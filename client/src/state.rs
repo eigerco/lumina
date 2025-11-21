@@ -461,15 +461,22 @@ impl StateApi {
 mod tests {
     use super::*;
 
+    use std::time::Duration;
+
+    use celestia_grpc::Error as GrpcError;
+    use celestia_rpc::Error as RpcError;
+    use jsonrpsee::core::ClientError as JrpcError;
+    use lumina_utils::test_utils::async_test;
+    use tonic::Code;
+
     use celestia_grpc::TxConfig;
     use k256::ecdsa::SigningKey;
-    use lumina_utils::test_utils::async_test;
 
-    use crate::Error;
     use crate::test_utils::{
-        ensure_serializable_deserializable, new_client, new_read_only_client, new_rpc_only_client,
-        node0_address, validator_address,
+        TEST_GRPC_URL, TEST_RPC_URL, ensure_serializable_deserializable, new_client,
+        new_read_only_client, new_rpc_only_client, node0_address, validator_address,
     };
+    use crate::{Client, Error};
 
     #[async_test]
     async fn transfer() {
@@ -724,5 +731,41 @@ mod tests {
         ensure_serializable_deserializable(
             api.query_redelegations(&val_addr, &val_addr).await.unwrap(),
         );
+    }
+
+    #[async_test]
+    async fn rpc_timeout() {
+        let _client_build_error = Client::builder()
+            .rpc_url(TEST_RPC_URL)
+            .grpc_url(TEST_GRPC_URL)
+            .timeout(Duration::from_nanos(1))
+            .build()
+            .await
+            .unwrap_err();
+
+        assert!(matches!(
+            Error::Rpc(RpcError::JsonRpc(JrpcError::RequestTimeout)),
+            _client_build_error
+        ));
+    }
+
+    #[async_test]
+    async fn grpc_timeout() {
+        let client = new_client().await;
+
+        let _balance_timeout = client
+            .state()
+            .balance()
+            .timeout(Duration::from_nanos(100))
+            .await
+            .unwrap_err();
+
+        let _balance_ok = client.state().balance().await.unwrap();
+
+        let Error::Grpc(GrpcError::TonicError(status)) = _balance_timeout else {
+            panic!("Invalid error type");
+        };
+
+        assert_eq!(status.code(), Code::DeadlineExceeded);
     }
 }

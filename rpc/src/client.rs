@@ -14,7 +14,9 @@ pub use self::wasm::Client;
 mod native {
     use std::fmt;
     use std::result::Result;
+    use std::time::Duration;
 
+    use bon::bon;
     use http::{HeaderValue, header};
     use jsonrpsee::core::ClientError;
     use jsonrpsee::core::client::{BatchResponse, ClientT, Subscription, SubscriptionClientT};
@@ -23,6 +25,7 @@ mod native {
     use jsonrpsee::http_client::{HeaderMap, HttpClient, HttpClientBuilder};
     use jsonrpsee::ws_client::{PingConfig, WsClient, WsClientBuilder};
     use serde::de::DeserializeOwned;
+    use tracing::warn;
 
     use crate::Error;
 
@@ -36,16 +39,23 @@ mod native {
         Ws(WsClient),
     }
 
+    #[bon]
     impl Client {
         /// Create a new Json RPC client.
         ///
         /// Only 'http\[s\]' and 'ws\[s\]' protocols are supported and they should
-        /// be specified in the provided `conn_str`. For more flexibility
+        /// be specified in the provided `url`. For more flexibility
         /// consider creating the client using [`jsonrpsee`] directly.
         ///
         /// Please note that currently the celestia-node supports only 'http' and 'ws'.
         /// For a secure connection you have to hide it behind a proxy.
-        pub async fn new(conn_str: &str, auth_token: Option<&str>) -> Result<Self, Error> {
+        #[builder]
+        pub async fn new(
+            url: &str,
+            auth_token: Option<&str>,
+            connect_timeout: Option<Duration>,
+            request_timeout: Option<Duration>,
+        ) -> Result<Self, Error> {
             let mut headers = HeaderMap::new();
 
             if let Some(token) = auth_token {
@@ -53,23 +63,34 @@ mod native {
                 headers.insert(header::AUTHORIZATION, val);
             }
 
-            let protocol = conn_str.split_once(':').map(|(proto, _)| proto);
+            let protocol = url.split_once(':').map(|(proto, _)| proto);
             let client = match protocol {
-                Some("http") | Some("https") => Client::Http(
-                    HttpClientBuilder::default()
+                Some("http") | Some("https") => {
+                    let mut builder = HttpClientBuilder::default()
+                        .max_response_size(MAX_RESPONSE_SIZE as u32)
+                        .set_headers(headers);
+                    if let Some(timeout) = request_timeout {
+                        builder = builder.request_timeout(timeout);
+                    }
+                    if connect_timeout.is_some() {
+                        warn!("ignored connect_timeout for TODO");
+                    }
+                    Client::Http(builder.build(url)?)
+                }
+                Some("ws") | Some("wss") => {
+                    let mut builder = WsClientBuilder::default()
                         .max_response_size(MAX_RESPONSE_SIZE as u32)
                         .set_headers(headers)
-                        .build(conn_str)?,
-                ),
-                Some("ws") | Some("wss") => Client::Ws(
-                    WsClientBuilder::default()
-                        .max_response_size(MAX_RESPONSE_SIZE as u32)
-                        .set_headers(headers)
-                        .enable_ws_ping(PingConfig::default())
-                        .build(conn_str)
-                        .await?,
-                ),
-                _ => return Err(Error::ProtocolNotSupported(conn_str.into())),
+                        .enable_ws_ping(PingConfig::default());
+                    if let Some(timeout) = request_timeout {
+                        builder = builder.request_timeout(timeout);
+                    }
+                    if let Some(timeout) = connect_timeout {
+                        builder = builder.connection_timeout(timeout);
+                    }
+                    Client::Ws(builder.build(url).await?)
+                }
+                _ => return Err(Error::ProtocolNotSupported(url.into())),
             };
 
             Ok(client)
@@ -164,8 +185,11 @@ mod wasm {
     use std::fmt;
     use std::result::Result;
     use std::sync::atomic::{AtomicU64, Ordering};
+    use std::time::Duration;
 
+    use bon::bon;
     use gloo_net::http::{Request as JsRequest, Response as JsResponse};
+    use gloo_timers::callback::Timeout;
     use jsonrpsee::core::client::{BatchResponse, ClientT, Subscription, SubscriptionClientT};
     use jsonrpsee::core::middleware::Batch;
     use jsonrpsee::core::params::BatchRequestBuilder;
@@ -177,16 +201,22 @@ mod wasm {
     use send_wrapper::SendWrapper;
     use serde::Serialize;
     use serde::de::DeserializeOwned;
+    use tracing::warn;
+    use web_sys::AbortController;
 
     use crate::Error;
+
+    const ABORT_ERROR_NAME: &str = "AbortError";
 
     /// Json RPC client.
     pub struct Client {
         id: AtomicU64,
         url: String,
         auth_token: Option<String>,
+        timeout_ms: Option<u32>,
     }
 
+    #[bon]
     impl Client {
         /// Create a new Json RPC client.
         ///
@@ -194,24 +224,47 @@ mod wasm {
         /// doesn't allow setting headers with websocket. If you want to
         /// use the websocket client anyway, you can use the one from the
         /// `jsonrpsee` directly, but you need a node with `--rpc.skip-auth`.
-        pub async fn new(conn_str: &str, auth_token: Option<&str>) -> Result<Self, Error> {
-            let protocol = conn_str.split_once(':').map(|(proto, _)| proto);
+        #[builder]
+        pub async fn new(
+            url: &str,
+            auth_token: Option<&str>,
+            connect_timeout: Option<Duration>,
+            request_timeout: Option<Duration>,
+        ) -> Result<Self, Error> {
+            let protocol = url.split_once(':').map(|(proto, _)| proto);
             match protocol {
                 Some("http") | Some("https") => (),
-                _ => return Err(Error::ProtocolNotSupported(conn_str.into())),
+                _ => return Err(Error::ProtocolNotSupported(url.into())),
             };
+            let timeout_ms = request_timeout
+                .map(|t| t.as_millis().try_into())
+                .transpose()
+                .map_err(|_| Error::TimeoutOutOfRange)?;
+            if connect_timeout.is_some() {
+                warn!("ignored connect_timeout for wasm");
+            }
 
             Ok(Client {
                 id: AtomicU64::new(0),
-                url: conn_str.into(),
+                url: url.into(),
                 auth_token: auth_token.map(ToOwned::to_owned),
+                timeout_ms,
             })
         }
 
-        // TODO: Add request timeouts
         async fn send<T: Serialize>(&self, request: T) -> Result<JsResponse, ClientError> {
             let fut = {
                 let mut req = JsRequest::post(&self.url);
+
+                if let Some(timeout) = self.timeout_ms {
+                    let abort_controller = AbortController::new().unwrap(); // FIXME: unwrap
+                    let abort_signal = abort_controller.signal();
+                    Timeout::new(timeout, move || {
+                        abort_controller.abort();
+                    })
+                    .forget();
+                    req = req.abort_signal(Some(&abort_signal));
+                }
 
                 if let Some(token) = self.auth_token.as_ref() {
                     req = req.header("Authorization", &format!("Bearer {token}"));
@@ -220,9 +273,17 @@ mod wasm {
                 req.json(&request).map_err(into_parse_error)?.send()
             };
 
-            SendWrapper::new(fut)
-                .await
-                .map_err(|e| ClientError::Transport(e.into()))
+            SendWrapper::new(fut).await.map_err(|e| match e {
+                gloo_net::Error::JsError(e) => {
+                    if e.name == ABORT_ERROR_NAME {
+                        ClientError::RequestTimeout
+                    } else {
+                        ClientError::Transport(e.into())
+                    }
+                }
+                gloo_net::Error::SerdeError(e) => ClientError::ParseError(e),
+                gloo_net::Error::GlooError(e) => ClientError::Transport(e.into()),
+            })
         }
 
         async fn send_and_read_body<T: Serialize>(
