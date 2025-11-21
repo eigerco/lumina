@@ -1273,7 +1273,7 @@ mod tests {
     }
 
     #[async_test]
-    async fn height_sequencer_smoke() {
+    async fn height_sequence_smoke() {
         let mut generator = ExtendedHeaderGenerator::new();
         let headers = generator.next_many(20);
         let (syncer, store, mut p2p_mock) = initialized_syncer(headers[9].clone()).await;
@@ -1289,35 +1289,44 @@ mod tests {
         // header sub receiving header at height 11 (adjacent, should be added immediately)
         p2p_mock.announce_new_head(headers[10].clone());
         assert_syncing(&syncer, &store, &[10..=11], 11).await;
+        assert_eq!(received_heights.recv().await.unwrap(), 11);
 
         // header sub receiving header at height 15 (gap, should NOT be added immediately)
         p2p_mock.announce_new_head(headers[14].clone());
         assert_syncing(&syncer, &store, &[10..=11], 15).await;
+        received_heights.try_recv().unwrap_err();
 
-        // Syncer requests past header range, should be ignored by the sequencer
+        // Syncer requests past header range, should be ignored
         handle_session_batch(&mut p2p_mock, &headers, 2..=9, true).await;
         handle_session_batch(&mut p2p_mock, &headers, 1..=1, true).await;
+        received_heights.try_recv().unwrap_err();
 
         // Syncer should request the gap [12, 15]
         handle_session_batch(&mut p2p_mock, &headers, 12..=15, true).await;
         assert_syncing(&syncer, &store, &[1..=15], 15).await;
 
+        for i in 12..=15 {
+            let height = received_heights.recv().await.unwrap();
+            assert_eq!(height, i);
+        }
+
         // header sub receives header at height 19 (gap)
         p2p_mock.announce_new_head(headers[18].clone());
         assert_syncing(&syncer, &store, &[1..=15], 19).await;
+        received_heights.try_recv().unwrap_err();
 
         // Syncer should request the gap [16, 18]
         handle_session_batch(&mut p2p_mock, &headers, 16..=19, true).await;
         assert_syncing(&syncer, &store, &[1..=19], 19).await;
 
-        for i in 11..=19 {
+        for i in 16..=19 {
             let height = received_heights.recv().await.unwrap();
             assert_eq!(height, i);
         }
     }
 
     #[async_test]
-    async fn height_sequencer_handles_disconnect() {
+    async fn height_sequence_handles_disconnect() {
         let mut generator = ExtendedHeaderGenerator::new();
         let headers = generator.next_many(20);
         let (syncer, store, mut p2p_mock) = initialized_syncer(headers[0].clone()).await;

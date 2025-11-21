@@ -206,7 +206,7 @@ pub enum StoreInsertionError {
     #[error("Provided headers failed to be verified with existing neighbors: {0}")]
     NeighborsVerificationFailed(String),
 
-    /// Store contraints are not met.
+    /// Store constraints are not met.
     #[error("Contraints not met: {0}")]
     ContraintsNotMet(BlockRangesError),
 

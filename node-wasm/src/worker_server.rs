@@ -128,7 +128,6 @@ impl ConnectionWorker {
                     self.response_sender
                         .send(response, ports.as_ref())
                         .with_context(|| format!("failed to send outgoing response for {:?}", response.id))?;
-
                 }
             }
         }
