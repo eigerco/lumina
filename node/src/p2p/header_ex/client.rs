@@ -177,13 +177,16 @@ where
         }
     }
 
+    fn has_pending_head_requests() -> bool {
+        !self.head_reqs.is_empty() && !self.head_req_scheduled
+    }
+
     fn has_pending_requests(&self) -> bool {
-        (!self.head_reqs.is_empty() && !self.head_req_scheduled)
-            || self.pending_reqs.values().any(|reqs| !reqs.is_empty())
+        self.has_pending_head_requests() || self.pending_reqs.values().any(|reqs| !reqs.is_empty())
     }
 
     fn needs_trusted_peers(&self) -> bool {
-        (!self.head_reqs.is_empty() && !self.head_req_scheduled)
+        self.has_pending_head_requests()
             || self
                 .pending_reqs
                 .get(&PeerKind::Trusted)
@@ -205,7 +208,7 @@ where
     }
 
     pub(super) fn schedule_pending_requests(&mut self, sender: &mut S, peer_tracker: &PeerTracker) {
-        if !self.head_reqs.is_empty() && !self.head_req_scheduled {
+        if self.has_pending_head_requests() {
             self.schedule_head_request(sender, peer_tracker);
         }
 
@@ -219,6 +222,8 @@ where
             self.schedule_pending_interval.take();
         }
 
+        // Check every `SEND_NEED_MORE_PEERS_AFTER` seconds if trusted peers are needed
+        // and generate `Event::NeedTrustedPeers`
         if self
             .last_need_trusted_sent
             .is_none_or(|tm| tm.elapsed() >= SEND_NEED_MORE_PEERS_AFTER)
@@ -228,6 +233,8 @@ where
             self.last_need_trusted_sent = Some(Instant::now());
         }
 
+        // Check every `SEND_NEED_MORE_PEERS_AFTER` seconds if archival peers are needed
+        // and generate `Event::NeedArchivalPeers`
         if self
             .last_need_archival_sent
             .is_none_or(|tm| tm.elapsed() >= SEND_NEED_MORE_PEERS_AFTER)
@@ -298,6 +305,7 @@ where
 
         let peers = peer_tracker
             .peers()
+            // For HEAD requests we only use trusted peers
             .filter(|peer| peer.is_connected() && peer.is_trusted())
             .take(MAX_PEERS)
             .collect::<SmallVec<[_; MAX_PEERS]>>();
@@ -426,11 +434,13 @@ where
 
     pub(super) fn on_stop(&mut self) {
         self.cancellation_token.cancel();
-        self.tasks.clear();
         self.reqs.clear();
         self.head_reqs.clear();
-        self.pending_reqs.clear();
         self.head_req_scheduled = false;
+        self.pending_reqs.clear();
+        self.tasks.clear();
+        self.events.clear();
+        self.schedule_pending_interval.take();
     }
 
     pub(super) fn poll(&mut self, cx: &mut Context) -> Poll<Event> {
@@ -440,17 +450,17 @@ where
 
         while let Poll::Ready(Some(res)) = self.tasks.poll_next_unpin(cx) {
             match res {
-                TaskResult::Head(res) => {
-                    // By setting this to `false` when `res` is `None`, we trigger
-                    // a retry when `schedule_pending_requests` is called.
+                TaskResult::Head(None) => {
+                    // By setting this to `false` on `None`, we trigger a retry
+                    // when `schedule_pending_requests` is called.
                     self.head_req_scheduled = false;
+                }
+                TaskResult::Head(Some(head)) => {
+                    self.head_req_scheduled = false;
+                    let head = vec![*head];
 
-                    if let Some(head) = res {
-                        let head = vec![*head];
-
-                        for mut respond_to in self.head_reqs.drain(..) {
-                            respond_to.maybe_send_ok(head.clone());
-                        }
+                    for mut respond_to in self.head_reqs.drain(..) {
+                        respond_to.maybe_send_ok(head.clone());
                     }
                 }
                 TaskResult::Req(req_id, res) => {

@@ -169,10 +169,6 @@ where
                 _ = self.peer_tracker_info_watcher.changed() => {
                     self.peer_health_check().await;
                 }
-                // TODO: if we start the node before we connect to the internet
-                // and after that we connect, then SwarmManager (and kademlia behaviour)
-                // doesn't detect this. The node gets connected after the following
-                // timer gets triggered.
                 _ = self.peer_health_check_interval.tick() => {
                     self.peer_health_check().await;
                 }
@@ -180,7 +176,7 @@ where
                     self.peer_tracker.gc();
                 }
                 ev = self.swarm.select_next_some() => {
-                    if let Some(ev) = self.on_swarm_event(ev).await {
+                    if let Some(ev) = self.on_swarm_event(ev) {
                         return Ok(ev);
                     }
                 }
@@ -488,10 +484,7 @@ where
         }
     }
 
-    async fn on_swarm_event(
-        &mut self,
-        ev: SwarmEvent<SwarmBehaviourEvent<B>>,
-    ) -> Option<B::ToSwarm> {
+    fn on_swarm_event(&mut self, ev: SwarmEvent<SwarmBehaviourEvent<B>>) -> Option<B::ToSwarm> {
         match ev {
             SwarmEvent::Behaviour(ev) => match ev {
                 SwarmBehaviourEvent::Identify(ev) => self.on_identify_event(ev),
@@ -505,7 +498,7 @@ where
                 connection_id,
                 ..
             } => {
-                self.on_peer_connected(&peer_id, connection_id).await;
+                self.on_peer_connected(&peer_id, connection_id);
             }
             SwarmEvent::ConnectionClosed {
                 peer_id,
@@ -528,7 +521,7 @@ where
         debug!("Peer discovered: {peer_id}");
     }
 
-    async fn on_peer_connected(&mut self, peer_id: &PeerId, connection_id: ConnectionId) {
+    fn on_peer_connected(&mut self, peer_id: &PeerId, connection_id: ConnectionId) {
         debug!("Peer connected: {peer_id}");
         self.peer_tracker.add_connection(peer_id, connection_id);
 
