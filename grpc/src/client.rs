@@ -898,6 +898,7 @@ mod tests {
     use std::future::IntoFuture;
     use std::ops::RangeInclusive;
     use std::sync::Arc;
+    use std::time::Duration;
 
     use celestia_proto::cosmos::bank::v1beta1::MsgSend;
     use celestia_rpc::HeaderClient;
@@ -1083,6 +1084,8 @@ mod tests {
             .await
             .unwrap();
         let tx2 = tx_client.get_tx(tx.hash).await.unwrap();
+
+        lumina_utils::time::sleep(Duration::from_millis(100)).await;
 
         assert_eq!(tx.hash, tx2.tx_response.txhash);
         assert_eq!(tx2.tx.body.memo, "foo");
