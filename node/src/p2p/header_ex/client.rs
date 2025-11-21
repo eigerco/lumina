@@ -177,7 +177,7 @@ where
         }
     }
 
-    fn has_pending_head_requests() -> bool {
+    fn has_pending_head_requests(&self) -> bool {
         !self.head_reqs.is_empty() && !self.head_req_scheduled
     }
 
