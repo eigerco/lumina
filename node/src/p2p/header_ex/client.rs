@@ -1689,7 +1689,7 @@ mod tests {
         // Request is now scheduled (i.e. not pending)
         assert!(!handler.has_pending_requests());
 
-        // Responde with failure
+        // Respond with failure
         mock_req.send_n_failures(1, OutboundFailure::ConnectionClosed);
         poll_client_for(
             &mut handler,
