@@ -5,10 +5,12 @@ use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
 use blockstore::EitherBlockstore;
-use celestia_rpc::Client;
 use celestia_rpc::prelude::*;
+use celestia_rpc::{Client, TxConfig};
+use celestia_types::nmt::Namespace;
 use clap::{Parser, value_parser};
 use directories::ProjectDirs;
+use libp2p::futures::StreamExt;
 use libp2p::multiaddr::{Multiaddr, Protocol};
 use lumina_node::blockstore::{InMemoryBlockstore, RedbBlockstore};
 use lumina_node::events::NodeEvent;
@@ -198,6 +200,28 @@ async fn fetch_bridge_multiaddrs(ws_url: &str) -> Result<Vec<Multiaddr>> {
             ma
         })
         .collect::<Vec<_>>();
+
+    tokio::spawn(async move {
+        let mut sub = client.header_subscribe();
+        let ns = Namespace::new_v0(&[1, 2, 3]).unwrap();
+
+        while let Some(hdr) = sub.next().await {
+            let hdr = hdr.unwrap().height().value();
+            println!("NEW HEAD: {hdr}");
+            let data = format!("header{hdr}");
+            let blob = celestia_types::Blob::new(
+                ns,
+                data.as_bytes().to_vec(),
+                None,
+                celestia_types::AppVersion::V6,
+            )
+            .unwrap();
+            client
+                .blob_submit(&[blob], TxConfig::default())
+                .await
+                .unwrap();
+        }
+    });
 
     if addrs.is_empty() {
         bail!("Bridge doesn't listen on tcp");

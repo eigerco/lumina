@@ -48,6 +48,7 @@ use tracing::{debug, info, instrument, trace, warn};
 mod connection_control;
 mod header_ex;
 pub(crate) mod header_session;
+mod shrex;
 pub(crate) mod shwap;
 mod swarm;
 mod swarm_manager;
@@ -56,6 +57,7 @@ use crate::block_ranges::BlockRange;
 use crate::events::EventPublisher;
 use crate::p2p::header_ex::{HeaderExBehaviour, HeaderExConfig};
 use crate::p2p::header_session::HeaderSession;
+use crate::p2p::shrex::{ShrExBehaviour, ShrExConfig};
 use crate::p2p::shwap::{ShwapMultihasher, convert_cid, get_block_container};
 use crate::p2p::swarm_manager::SwarmManager;
 use crate::peer_tracker::PeerTracker;
@@ -689,6 +691,7 @@ where
 {
     bitswap: beetswap::Behaviour<MAX_MH_SIZE, B>,
     header_ex: HeaderExBehaviour<S>,
+    shrex: shrex::ShrExBehaviour<S>,
     gossipsub: gossipsub::Behaviour,
 }
 
@@ -740,10 +743,17 @@ where
             header_store: args.store.clone(),
         });
 
+        let shrex = ShrExBehaviour::new(ShrExConfig {
+            network_id: &args.network_id,
+            local_peer_id: args.local_keypair.public().into(),
+            header_store: args.store.clone(),
+        });
+
         let behaviour = Behaviour {
             bitswap,
             gossipsub,
             header_ex,
+            shrex,
         };
 
         let swarm = SwarmManager::new(
@@ -824,6 +834,9 @@ where
             BehaviourEvent::Gossipsub(ev) => self.on_gossip_sub_event(ev).await,
             BehaviourEvent::Bitswap(ev) => self.on_bitswap_event(ev).await,
             BehaviourEvent::HeaderEx(_) => {}
+            BehaviourEvent::Shrex(_ev) => {
+                // todo: event for adding peers to peer tracker
+            }
         }
 
         Ok(())

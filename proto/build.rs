@@ -173,6 +173,8 @@ const PROTO_FILES: &[&str] = &[
     "vendor/header/pb/extended_header.proto",
     "vendor/share/eds/byzantine/pb/share.proto",
     "vendor/share/shwap/p2p/bitswap/pb/bitswap.proto",
+    "vendor/share/shwap/p2p/shrex/pb/shrex.proto",
+    "vendor/share/shwap/p2p/shrex/shrexsub/pb/notification.proto",
     "vendor/share/shwap/pb/shwap.proto",
     "vendor/tendermint-celestia-mods/abci/types.proto",
     "vendor/tendermint-celestia-mods/blocksync/types.proto",
