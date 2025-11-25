@@ -1621,7 +1621,7 @@ mod tests {
         assert!(matches!(ev, Event::SchedulePendingRequests));
         assert!(handler.has_pending_requests());
 
-        // Poll again a peer
+        // Poll again with a connected peer
         poll_client_for(
             &mut handler,
             &mut mock_req,
