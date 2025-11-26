@@ -1437,8 +1437,9 @@ mod tests {
         let mut invalid_header5 = header5.clone();
         invalidate(&mut invalid_header5);
 
-        // Head request retry indefinitely
-        for _ in 0..5 {
+        // Head request retry indefinitely. In the test we check that it
+        // goes beyond `MAX_TRIES`.
+        for _ in 0..MAX_TRIES + 2 {
             mock_req.send_n_responses(10, vec![invalid_header5.to_header_response()]);
 
             poll_client_for(
@@ -1472,8 +1473,9 @@ mod tests {
 
         handler.on_send_request(HeaderRequest::with_origin(0, 1), tx);
 
-        // Head request retry indefinitely
-        for _ in 0..5 {
+        // Head request retry indefinitely. In the test we check that it
+        // goes beyond `MAX_TRIES`.
+        for _ in 0..MAX_TRIES + 2 {
             mock_req.send_n_failures(5, OutboundFailure::Timeout);
             mock_req.send_n_failures(5, OutboundFailure::ConnectionClosed);
 
