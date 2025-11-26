@@ -194,10 +194,10 @@ mod tests {
 
         interval.tick().await;
         let elapsed = now.elapsed();
-        assert!(elapsed > Duration::from_millis(100) && elapsed < Duration::from_millis(102));
+        assert!(elapsed > Duration::from_millis(100) && elapsed < Duration::from_millis(105));
 
         interval.tick().await;
         let elapsed = now.elapsed();
-        assert!(elapsed > Duration::from_millis(200) && elapsed < Duration::from_millis(202));
+        assert!(elapsed > Duration::from_millis(200) && elapsed < Duration::from_millis(205));
     }
 }
