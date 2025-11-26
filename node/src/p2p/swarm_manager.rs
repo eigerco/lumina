@@ -372,6 +372,7 @@ where
         }
     }
 
+    #[cfg(any(test, feature = "test-utils"))]
     pub(crate) fn mark_as_archival(&mut self, peer_id: &PeerId) {
         if self.swarm.local_peer_id() != peer_id {
             self.peer_tracker.mark_as_archival(peer_id);

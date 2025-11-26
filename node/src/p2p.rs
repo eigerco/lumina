@@ -247,6 +247,7 @@ pub(crate) enum P2pCmd {
         peer_id: PeerId,
         is_trusted: bool,
     },
+    #[cfg(any(test, feature = "test-utils"))]
     MarkAsArchival {
         peer_id: PeerId,
     },
@@ -649,6 +650,7 @@ impl P2p {
         .await
     }
 
+    #[cfg(any(test, feature = "test-utils"))]
     pub(crate) async fn mark_as_archival(&self, peer_id: PeerId) -> Result<()> {
         self.send_command(P2pCmd::MarkAsArchival { peer_id }).await
     }
@@ -874,6 +876,7 @@ where
             } => {
                 self.swarm.set_peer_trust(&peer_id, is_trusted);
             }
+            #[cfg(any(test, feature = "test-utils"))]
             P2pCmd::MarkAsArchival { peer_id } => {
                 self.swarm.mark_as_archival(&peer_id);
             }

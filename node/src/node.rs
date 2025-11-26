@@ -332,6 +332,7 @@ where
     }
 
     /// Manually mark the peer as archival.
+    #[cfg(any(test, feature = "test-utils"))]
     pub async fn mark_as_archival(&self, peer_id: PeerId) -> Result<()> {
         Ok(self.p2p().mark_as_archival(peer_id).await?)
     }
