@@ -735,7 +735,7 @@ mod tests {
 
     #[async_test]
     async fn rpc_timeout() {
-        let _client_build_error = Client::builder()
+        let client_build_error = Client::builder()
             .rpc_url(TEST_RPC_URL)
             .grpc_url(TEST_GRPC_URL)
             .timeout(Duration::from_nanos(1))
@@ -744,8 +744,8 @@ mod tests {
             .unwrap_err();
 
         assert!(matches!(
-            Error::Rpc(RpcError::JsonRpc(JrpcError::RequestTimeout)),
-            _client_build_error
+            client_build_error,
+            Error::Rpc(RpcError::JsonRpc(JrpcError::RequestTimeout))
         ));
     }
 
@@ -753,7 +753,7 @@ mod tests {
     async fn grpc_timeout() {
         let client = new_client().await;
 
-        let _balance_timeout = client
+        let balance_timeout = client
             .state()
             .balance()
             .timeout(Duration::from_nanos(100))
@@ -762,7 +762,7 @@ mod tests {
 
         let _balance_ok = client.state().balance().await.unwrap();
 
-        let Error::Grpc(GrpcError::TonicError(status)) = _balance_timeout else {
+        let Error::Grpc(GrpcError::TonicError(status)) = balance_timeout else {
             panic!("Invalid error type");
         };
 

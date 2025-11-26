@@ -5,10 +5,10 @@
 //! one using [`jsonrpsee`] crate directly.
 
 #[cfg(not(target_arch = "wasm32"))]
-pub use self::native::Client;
+pub use self::native::{Client, ClientBuilder};
 
 #[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
-pub use self::wasm::Client;
+pub use self::wasm::{Client, ClientBuilder};
 
 #[cfg(not(target_arch = "wasm32"))]
 mod native {
@@ -51,9 +51,13 @@ mod native {
         /// For a secure connection you have to hide it behind a proxy.
         #[builder]
         pub async fn new(
+            /// Url used to connect to the RPC server
             url: &str,
+            /// Auth token
             auth_token: Option<&str>,
+            /// Timeout for establishing the connection, supported with WebSockets only
             connect_timeout: Option<Duration>,
+            /// Timeout when sending a request
             request_timeout: Option<Duration>,
         ) -> Result<Self, Error> {
             let mut headers = HeaderMap::new();
@@ -73,7 +77,7 @@ mod native {
                         builder = builder.request_timeout(timeout);
                     }
                     if connect_timeout.is_some() {
-                        warn!("ignored connect_timeout for TODO");
+                        warn!("ignored connect_timeout: not supported with http(s)");
                     }
                     Client::Http(builder.build(url)?)
                 }
@@ -226,9 +230,13 @@ mod wasm {
         /// `jsonrpsee` directly, but you need a node with `--rpc.skip-auth`.
         #[builder]
         pub async fn new(
+            /// Url used to connect to the RPC server
             url: &str,
+            /// Auth token
             auth_token: Option<&str>,
+            /// Timeout for establishing the connection, unsupported on wasm
             connect_timeout: Option<Duration>,
+            /// Timeout when sending a request
             request_timeout: Option<Duration>,
         ) -> Result<Self, Error> {
             let protocol = url.split_once(':').map(|(proto, _)| proto);
@@ -241,7 +249,7 @@ mod wasm {
                 .transpose()
                 .map_err(|_| Error::TimeoutOutOfRange)?;
             if connect_timeout.is_some() {
-                warn!("ignored connect_timeout for wasm");
+                warn!("ignored connect_timeout: not supported in wasm");
             }
 
             Ok(Client {
@@ -257,7 +265,8 @@ mod wasm {
                 let mut req = JsRequest::post(&self.url);
 
                 if let Some(timeout) = self.timeout_ms {
-                    let abort_controller = AbortController::new().unwrap(); // FIXME: unwrap
+                    let abort_controller =
+                        AbortController::new().expect("AbortController should be available");
                     let abort_signal = abort_controller.signal();
                     Timeout::new(timeout, move || {
                         abort_controller.abort();

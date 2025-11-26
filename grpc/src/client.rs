@@ -1375,6 +1375,14 @@ mod tests {
             .build()
             .unwrap();
 
+        // client-wide too-short timeout should fail
+        let Error::TonicError(timeout) =
+            client.get_all_balances(&account.address).await.unwrap_err()
+        else {
+            panic!("invalid error type, expected TonicError");
+        };
+        assert_eq!(timeout.code(), Code::DeadlineExceeded);
+
         // per-request override
         let _balance = client
             .get_all_balances(&account.address)
