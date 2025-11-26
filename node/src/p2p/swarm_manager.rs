@@ -34,7 +34,7 @@ const BOOTNODE_PROTECT_TAG: u32 = 0;
 const FULL_PROTECT_TAG: u32 = 1;
 const ARCHIVAL_PROTECT_TAG: u32 = 2;
 
-const PEER_HEALTH_CHECK_INTERVAL: Duration = Duration::from_secs(10 * 60);
+const PEER_HEALTH_CHECK_INTERVAL: Duration = Duration::from_secs(60);
 const AGGRESSIVE_PEER_HEALTH_CHECK_INTERVAL: Duration = Duration::from_secs(10);
 
 #[derive(NetworkBehaviour)]
