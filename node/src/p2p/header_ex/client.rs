@@ -222,8 +222,8 @@ where
             self.schedule_pending_interval.take();
         }
 
-        // Check every `SEND_NEED_MORE_PEERS_AFTER` seconds if trusted peers are needed
-        // and generate `Event::NeedTrustedPeers`
+        // Check every `SEND_NEED_MORE_PEERS_AFTER` seconds if there are still
+        // pending requests for trusted peers and generate `Event::NeedTrustedPeers`.
         if self
             .last_need_trusted_sent
             .is_none_or(|tm| tm.elapsed() >= SEND_NEED_MORE_PEERS_AFTER)
@@ -233,8 +233,8 @@ where
             self.last_need_trusted_sent = Some(Instant::now());
         }
 
-        // Check every `SEND_NEED_MORE_PEERS_AFTER` seconds if archival peers are needed
-        // and generate `Event::NeedArchivalPeers`
+        // Check every `SEND_NEED_MORE_PEERS_AFTER` seconds if there are still
+        // pending requests for archival peers and generate `Event::NeedArchivalPeers`.
         if self
             .last_need_archival_sent
             .is_none_or(|tm| tm.elapsed() >= SEND_NEED_MORE_PEERS_AFTER)
