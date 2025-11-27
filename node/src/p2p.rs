@@ -48,7 +48,7 @@ use tracing::{debug, info, instrument, trace, warn};
 mod connection_control;
 mod header_ex;
 pub(crate) mod header_session;
-mod shrex;
+mod shr_ex;
 pub(crate) mod shwap;
 mod swarm;
 mod swarm_manager;
@@ -689,7 +689,7 @@ where
 {
     bitswap: beetswap::Behaviour<MAX_MH_SIZE, B>,
     header_ex: header_ex::Behaviour<S>,
-    shrex: shrex::Behaviour<S>,
+    shr_ex: shr_ex::Behaviour<S>,
     gossipsub: gossipsub::Behaviour,
 }
 
@@ -741,7 +741,7 @@ where
             header_store: args.store.clone(),
         });
 
-        let shrex = shrex::Behaviour::new(shrex::Config {
+        let shr_ex = shr_ex::Behaviour::new(shr_ex::Config {
             network_id: &args.network_id,
             local_peer_id: args.local_keypair.public().into(),
             header_store: args.store.clone(),
@@ -751,7 +751,7 @@ where
             bitswap,
             gossipsub,
             header_ex,
-            shrex,
+            shr_ex,
         };
 
         let swarm = SwarmManager::new(
@@ -832,7 +832,7 @@ where
             BehaviourEvent::Gossipsub(ev) => self.on_gossip_sub_event(ev).await,
             BehaviourEvent::Bitswap(ev) => self.on_bitswap_event(ev).await,
             BehaviourEvent::HeaderEx(_) => {}
-            BehaviourEvent::Shrex(_ev) => {
+            BehaviourEvent::ShrEx(_ev) => {
                 // todo: event for adding peers to peer tracker
             }
         }

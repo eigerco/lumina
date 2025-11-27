@@ -32,7 +32,7 @@ where
     S: Store + 'static,
 {
     req_resp: request_response::Behaviour<TodoCodec>,
-    shrex_sub: floodsub::Behaviour,
+    shr_ex_sub: floodsub::Behaviour,
     _da_pools: HashMap<u64, HashSet<PeerId>>,
     _store: Arc<S>,
 }
@@ -45,12 +45,12 @@ where
     S: Store,
 {
     pub fn new(config: Config<'_, S>) -> Self {
-        let mut shrex_sub = floodsub::Behaviour::new(config.local_peer_id);
+        let mut shr_ex_sub = floodsub::Behaviour::new(config.local_peer_id);
         let topic = format!("{}/eds-sub/v0.2.0", config.network_id);
-        shrex_sub.subscribe(Topic::new(&topic));
+        shr_ex_sub.subscribe(Topic::new(&topic));
 
         Self {
-            shrex_sub,
+            shr_ex_sub,
             req_resp: request_response::Behaviour::new(
                 [(
                     protocol_id(config.network_id, "/todo/v0.0.1"),
@@ -79,7 +79,7 @@ where
         remote_addr: &Multiaddr,
     ) -> Result<Self::ConnectionHandler, ConnectionDenied> {
         Ok(ConnHandler(ConnectionHandler::select(
-            self.shrex_sub.handle_established_inbound_connection(
+            self.shr_ex_sub.handle_established_inbound_connection(
                 connection_id,
                 peer,
                 local_addr,
@@ -103,7 +103,7 @@ where
         port_use: PortUse,
     ) -> Result<Self::ConnectionHandler, ConnectionDenied> {
         Ok(ConnHandler(ConnectionHandler::select(
-            self.shrex_sub.handle_established_outbound_connection(
+            self.shr_ex_sub.handle_established_outbound_connection(
                 connection_id,
                 peer,
                 addr,
@@ -126,7 +126,7 @@ where
         local_addr: &Multiaddr,
         remote_addr: &Multiaddr,
     ) -> Result<(), ConnectionDenied> {
-        self.shrex_sub
+        self.shr_ex_sub
             .handle_pending_inbound_connection(connection_id, local_addr, remote_addr)?;
         self.req_resp
             .handle_pending_inbound_connection(connection_id, local_addr, remote_addr)?;
@@ -142,7 +142,7 @@ where
     ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
         let mut combined_addresses = Vec::new();
 
-        combined_addresses.extend(self.shrex_sub.handle_pending_outbound_connection(
+        combined_addresses.extend(self.shr_ex_sub.handle_pending_outbound_connection(
             connection_id,
             maybe_peer,
             addresses,
@@ -159,14 +159,14 @@ where
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm) {
-        self.shrex_sub.on_swarm_event(event);
+        self.shr_ex_sub.on_swarm_event(event);
         self.req_resp.on_swarm_event(event);
 
         // we need to add the node to floodsub to send it our subscriptions
         if let FromSwarm::ConnectionEstablished(connection_established) = event
             && connection_established.other_established == 0
         {
-            self.shrex_sub
+            self.shr_ex_sub
                 .add_node_to_partial_view(connection_established.peer_id);
         }
     }
@@ -178,9 +178,9 @@ where
         event: THandlerOutEvent<Self>,
     ) {
         match event {
-            Either::Left(shrex_sub_ev) => {
-                self.shrex_sub
-                    .on_connection_handler_event(peer_id, connection_id, shrex_sub_ev)
+            Either::Left(shr_ex_sub_ev) => {
+                self.shr_ex_sub
+                    .on_connection_handler_event(peer_id, connection_id, shr_ex_sub_ev)
             }
             Either::Right(req_resp_ev) => {
                 self.req_resp
@@ -193,7 +193,7 @@ where
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
-        if let Poll::Ready(ev) = self.shrex_sub.poll(cx) {
+        if let Poll::Ready(ev) = self.shr_ex_sub.poll(cx) {
             if let ToSwarm::GenerateEvent(ev) = ev {
                 println!("{ev:?}");
             } else {
