@@ -10,7 +10,6 @@ use celestia_rpc::{Client, TxConfig};
 use celestia_types::nmt::Namespace;
 use clap::{Parser, value_parser};
 use directories::ProjectDirs;
-use libp2p::futures::StreamExt;
 use libp2p::multiaddr::{Multiaddr, Protocol};
 use lumina_node::blockstore::{InMemoryBlockstore, RedbBlockstore};
 use lumina_node::events::NodeEvent;
@@ -202,13 +201,11 @@ async fn fetch_bridge_multiaddrs(ws_url: &str) -> Result<Vec<Multiaddr>> {
         .collect::<Vec<_>>();
 
     tokio::spawn(async move {
-        let mut sub = client.header_subscribe();
         let ns = Namespace::new_v0(&[1, 2, 3]).unwrap();
+        let mut i = 0;
 
-        while let Some(hdr) = sub.next().await {
-            let hdr = hdr.unwrap().height().value();
-            println!("NEW HEAD: {hdr}");
-            let data = format!("header{hdr}");
+        loop {
+            let data = format!("blob{i}");
             let blob = celestia_types::Blob::new(
                 ns,
                 data.as_bytes().to_vec(),
@@ -216,10 +213,13 @@ async fn fetch_bridge_multiaddrs(ws_url: &str) -> Result<Vec<Multiaddr>> {
                 celestia_types::AppVersion::V6,
             )
             .unwrap();
-            client
+            let height = client
                 .blob_submit(&[blob], TxConfig::default())
                 .await
                 .unwrap();
+
+            println!("Submitted blob '{data}' at height '{height}'");
+            i += 1;
         }
     });
 
