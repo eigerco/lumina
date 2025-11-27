@@ -21,13 +21,13 @@ use libp2p::{Multiaddr, PeerId, StreamProtocol, floodsub};
 use crate::store::Store;
 use crate::utils::protocol_id;
 
-pub(crate) struct ShrExConfig<'a, S> {
+pub(crate) struct Config<'a, S> {
     pub network_id: &'a str,
     pub local_peer_id: PeerId,
     pub header_store: Arc<S>,
 }
 
-pub(crate) struct ShrExBehaviour<S>
+pub(crate) struct Behaviour<S>
 where
     S: Store + 'static,
 {
@@ -38,13 +38,13 @@ where
 }
 
 #[derive(Debug)]
-pub(crate) enum ShrExBehaviourEvent {}
+pub(crate) enum Event {}
 
-impl<S> ShrExBehaviour<S>
+impl<S> Behaviour<S>
 where
     S: Store,
 {
-    pub fn new(config: ShrExConfig<'_, S>) -> Self {
+    pub fn new(config: Config<'_, S>) -> Self {
         let mut shrex_sub = floodsub::Behaviour::new(config.local_peer_id);
         let topic = format!("{}/eds-sub/v0.2.0", config.network_id);
         shrex_sub.subscribe(Topic::new(&topic));
@@ -64,12 +64,12 @@ where
     }
 }
 
-impl<S> NetworkBehaviour for ShrExBehaviour<S>
+impl<S> NetworkBehaviour for Behaviour<S>
 where
     S: Store + 'static,
 {
     type ConnectionHandler = ConnHandler;
-    type ToSwarm = ShrExBehaviourEvent;
+    type ToSwarm = Event;
 
     fn handle_established_inbound_connection(
         &mut self,

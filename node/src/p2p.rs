@@ -57,7 +57,6 @@ use crate::block_ranges::BlockRange;
 use crate::events::EventPublisher;
 use crate::p2p::header_ex::{HeaderExBehaviour, HeaderExConfig};
 use crate::p2p::header_session::HeaderSession;
-use crate::p2p::shrex::{ShrExBehaviour, ShrExConfig};
 use crate::p2p::shwap::{ShwapMultihasher, convert_cid, get_block_container};
 use crate::p2p::swarm_manager::SwarmManager;
 use crate::peer_tracker::PeerTracker;
@@ -691,7 +690,7 @@ where
 {
     bitswap: beetswap::Behaviour<MAX_MH_SIZE, B>,
     header_ex: HeaderExBehaviour<S>,
-    shrex: shrex::ShrExBehaviour<S>,
+    shrex: shrex::Behaviour<S>,
     gossipsub: gossipsub::Behaviour,
 }
 
@@ -743,7 +742,7 @@ where
             header_store: args.store.clone(),
         });
 
-        let shrex = ShrExBehaviour::new(ShrExConfig {
+        let shrex = shrex::Behaviour::new(shrex::Config {
             network_id: &args.network_id,
             local_peer_id: args.local_keypair.public().into(),
             header_store: args.store.clone(),
