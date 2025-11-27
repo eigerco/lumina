@@ -907,6 +907,7 @@ mod tests {
     use celestia_types::{AppVersion, Blob};
     use futures::FutureExt;
     use lumina_utils::test_utils::async_test;
+    use lumina_utils::time::sleep;
     use rand::{Rng, RngCore};
 
     use super::GrpcClient;
@@ -1085,7 +1086,7 @@ mod tests {
             .unwrap();
         let tx2 = tx_client.get_tx(tx.hash).await.unwrap();
 
-        lumina_utils::time::sleep(Duration::from_millis(100)).await;
+        sleep(Duration::from_millis(100)).await;
 
         assert_eq!(tx.hash, tx2.tx_response.txhash);
         assert_eq!(tx2.tx.body.memo, "foo");
