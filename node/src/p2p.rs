@@ -55,7 +55,6 @@ mod swarm_manager;
 
 use crate::block_ranges::BlockRange;
 use crate::events::EventPublisher;
-use crate::p2p::header_ex::{HeaderExBehaviour, HeaderExConfig};
 use crate::p2p::header_session::HeaderSession;
 use crate::p2p::shwap::{ShwapMultihasher, convert_cid, get_block_container};
 use crate::p2p::swarm_manager::SwarmManager;
@@ -689,7 +688,7 @@ where
     S: Store + 'static,
 {
     bitswap: beetswap::Behaviour<MAX_MH_SIZE, B>,
-    header_ex: HeaderExBehaviour<S>,
+    header_ex: header_ex::Behaviour<S>,
     shrex: shrex::Behaviour<S>,
     gossipsub: gossipsub::Behaviour,
 }
@@ -737,7 +736,7 @@ where
             &args.network_id,
         )?;
 
-        let header_ex = HeaderExBehaviour::new(HeaderExConfig {
+        let header_ex = header_ex::Behaviour::new(header_ex::Config {
             network_id: &args.network_id,
             header_store: args.store.clone(),
         });
