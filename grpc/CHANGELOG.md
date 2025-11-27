@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.1](https://github.com/eigerco/lumina/compare/celestia-grpc-v0.9.0...celestia-grpc-v0.9.1) - 2025-11-27
+
+### Other
+
+- bump celestia-node to 0.28.2; celestia-app to 6.2.5 ([#808](https://github.com/eigerco/lumina/pull/808))
+
 ## [0.9.0](https://github.com/eigerco/lumina/compare/celestia-grpc-v0.8.0...celestia-grpc-v0.9.0) - 2025-11-19
 
 ### Added
