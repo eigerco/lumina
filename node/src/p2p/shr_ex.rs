@@ -33,13 +33,13 @@ where
     S: Store + 'static,
 {
     req_resp: request_response::Behaviour<TodoCodec>,
-    // TODO: this is a workaround, should be replaced with real floodsub
-    // rust-libp2p implementation of floodsub isn't compliant with the spec,
-    // so we work that around by using gossipsub configured with floodsub support.
-    // Gossipsub will then always forward messages to all floodsub peers.
-    // Since we always maintain connection to a few of bridge (and possibly archival)
-    // nodes, and assuming they correctly use only floodsub there, we cannot
-    // be isolated in a way described in a spec:
+    // TODO: this is a workaround, should be replaced with a real floodsub
+    // rust-libp2p implementation of the floodsub isn't compliant with a spec,
+    // so we work that around by using a gossipsub configured with floodsub support.
+    // Gossipsub will always receive from and forward messages to all the floodsub peers.
+    // Since we always maintain a connection with a few bridge (and possibly archival)
+    // nodes, then if we assume those nodes correctly use only floodsub protocol there,
+    // we cannot be isolated in a way described in a shrex-sub spec:
     // https://github.com/celestiaorg/celestia-node/blob/76db37cc4ac09e892122a081b8bea24f87899f11/specs/src/shrex/shrex-sub.md
     shr_ex_sub: gossipsub::Behaviour,
     _da_pools: HashMap<u64, HashSet<PeerId>>,
