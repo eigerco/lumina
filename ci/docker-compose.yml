@@ -118,8 +118,9 @@ services:
       # amount of DA nodes to provision (default: 3)
       - NODE_COUNT=3
       # values from the eviction testing in celestia-app
-      # https://github.com/celestiaorg/celestia-app/blob/v6.1.0-rc0/pkg/user/tx_client_test.go#L338
-      - BLOCK_SIZE=1048576
+      # https://github.com/celestiaorg/celestia-app/blob/v6.2.5-mocha/pkg/user/tx_client_test.go#L338
+      - BLOCK_SIZE=2097152 # 2 * 1024 * 1024; 2mb
+      - SQUARE_SIZE=64
       - MEMPOOL_TX_TTL=1
     ports:
       - 29090:9090

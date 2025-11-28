@@ -898,6 +898,7 @@ mod tests {
     use std::future::IntoFuture;
     use std::ops::RangeInclusive;
     use std::sync::Arc;
+    use std::time::Duration;
 
     use celestia_proto::cosmos::bank::v1beta1::MsgSend;
     use celestia_rpc::HeaderClient;
@@ -906,6 +907,7 @@ mod tests {
     use celestia_types::{AppVersion, Blob};
     use futures::FutureExt;
     use lumina_utils::test_utils::async_test;
+    use lumina_utils::time::sleep;
     use rand::{Rng, RngCore};
 
     use super::GrpcClient;
@@ -1084,6 +1086,8 @@ mod tests {
             .unwrap();
         let tx2 = tx_client.get_tx(tx.hash).await.unwrap();
 
+        sleep(Duration::from_millis(100)).await;
+
         assert_eq!(tx.hash, tx2.tx_response.txhash);
         assert_eq!(tx2.tx.body.memo, "foo");
     }
@@ -1093,27 +1097,21 @@ mod tests {
         let (_lock, tx_client) = new_tx_client().await;
         let tx_client = Arc::new(tx_client);
 
-        let futs = (0..100)
+        let futs = (0..50)
             .map(|_| {
                 let tx_client = tx_client.clone();
                 spawn(async move {
-                    let response = if rand::random() {
+                    if rand::random() {
                         tx_client
                             .submit_blobs(&[random_blob(10..=10000)], TxConfig::default())
                             .await
+                            .unwrap()
                     } else {
                         tx_client
                             .submit_message(random_transfer(&tx_client), TxConfig::default())
                             .await
+                            .unwrap()
                     };
-
-                    match response {
-                        Ok(_) => (),
-                        // some wrong sequence errors are still expected until we implement
-                        // multi-account submission
-                        Err(Error::TxRejected(_, ErrorCode::WrongSequence, _)) => {}
-                        err => panic!("{err:?}"),
-                    }
                 })
             })
             .collect::<Vec<_>>();
@@ -1186,7 +1184,14 @@ mod tests {
                 async move {
                     let blobs = (0..2).map(|_| random_blob(500000..=500000)).collect();
                     client
-                        .sign_and_broadcast_blobs(blobs, TxConfig::default(), &Context::default())
+                        .sign_and_broadcast_blobs(
+                            blobs,
+                            // skip simulation part for faster submission
+                            TxConfig::default()
+                                .with_gas_limit(10000000)
+                                .with_gas_price(1e6),
+                            &Context::default(),
+                        )
                         .await
                         .unwrap()
                 }
@@ -1214,7 +1219,7 @@ mod tests {
                         .confirm_tx(tx, TxConfig::default(), &Context::default())
                         .await
                     {
-                        // some of the retransmitted tx's will still fail because
+                        // some of the retransmitted tx's will still be evicted because
                         // of sequence mismatch
                         Err(Error::TxEvicted(_)) => false,
                         res => {
