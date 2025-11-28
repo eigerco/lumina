@@ -31,7 +31,6 @@ lumina-utils = { workspace = true, features = ["executor", "token", "time"] }
 libp2p = { workspace = true, features = [
   "autonat",
   "ping",
-  "floodsub",
   "gossipsub",
   "identify",
   "macros",

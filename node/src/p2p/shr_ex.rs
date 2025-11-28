@@ -8,7 +8,7 @@ use either::Either;
 use futures::{AsyncRead, AsyncWrite};
 use libp2p::core::Endpoint;
 use libp2p::core::transport::PortUse;
-use libp2p::floodsub::Topic;
+use libp2p::identity::Keypair;
 use libp2p::request_response::{self, Codec, ProtocolSupport};
 use libp2p::swarm::handler::ConnectionEvent;
 use libp2p::swarm::{
@@ -16,14 +16,15 @@ use libp2p::swarm::{
     ConnectionId, FromSwarm, NetworkBehaviour, SubstreamProtocol, THandler, THandlerInEvent,
     THandlerOutEvent, ToSwarm,
 };
-use libp2p::{Multiaddr, PeerId, StreamProtocol, floodsub};
+use libp2p::{Multiaddr, PeerId, StreamProtocol, gossipsub};
 
+use crate::p2p::P2pError;
 use crate::store::Store;
 use crate::utils::protocol_id;
 
 pub(crate) struct Config<'a, S> {
     pub network_id: &'a str,
-    pub local_peer_id: PeerId,
+    pub local_keypair: &'a Keypair,
     pub header_store: Arc<S>,
 }
 
@@ -32,7 +33,7 @@ where
     S: Store + 'static,
 {
     req_resp: request_response::Behaviour<TodoCodec>,
-    shr_ex_sub: floodsub::Behaviour,
+    shr_ex_sub: gossipsub::Behaviour,
     _da_pools: HashMap<u64, HashSet<PeerId>>,
     _store: Arc<S>,
 }
@@ -44,12 +45,33 @@ impl<S> Behaviour<S>
 where
     S: Store,
 {
-    pub fn new(config: Config<'_, S>) -> Self {
-        let mut shr_ex_sub = floodsub::Behaviour::new(config.local_peer_id);
-        let topic = format!("{}/eds-sub/v0.2.0", config.network_id);
-        shr_ex_sub.subscribe(Topic::new(&topic));
+    pub fn new(config: Config<'_, S>) -> Result<Self, P2pError> {
+        let message_authenticity =
+            gossipsub::MessageAuthenticity::Signed(config.local_keypair.clone());
 
-        Self {
+        let shr_ex_sub_config = gossipsub::ConfigBuilder::default()
+            // replace default meshsub protocols with something that won't match
+            .protocol_id_prefix("/nosub")
+            // add floodsub protocol
+            .support_floodsub()
+            // and floodsub publish behaviour
+            .flood_publish(true)
+            .validation_mode(gossipsub::ValidationMode::Strict)
+            .validate_messages()
+            .build()
+            .map_err(|e| P2pError::GossipsubInit(e.to_string()))?;
+
+        // build a gossipsub network behaviour
+        let mut shr_ex_sub: gossipsub::Behaviour =
+            gossipsub::Behaviour::new(message_authenticity, shr_ex_sub_config)
+                .map_err(|e| P2pError::GossipsubInit(e.to_string()))?;
+
+        let topic = format!("{}/eds-sub/v0.2.0", config.network_id);
+        shr_ex_sub
+            .subscribe(&gossipsub::IdentTopic::new(topic))
+            .map_err(|e| P2pError::GossipsubInit(e.to_string()))?;
+
+        Ok(Self {
             shr_ex_sub,
             req_resp: request_response::Behaviour::new(
                 [(
@@ -60,7 +82,7 @@ where
             ),
             _da_pools: HashMap::new(),
             _store: config.header_store,
-        }
+        })
     }
 }
 
@@ -126,8 +148,11 @@ where
         local_addr: &Multiaddr,
         remote_addr: &Multiaddr,
     ) -> Result<(), ConnectionDenied> {
-        self.shr_ex_sub
-            .handle_pending_inbound_connection(connection_id, local_addr, remote_addr)?;
+        self.shr_ex_sub.handle_pending_inbound_connection(
+            connection_id,
+            local_addr,
+            remote_addr,
+        )?;
         self.req_resp
             .handle_pending_inbound_connection(connection_id, local_addr, remote_addr)?;
         Ok(())
@@ -161,14 +186,6 @@ where
     fn on_swarm_event(&mut self, event: FromSwarm) {
         self.shr_ex_sub.on_swarm_event(event);
         self.req_resp.on_swarm_event(event);
-
-        // we need to add the node to floodsub to send it our subscriptions
-        if let FromSwarm::ConnectionEstablished(connection_established) = event
-            && connection_established.other_established == 0
-        {
-            self.shr_ex_sub
-                .add_node_to_partial_view(connection_established.peer_id);
-        }
     }
 
     fn on_connection_handler_event(
@@ -220,7 +237,7 @@ where
 }
 
 type ConnHandlerSelect = ConnectionHandlerSelect<
-    THandler<floodsub::Behaviour>,
+    THandler<gossipsub::Behaviour>,
     THandler<request_response::Behaviour<TodoCodec>>,
 >;
 
