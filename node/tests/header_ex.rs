@@ -76,6 +76,11 @@ async fn client_server() {
         .await
         .unwrap();
 
+    client
+        .mark_as_archival(server.local_peer_id().to_owned())
+        .await
+        .unwrap();
+
     client.wait_connected().await.unwrap();
 
     // request head (with one peer)
@@ -316,6 +321,11 @@ async fn invalidated_header_server_store() {
     let client = listening_test_node_builder()
         .bootnodes(server_addrs)
         .start()
+        .await
+        .unwrap();
+
+    client
+        .mark_as_archival(server.local_peer_id().to_owned())
         .await
         .unwrap();
 
