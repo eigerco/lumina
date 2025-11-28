@@ -57,18 +57,21 @@ impl GrpcMethod {
                 let param = crate::grpc::IntoGrpcParam::into_parameter(( #( #params ),* ));
 
                 crate::grpc::AsyncGrpcCall::new(move |context: crate::grpc::Context| async move {
-                    // 256 mb, future proof as celesita blocks grow
+                    // 256 mb, future proof as celestia blocks grow
                     const MAX_MSG_SIZE: usize = 256 * 1024 * 1024;
 
                     let mut client = #grpc_client_struct :: new(transport)
                         .max_decoding_message_size(MAX_MSG_SIZE)
                         .max_encoding_message_size(MAX_MSG_SIZE);
 
-                    let request = ::tonic::Request::from_parts(
+                    let mut request = ::tonic::Request::from_parts(
                         context.metadata,
                         ::tonic::Extensions::new(),
                         param,
                     );
+                    if let Some(timeout) = context.timeout {
+                        request.set_timeout(timeout);
+                    }
 
                     let fut = client. #grpc_method_name (request);
 

@@ -31,6 +31,7 @@ serde = { workspace = true, features = ["derive"] }
 serde_repr.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
+bon = "3"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 http.workspace = true
@@ -38,8 +39,10 @@ jsonrpsee = { workspace = true, features = ["http-client", "ws-client"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 gloo-net = { version = "0.6", default-features = false, features = ["http", "json"] }
+gloo-timers.workspace = true
 send_wrapper.workspace = true
 serde_json.workspace = true
+web-sys = { workspace = true, features = ["console", "AbortController", "AbortSignal"] }
 
 [dev-dependencies]
 anyhow.workspace = true

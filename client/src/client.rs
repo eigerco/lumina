@@ -1,6 +1,7 @@
 use std::error::Error as StdError;
 use std::fmt::{self, Debug};
 use std::sync::Arc;
+use std::time::Duration;
 
 use blockstore::cond_send::CondSend;
 use celestia_grpc::{GrpcClient, GrpcClientBuilder};
@@ -87,6 +88,7 @@ pub(crate) struct ClientInner {
 pub struct ClientBuilder {
     rpc_url: Option<String>,
     rpc_auth_token: Option<String>,
+    timeout: Option<Duration>,
     grpc_builder: Option<GrpcClientBuilder>,
 }
 
@@ -215,6 +217,12 @@ impl ClientBuilder {
         self
     }
 
+    /// Set the request timeout for both RPC and gRPC endpoints.
+    pub fn timeout(mut self, timeout: Duration) -> ClientBuilder {
+        self.timeout = Some(timeout);
+        self
+    }
+
     /// Set the gRPC endpoint.
     ///
     /// # Note
@@ -272,7 +280,10 @@ impl ClientBuilder {
         let rpc_url = self.rpc_url.as_ref().ok_or(Error::RpcEndpointNotSet)?;
         let rpc_auth_token = self.rpc_auth_token.as_deref();
 
-        let (grpc, pubkey) = if let Some(grpc_builder) = self.grpc_builder {
+        let (grpc, pubkey) = if let Some(mut grpc_builder) = self.grpc_builder {
+            if let Some(timeout) = self.timeout {
+                grpc_builder = grpc_builder.timeout(timeout)
+            };
             let client = grpc_builder.build()?;
             let pubkey = client.get_account_pubkey();
             (Some(client), pubkey)
@@ -280,7 +291,14 @@ impl ClientBuilder {
             (None, None)
         };
 
-        let rpc = RpcClient::new(rpc_url, rpc_auth_token).await?;
+        let rpc = RpcClient::builder()
+            .url(rpc_url)
+            .maybe_auth_token(rpc_auth_token)
+            .maybe_connect_timeout(self.timeout)
+            .maybe_request_timeout(self.timeout)
+            .build()
+            .await?;
+
         let head = rpc.header_network_head().await?;
         head.validate()?;
 

@@ -20,4 +20,8 @@ pub enum Error {
     /// Error propagated from the [`jsonrpsee`].
     #[error(transparent)]
     JsonRpc(#[from] jsonrpsee::core::ClientError),
+
+    /// Provided timeout is out of range
+    #[error("Out of range timeout value")]
+    TimeoutOutOfRange,
 }

@@ -1,6 +1,7 @@
 //! Types and client for the celestia grpc
 
 use std::future::{Future, IntoFuture};
+use std::time::Duration;
 use std::{any, fmt};
 
 #[cfg(feature = "uniffi")]
@@ -54,6 +55,7 @@ type CallFn<Response, Error> = Box<dyn FnOnce(Context) -> RequestFuture<Response
 pub struct Context {
     /// Metadata attached to each grpc request.
     pub metadata: MetadataMap,
+    pub timeout: Option<Duration>,
 }
 
 impl Context {
@@ -101,6 +103,12 @@ impl Context {
     /// Merges the other context into self.
     pub(crate) fn extend(&mut self, other: &Context) {
         self.append_metadata_map(&other.metadata);
+        self.timeout = match (self.timeout, other.timeout) {
+            (None, None) => None,
+            (Some(t), None) => Some(t),
+            (None, Some(t)) => Some(t),
+            (Some(t0), Some(t1)) => Some(t0.min(t1)),
+        };
     }
 
     fn maybe_append_ascii(&mut self, key: MetadataKey<Ascii>, value: MetadataValue<Ascii>) {
@@ -201,6 +209,12 @@ impl<Response, Error> AsyncGrpcCall<Response, Error> {
     pub fn block_height(self, height: u64) -> Self {
         self.metadata("x-cosmos-block-height", &height.to_string())
             .expect("valid ascii metadata")
+    }
+
+    /// Sets the request timeout.
+    pub fn timeout(mut self, timeout: Duration) -> Self {
+        self.context.timeout = Some(timeout);
+        self
     }
 }
 
