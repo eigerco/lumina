@@ -195,7 +195,7 @@ pub enum StoreError {
     NamedLock(String),
 }
 
-/// Store insersion non-fatal errors.
+/// Store insertion non-fatal errors.
 #[derive(Error, Debug)]
 pub enum StoreInsertionError {
     /// Provided headers failed verification.
@@ -206,7 +206,7 @@ pub enum StoreInsertionError {
     #[error("Provided headers failed to be verified with existing neighbors: {0}")]
     NeighborsVerificationFailed(String),
 
-    /// Store containts are not met.
+    /// Store constraints are not met.
     #[error("Contraints not met: {0}")]
     ContraintsNotMet(BlockRangesError),
 

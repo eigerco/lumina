@@ -1,53 +1,38 @@
 //! Worker component
 
-use std::fmt::Debug;
 use std::time::Duration;
 
 use blockstore::EitherBlockstore;
-use celestia_types::Blob;
 use celestia_types::nmt::Namespace;
+use celestia_types::{Blob, ExtendedHeader};
+use futures::StreamExt;
 use libp2p::{Multiaddr, PeerId};
-use serde::{Deserialize, Serialize};
-use serde_wasm_bindgen::to_value;
-use thiserror::Error;
-use tracing::{error, info, warn};
-use wasm_bindgen::prelude::*;
-use wasm_bindgen_futures::spawn_local;
-use web_sys::BroadcastChannel;
-
-use celestia_types::ExtendedHeader;
 use lumina_node::blockstore::{InMemoryBlockstore, IndexedDbBlockstore};
 use lumina_node::events::{EventSubscriber, NodeEventInfo};
+use lumina_node::node::subscriptions::SubscriptionError;
 use lumina_node::node::{Node, SyncingInfo};
 use lumina_node::store::{EitherStore, InMemoryStore, IndexedDbStore, SamplingMetadata};
+use serde::Serialize;
+use serde_wasm_bindgen::to_value;
+use tokio_stream::wrappers::BroadcastStream;
+use tracing::{error, info};
+use wasm_bindgen::prelude::*;
+use wasm_bindgen_futures::spawn_local;
+use web_sys::{BroadcastChannel, MessagePort};
 
 use crate::client::WasmNodeConfig;
-use crate::commands::{NodeCommand, SingleHeaderQuery, WorkerResponse};
+use crate::commands::{
+    Command, CommandWithResponder, NodeCommand, SingleHeaderQuery, SubscriptionCommand,
+    WorkerCommand, WorkerError, WorkerResponse, WorkerResult,
+};
 use crate::error::{Context, Error, Result};
-use crate::ports::WorkerServer;
+use crate::subscriptions::forward_stream_to_message_port;
 use crate::utils::random_id;
+use crate::worker_server::WorkerServer;
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
 
 pub(crate) type WasmBlockstore = EitherBlockstore<InMemoryBlockstore, IndexedDbBlockstore>;
 pub(crate) type WasmStore = EitherStore<InMemoryStore, IndexedDbStore>;
-
-/// Errors produced by `NodeWorker`
-#[derive(Debug, Serialize, Deserialize, Error)]
-pub enum WorkerError {
-    /// Worker is initialised, but the node has not been started yet. Use [`NodeDriver::start`].
-    #[error("node hasn't been started yet")]
-    NodeNotRunning,
-    /// Communication with worker has been broken and we're unable to send or receive messages from it.
-    /// Try creating new [`NodeDriver`] instance.
-    #[error("error trying to communicate with worker")]
-    WorkerCommunicationError(Error),
-    /// Worker received unrecognised command
-    #[error("invalid command received")]
-    InvalidCommandReceived,
-    /// Worker encountered error coming from lumina-node
-    #[error("Worker encountered an error: {0:?}")]
-    NodeError(Error),
-}
 
 /// `NodeWorker` is responsible for receiving commands from connected [`NodeClient`]s, executing
 /// them and sending a response back, as well as accepting new `NodeClient` connections.
@@ -62,7 +47,6 @@ pub struct NodeWorker {
 
 struct NodeWorkerInstance {
     node: Node<WasmBlockstore, WasmStore>,
-    events_channel_name: String,
 }
 
 #[wasm_bindgen]
@@ -89,46 +73,62 @@ impl NodeWorker {
     /// Run `NodeWorker` main loop.
     pub async fn run(&mut self) -> Result<(), Error> {
         loop {
-            let (command, responder) = self.request_server.recv().await?;
+            let CommandWithResponder { command, responder } = self.request_server.recv().await?;
 
-            // StopNode needs special handling because `NodeWorkerInstance` needs to be consumed.
-            if matches!(&command, NodeCommand::StopNode)
-                && let Some(node) = self.node.take()
-            {
-                node.stop().await;
-                if responder.send(WorkerResponse::NodeStopped(())).is_err() {
-                    error!("Failed to send response: channel dropped");
-                }
-                continue;
-            }
+            let response = self.execute_command(command).await;
 
-            let response = match &mut self.node {
-                Some(node) => node.process_command(command).await,
-                node @ None => match command {
-                    NodeCommand::InternalPing => WorkerResponse::InternalPong,
-                    NodeCommand::IsRunning => WorkerResponse::IsRunning(false),
-                    NodeCommand::GetEventsChannelName => {
-                        WorkerResponse::EventsChannelName(self.event_channel_name.clone())
-                    }
-                    NodeCommand::StartNode(config) => {
-                        match NodeWorkerInstance::new(&self.event_channel_name, config).await {
-                            Ok(instance) => {
-                                let _ = node.insert(instance);
-                                WorkerResponse::NodeStarted(Ok(()))
-                            }
-                            Err(e) => WorkerResponse::NodeStarted(Err(e)),
-                        }
-                    }
-                    _ => {
-                        warn!("Worker not running");
-                        WorkerResponse::NodeNotRunning
-                    }
-                },
-            };
             if responder.send(response).is_err() {
                 error!("Failed to send response: channel dropped");
             }
         }
+    }
+
+    async fn execute_command(&mut self, command: Command) -> Result<WorkerResponse, WorkerError> {
+        Ok(match command {
+            Command::Management(command) => match command {
+                WorkerCommand::InternalPing => WorkerResponse::InternalPong,
+                WorkerCommand::IsRunning => WorkerResponse::IsRunning(self.node.is_some()),
+                WorkerCommand::GetEventsChannelName => {
+                    WorkerResponse::EventsChannelName(self.event_channel_name.clone())
+                }
+                WorkerCommand::StartNode(config) => match &mut self.node {
+                    Some(_) => return Err(WorkerError::NodeAlreadyRunning),
+                    node => {
+                        let instance =
+                            NodeWorkerInstance::new(&self.event_channel_name, config).await?;
+                        let _ = node.insert(instance);
+                        WorkerResponse::Ok
+                    }
+                },
+                WorkerCommand::StopNode => {
+                    let node = self.node.take().ok_or(WorkerError::NodeNotRunning)?;
+                    node.stop().await;
+                    WorkerResponse::Ok
+                }
+                WorkerCommand::ConnectPort(port) => {
+                    self.request_server.spawn_connection_worker(
+                        port.ok_or(WorkerError::InvalidCommandReceived)?,
+                    )?;
+                    WorkerResponse::Ok
+                }
+            },
+            Command::Node(command) => {
+                self.node
+                    .as_mut()
+                    .ok_or(WorkerError::NodeNotRunning)?
+                    .process_command(command)
+                    .await?
+            }
+            Command::Subscribe(command) => {
+                let port = self
+                    .node
+                    .as_mut()
+                    .ok_or(WorkerError::NodeNotRunning)?
+                    .process_subscription(command)
+                    .await?;
+                WorkerResponse::Subscribed(Some(port.into()))
+            }
+        })
     }
 }
 
@@ -142,10 +142,7 @@ impl NodeWorkerInstance {
 
         spawn_local(event_forwarder_task(events_sub, events_channel));
 
-        Ok(Self {
-            node,
-            events_channel_name: events_channel_name.to_owned(),
-        })
+        Ok(Self { node })
     }
 
     async fn stop(self) {
@@ -245,54 +242,50 @@ impl NodeWorkerInstance {
             .await?)
     }
 
-    async fn process_command(&mut self, command: NodeCommand) -> WorkerResponse {
-        match command {
-            NodeCommand::IsRunning => WorkerResponse::IsRunning(true),
-            NodeCommand::StartNode(_) => {
-                WorkerResponse::NodeStarted(Err(Error::new("Node already started")))
-            }
-            NodeCommand::StopNode => unreachable!("StopNode is handled in `run()`"),
+    async fn process_command(&mut self, command: NodeCommand) -> WorkerResult {
+        Ok(match command {
             NodeCommand::GetLocalPeerId => {
                 WorkerResponse::LocalPeerId(self.node.local_peer_id().to_string())
             }
-            NodeCommand::GetEventsChannelName => {
-                WorkerResponse::EventsChannelName(self.events_channel_name.clone())
-            }
-            NodeCommand::GetSyncerInfo => WorkerResponse::SyncerInfo(self.get_syncer_info().await),
+            NodeCommand::GetSyncerInfo => WorkerResponse::SyncerInfo(self.get_syncer_info().await?),
             NodeCommand::GetPeerTrackerInfo => {
                 let peer_tracker_info = self.node.peer_tracker_info();
                 WorkerResponse::PeerTrackerInfo(peer_tracker_info)
             }
             NodeCommand::GetNetworkInfo => {
-                WorkerResponse::NetworkInfo(self.get_network_info().await)
+                WorkerResponse::NetworkInfo(self.get_network_info().await?)
             }
             NodeCommand::GetConnectedPeers => {
-                WorkerResponse::ConnectedPeers(self.get_connected_peers().await)
+                WorkerResponse::ConnectedPeers(self.get_connected_peers().await?)
             }
             NodeCommand::SetPeerTrust {
                 peer_id,
                 is_trusted,
-            } => WorkerResponse::SetPeerTrust(self.set_peer_trust(peer_id, is_trusted).await),
+            } => {
+                self.set_peer_trust(peer_id, is_trusted).await?;
+                WorkerResponse::Ok
+            }
             NodeCommand::WaitConnected { trusted } => {
-                WorkerResponse::Connected(self.wait_connected(trusted).await)
+                self.wait_connected(trusted).await?;
+                WorkerResponse::Ok
             }
-            NodeCommand::GetListeners => WorkerResponse::Listeners(self.get_listeners().await),
+            NodeCommand::GetListeners => WorkerResponse::Listeners(self.get_listeners().await?),
             NodeCommand::RequestHeader(query) => {
-                WorkerResponse::Header(self.request_header(query).await)
+                WorkerResponse::Header(self.request_header(query).await?)
             }
-            NodeCommand::GetHeader(query) => WorkerResponse::Header(self.get_header(query).await),
+            NodeCommand::GetHeader(query) => WorkerResponse::Header(self.get_header(query).await?),
             NodeCommand::GetVerifiedHeaders { from, amount } => {
-                WorkerResponse::Headers(self.get_verified_headers(from, amount).await)
+                WorkerResponse::Headers(self.get_verified_headers(from, amount).await?)
             }
             NodeCommand::GetHeadersRange {
                 start_height,
                 end_height,
-            } => WorkerResponse::Headers(self.get_headers_range(start_height, end_height).await),
+            } => WorkerResponse::Headers(self.get_headers_range(start_height, end_height).await?),
             NodeCommand::LastSeenNetworkHead => {
-                WorkerResponse::LastSeenNetworkHead(self.get_last_seen_network_head().await)
+                WorkerResponse::LastSeenNetworkHead(self.get_last_seen_network_head().await?)
             }
             NodeCommand::GetSamplingMetadata { height } => {
-                WorkerResponse::SamplingMetadata(self.get_sampling_metadata(height).await)
+                WorkerResponse::SamplingMetadata(self.get_sampling_metadata(height).await?)
             }
             NodeCommand::RequestAllBlobs {
                 namespace,
@@ -300,9 +293,30 @@ impl NodeWorkerInstance {
                 timeout_secs,
             } => WorkerResponse::Blobs(
                 self.request_all_blobs(namespace, block_height, timeout_secs)
-                    .await,
+                    .await?,
             ),
-            NodeCommand::InternalPing => WorkerResponse::InternalPong,
+        })
+    }
+
+    async fn process_subscription(
+        &mut self,
+        subscription: SubscriptionCommand,
+    ) -> Result<MessagePort> {
+        match subscription {
+            SubscriptionCommand::Headers => {
+                let stream = BroadcastStream::new(self.node.header_subscribe().await?)
+                    .map(|header_or_error| header_or_error.map_err(SubscriptionError::from));
+
+                forward_stream_to_message_port(stream)
+            }
+            SubscriptionCommand::Blobs(namespace) => {
+                let stream = self.node.blob_subscribe(namespace).await?;
+                forward_stream_to_message_port(stream)
+            }
+            SubscriptionCommand::Shares(namespace) => {
+                let stream = self.node.namespace_subscribe(namespace).await?;
+                forward_stream_to_message_port(stream)
+            }
         }
     }
 }

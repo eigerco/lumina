@@ -56,6 +56,7 @@ smallvec = { version = "1.13.2", features = [
 thiserror.workspace = true
 tokio = { workspace = true, features = ["macros", "sync"] }
 tokio-util.workspace = true
+tokio-stream = { workspace = true, features = ["sync"] }
 tracing.workspace = true
 void = "1"
 uniffi = { workspace = true, optional = true }
@@ -111,6 +112,7 @@ web-sys = { workspace = true, features = [
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 wasm-bindgen-test.workspace = true
+celestia-rpc = { workspace = true, features = ["wasm-bindgen"] }
 
 [dev-dependencies]
 celestia-rpc = { workspace = true, features = ["p2p"] }

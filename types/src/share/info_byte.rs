@@ -1,6 +1,9 @@
 use crate::consts::appconsts;
 use crate::{Error, Result};
 
+#[cfg(feature = "uniffi")]
+use crate::error::UniffiResult;
+
 /// The part of [`Share`] containing the `version` and `sequence_start` information.
 ///
 /// [`InfoByte`] is a single byte with the following structure:
@@ -12,6 +15,7 @@ use crate::{Error, Result};
 ///  [`Share`]: crate::Share
 #[repr(transparent)]
 #[derive(Debug, PartialEq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Object))]
 pub struct InfoByte(u8);
 
 impl InfoByte {
@@ -52,5 +56,33 @@ impl InfoByte {
 
     pub(crate) fn from_raw_unchecked(byte: u8) -> Self {
         InfoByte(byte)
+    }
+}
+
+#[cfg(feature = "uniffi")]
+#[uniffi::export]
+impl InfoByte {
+    /// Create a new [`InfoByte`] with given version and `sequence_start`.
+    #[uniffi::constructor(name = "create")]
+    pub fn uniffi_new(version: u8, is_sequence_start: bool) -> UniffiResult<Self> {
+        Ok(InfoByte::new(version, is_sequence_start)?)
+    }
+
+    /// Get the `version`.
+    #[uniffi::method(name = "version")]
+    pub fn uniffi_version(&self) -> u8 {
+        self.version()
+    }
+
+    /// Get the `sequence_start` indicator.
+    #[uniffi::method(name = "is_sequence_start")]
+    pub fn uniffi_is_sequence_start(&self) -> bool {
+        self.is_sequence_start()
+    }
+
+    /// Convert the [`InfoByte`] to a byte.
+    #[uniffi::method(name = "as_u8")]
+    pub fn uniffi_as_u8(&self) -> u8 {
+        self.as_u8()
     }
 }

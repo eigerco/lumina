@@ -140,7 +140,8 @@ from_display! {
     celestia_types::Error,
     lumina_node::node::NodeError,
     lumina_node::store::StoreError,
-    crate::worker::WorkerError,
+    lumina_node::node::subscriptions::SubscriptionError,
+    crate::commands::WorkerError,
     tokio::sync::oneshot::error::RecvError,
 }
 
