@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1](https://github.com/eigerco/lumina/compare/lumina-node-uniffi-v0.5.0...lumina-node-uniffi-v0.5.1) - 2025-11-28
+
+### Other
+
+- updated the following local packages: celestia-grpc, celestia-types, lumina-node
+
 ## [0.5.0](https://github.com/eigerco/lumina/compare/lumina-node-uniffi-v0.4.0...lumina-node-uniffi-v0.5.0) - 2025-11-19
 
 ### Other
