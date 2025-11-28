@@ -40,7 +40,7 @@ where
     // Since we always maintain a connection with a few bridge (and possibly archival)
     // nodes, then if we assume those nodes correctly use only floodsub protocol there,
     // we cannot be isolated in a way described in a shrex-sub spec:
-    // https://github.com/celestiaorg/celestia-node/blob/76db37cc4ac09e892122a081b8bea24f87899f11/specs/src/shrex/shrex-sub.md
+    // https://github.com/celestiaorg/celestia-node/blob/76db37cc4ac09e892122a081b8bea24f87899f11/specs/src/shrex/shrex-sub.md#why-not-gossipsub
     shr_ex_sub: gossipsub::Behaviour,
     _da_pools: HashMap<u64, HashSet<PeerId>>,
     _store: Arc<S>,
