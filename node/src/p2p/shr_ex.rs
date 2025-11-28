@@ -33,6 +33,14 @@ where
     S: Store + 'static,
 {
     req_resp: request_response::Behaviour<TodoCodec>,
+    // TODO: this is a workaround, should be replaced with real floodsub
+    // rust-libp2p implementation of floodsub isn't compliant with the spec,
+    // so we work that around by using gossipsub configured with floodsub support.
+    // Gossipsub will then always forward messages to all floodsub peers.
+    // Since we always maintain connection to a few of bridge (and possibly archival)
+    // nodes, and assuming they correctly use only floodsub there, we cannot
+    // be isolated in a way described in a spec:
+    // https://github.com/celestiaorg/celestia-node/blob/76db37cc4ac09e892122a081b8bea24f87899f11/specs/src/shrex/shrex-sub.md
     shr_ex_sub: gossipsub::Behaviour,
     _da_pools: HashMap<u64, HashSet<PeerId>>,
     _store: Arc<S>,
@@ -51,6 +59,7 @@ where
 
         let shr_ex_sub_config = gossipsub::ConfigBuilder::default()
             // replace default meshsub protocols with something that won't match
+            // note: this may create an additional, exclusive lumina-only gossip mesh :)
             .protocol_id_prefix("/nosub")
             // add floodsub protocol
             .support_floodsub()
