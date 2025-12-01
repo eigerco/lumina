@@ -50,7 +50,7 @@ impl TryFrom<MessageEvent> for MultiplexMessage<Command> {
         let MultiplexMessage::<Command> { id, mut payload } =
             from_value(ev.data()).context("could not deserialize message")?;
 
-        if let Some(port) = ev.get_ports().into_iter().take(1).last()
+        if let Some(port) = ev.get_ports().into_iter().next()
             && let Command::Management(WorkerCommand::ConnectPort(maybe_port)) = &mut payload
         {
             let _ = maybe_port.insert(port);
