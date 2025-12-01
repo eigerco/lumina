@@ -16,7 +16,7 @@ mod native {
     use std::result::Result;
     use std::time::Duration;
 
-    use bon::bon;
+    use derive_builder::Builder;
     use http::{HeaderValue, header};
     use jsonrpsee::core::ClientError;
     use jsonrpsee::core::client::{BatchResponse, ClientT, Subscription, SubscriptionClientT};
@@ -27,21 +27,16 @@ mod native {
     use serde::de::DeserializeOwned;
     use tracing::warn;
 
-    use crate::Error;
+    use crate::error::BuilderError;
 
     const MAX_RESPONSE_SIZE: usize = 256 * 1024 * 1024;
 
-    /// Json RPC client.
-    pub enum Client {
-        /// A client using 'http\[s\]' protocol.
-        Http(HttpClient),
-        /// A client using 'ws\[s\]' protocol.
-        Ws(WsClient),
-    }
-
-    #[bon]
-    impl Client {
-        /// Create a new Json RPC client.
+    #[derive(Builder)]
+    #[builder(derive(Debug))]
+    #[builder(name = "ClientBuilder", pattern = "owned")]
+    #[builder(build_fn(private, name = "build_partial", error = "BuilderError"))]
+    pub struct ClientPartialBuilder {
+        /// Url used to connect to the RPC server
         ///
         /// Only 'http\[s\]' and 'ws\[s\]' protocols are supported and they should
         /// be specified in the provided `url`. For more flexibility
@@ -49,24 +44,54 @@ mod native {
         ///
         /// Please note that currently the celestia-node supports only 'http' and 'ws'.
         /// For a secure connection you have to hide it behind a proxy.
-        #[builder]
-        pub async fn new(
-            /// Url used to connect to the RPC server
-            url: &str,
-            /// Auth token
-            auth_token: Option<&str>,
-            /// Timeout for establishing the connection, supported with WebSockets only
-            connect_timeout: Option<Duration>,
-            /// Timeout when sending a request
-            request_timeout: Option<Duration>,
-        ) -> Result<Self, Error> {
+        #[builder(setter(into))]
+        url: String,
+        /// Auth token
+        #[builder(setter(strip_option))]
+        auth_token: Option<String>,
+        /// Timeout for establishing the connection, supported with WebSockets only
+        #[builder(setter(strip_option))]
+        connect_timeout: Option<Duration>,
+        /// Timeout when sending a request
+        #[builder(setter(strip_option))]
+        request_timeout: Option<Duration>,
+    }
+
+    impl ClientBuilder {
+        /// Auth token
+        pub fn maybe_auth_token(mut self, auth_token: Option<impl Into<String>>) -> Self {
+            self.auth_token = Some(auth_token.map(Into::into));
+            self
+        }
+
+        /// Timeout when establishing a connection
+        pub fn maybe_connect_timeout(mut self, timeout: Option<Duration>) -> Self {
+            self.connect_timeout = Some(timeout);
+            self
+        }
+
+        /// Timeout when sending a request
+        pub fn maybe_request_timeout(mut self, timeout: Option<Duration>) -> Self {
+            self.request_timeout = Some(timeout);
+            self
+        }
+    }
+
+    impl ClientBuilder {
+        pub async fn build(self) -> Result<Client, BuilderError> {
+            let ClientPartialBuilder {
+                url,
+                auth_token,
+                connect_timeout,
+                request_timeout,
+            } = self.build_partial()?;
+
             let mut headers = HeaderMap::new();
 
             if let Some(token) = auth_token {
                 let val = HeaderValue::from_str(&format!("Bearer {token}"))?;
                 headers.insert(header::AUTHORIZATION, val);
             }
-
             let protocol = url.split_once(':').map(|(proto, _)| proto);
             let client = match protocol {
                 Some("http") | Some("https") => {
@@ -94,10 +119,24 @@ mod native {
                     }
                     Client::Ws(builder.build(url).await?)
                 }
-                _ => return Err(Error::ProtocolNotSupported(url.into())),
+                _ => return Err(BuilderError::ProtocolNotSupported(url)),
             };
-
             Ok(client)
+        }
+    }
+
+    /// Json RPC client.
+    pub enum Client {
+        /// A client using 'http\[s\]' protocol.
+        Http(HttpClient),
+        /// A client using 'ws\[s\]' protocol.
+        Ws(WsClient),
+    }
+
+    impl Client {
+        /// Create a builder for the [`Client`]
+        pub fn builder() -> ClientBuilder {
+            ClientBuilder::create_empty()
         }
     }
 
@@ -191,7 +230,7 @@ mod wasm {
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::time::Duration;
 
-    use bon::bon;
+    use derive_builder::Builder;
     use gloo_net::http::{Request as JsRequest, Response as JsResponse};
     use gloo_timers::callback::Timeout;
     use jsonrpsee::core::client::{BatchResponse, ClientT, Subscription, SubscriptionClientT};
@@ -208,63 +247,115 @@ mod wasm {
     use tracing::warn;
     use web_sys::AbortController;
 
-    use crate::Error;
+    use crate::error::BuilderError;
 
     const ABORT_ERROR_NAME: &str = "AbortError";
 
     /// Json RPC client.
-    pub struct Client {
-        id: AtomicU64,
+    #[derive(Builder)]
+    #[builder(name = "ClientBuilder", pattern = "owned")]
+    #[builder(derive(Debug))]
+    #[builder(build_fn(
+        private,
+        name = "build_partial",
+        error = "BuilderError",
+        validate = "Self::validate"
+    ))]
+    pub struct ClientPartialBuilder {
+        #[builder(setter(into))]
+        /// Url used to connect to the RPC server
+        ///
+        /// Only 'http\[s\]' and 'ws\[s\]' protocols are supported and they should
+        /// be specified in the provided `url`. For more flexibility
+        /// consider creating the client using [`jsonrpsee`] directly.
+        ///
+        /// Please note that currently the celestia-node supports only 'http' and 'ws'.
+        /// For a secure connection you have to hide it behind a proxy.
         url: String,
+        /// Auth token
+        #[builder(setter(strip_option))]
         auth_token: Option<String>,
-        timeout_ms: Option<u32>,
+        #[builder(setter(strip_option))]
+        request_timeout: Option<Duration>,
     }
 
-    #[bon]
-    impl Client {
-        /// Create a new Json RPC client.
-        ///
-        /// Only the 'http\[s\]' protocols are supported because JavaScript
-        /// doesn't allow setting headers with websocket. If you want to
-        /// use the websocket client anyway, you can use the one from the
-        /// `jsonrpsee` directly, but you need a node with `--rpc.skip-auth`.
-        #[builder]
-        pub async fn new(
-            /// Url used to connect to the RPC server
-            url: &str,
-            /// Auth token
-            auth_token: Option<&str>,
-            /// Timeout for establishing the connection, unsupported on wasm
-            connect_timeout: Option<Duration>,
-            /// Timeout when sending a request
-            request_timeout: Option<Duration>,
-        ) -> Result<Self, Error> {
+    pub struct Client {
+        id: AtomicU64,
+        /// Url used to connect to the RPC server
+        url: String,
+        /// Auth token
+        auth_token: Option<String>,
+        request_timeout_ms: Option<u32>,
+    }
+
+    impl ClientBuilder {
+        /// Auth token
+        pub fn maybe_auth_token(mut self, auth_token: Option<impl Into<String>>) -> Self {
+            self.auth_token = Some(auth_token.map(Into::into));
+            self
+        }
+
+        /// Timeout when establishing a connection
+        pub fn maybe_request_timeout(mut self, timeout: Option<Duration>) -> Self {
+            self.request_timeout = Some(timeout);
+            self
+        }
+
+        /// Timeout when establishing a connection
+        pub fn connect_timeout(self, _timeout: Duration) -> Self {
+            warn!("ignored connect_timeout: not supported in wasm");
+            self
+        }
+
+        /// Timeout when sending a request
+        pub fn maybe_connect_timeout(self, _timeout: Option<Duration>) -> Self {
+            warn!("ignored connect_timeout: not supported in wasm");
+            self
+        }
+
+        fn validate(&self) -> Result<(), BuilderError> {
+            let Some(url) = &self.url else {
+                return Err(BuilderError::ProtocolNotSupported(
+                    "No protocol set".to_string(),
+                ));
+            };
             let protocol = url.split_once(':').map(|(proto, _)| proto);
             match protocol {
-                Some("http") | Some("https") => (),
-                _ => return Err(Error::ProtocolNotSupported(url.into())),
-            };
-            let timeout_ms = request_timeout
-                .map(|t| t.as_millis().try_into())
-                .transpose()
-                .map_err(|_| Error::TimeoutOutOfRange)?;
-            if connect_timeout.is_some() {
-                warn!("ignored connect_timeout: not supported in wasm");
+                Some("http") | Some("https") => Ok(()),
+                _ => Err(BuilderError::ProtocolNotSupported(url.into())),
             }
+        }
 
+        pub async fn build(self) -> Result<Client, BuilderError> {
+            let ClientPartialBuilder {
+                url,
+                auth_token,
+                request_timeout,
+            } = self.build_partial()?;
+            let request_timeout_ms = request_timeout
+                .map(|t: Duration| t.as_millis().try_into())
+                .transpose()
+                .map_err(|_| BuilderError::TimeoutOutOfRange)?;
             Ok(Client {
-                id: AtomicU64::new(0),
-                url: url.into(),
-                auth_token: auth_token.map(ToOwned::to_owned),
-                timeout_ms,
+                id: AtomicU64::default(),
+                url,
+                auth_token,
+                request_timeout_ms,
             })
+        }
+    }
+
+    impl Client {
+        /// Create a builder for the [`Client`]
+        pub fn builder() -> ClientBuilder {
+            ClientBuilder::create_empty()
         }
 
         async fn send<T: Serialize>(&self, request: T) -> Result<JsResponse, ClientError> {
             let fut = {
                 let mut req = JsRequest::post(&self.url);
 
-                if let Some(timeout) = self.timeout_ms {
+                if let Some(timeout) = self.request_timeout_ms {
                     let abort_controller =
                         AbortController::new().expect("AbortController should be available");
                     let abort_signal = abort_controller.signal();

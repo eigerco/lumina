@@ -5,6 +5,7 @@ wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
 mod blob;
 mod blobstream;
+mod builder;
 mod client;
 mod fraud;
 mod header;
@@ -76,7 +77,8 @@ pub use celestia_proto as proto;
 #[doc(inline)]
 pub use celestia_types as types;
 
-pub use crate::client::{Client, ClientBuilder};
+pub use crate::builder::ClientBuilder;
+pub use crate::client::Client;
 
 /// Alias for a `Result` with the error type [`celestia_client::Error`].
 ///
@@ -91,6 +93,9 @@ pub enum Error {
     /// Celestia RPC error.
     #[error("RPC error: {0}")]
     Rpc(#[from] celestia_rpc::Error),
+
+    #[error("RPC client builder error: {0}")]
+    RpcBuilder(#[from] celestia_rpc::BuilderError),
 
     /// Celestia gRPC error.
     #[error("gRPC error: {0}")]

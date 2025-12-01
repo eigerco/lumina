@@ -40,6 +40,10 @@ pub enum GrpcClientBuilderError {
         "Tls support is not enabled but requested via url, please enable it using proper feature flags"
     )]
     TlsNotSupported,
+
+    /// Required builder field has not been initialised
+    #[error("Required builder field has not been initialised: {0}")]
+    UninitializedFieldError(String),
 }
 
 /// Builder for [`GrpcClient`]
@@ -148,6 +152,9 @@ impl From<crate::GrpcClientBuilderError> for GrpcClientBuilderError {
             }
             crate::GrpcClientBuilderError::TlsNotSupported => {
                 GrpcClientBuilderError::TlsNotSupported
+            }
+            crate::GrpcClientBuilderError::UninitializedFieldError(field) => {
+                GrpcClientBuilderError::UninitializedFieldError(field.to_string())
             }
         }
     }

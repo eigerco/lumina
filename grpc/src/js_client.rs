@@ -116,7 +116,7 @@ impl GrpcClientBuilder {
     #[wasm_bindgen(js_name = withMetadataBin)]
     pub fn with_metadata_bin(self, key: String, value: Uint8Array) -> Self {
         Self {
-            inner: self.inner.metadata_bin(&key, &value.to_vec()),
+            inner: self.inner.metadata_bin(&key, value.to_vec()),
         }
     }
 

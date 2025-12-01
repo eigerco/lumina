@@ -122,7 +122,7 @@ impl GrpcClient {
         }
     }
 
-    /// Create a builder for [`GrpcClient`] connected to `url`
+    /// Create a builder for the [`GrpcClient`]
     pub fn builder() -> GrpcClientBuilder {
         GrpcClientBuilder::new()
     }

@@ -1,5 +1,6 @@
 use celestia_types::hash::Hash;
 use celestia_types::state::ErrorCode;
+use derive_builder::UninitializedFieldError;
 use k256::ecdsa::signature::Error as SignatureError;
 use tonic::Status;
 
@@ -130,6 +131,10 @@ pub enum GrpcClientBuilderError {
         "Tls support is not enabled but requested via url, please enable it using proper feature flags"
     )]
     TlsNotSupported,
+
+    /// Required builder field not set
+    #[error(transparent)]
+    UninitializedFieldError(#[from] UninitializedFieldError),
 }
 
 #[derive(thiserror::Error, Debug)]

@@ -1,3 +1,5 @@
+use derive_builder::UninitializedFieldError;
+
 /// Alias for a `Result` with the error type [`celestia_rpc::Error`].
 ///
 /// [`celestia_rpc::Error`]: crate::Error
@@ -8,6 +10,13 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// [`celestia_rpc`]: crate
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    /// Error propagated from the [`jsonrpsee`].
+    #[error(transparent)]
+    JsonRpc(#[from] jsonrpsee::core::ClientError),
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum BuilderError {
     /// Invalid characters in the auth token.
     #[cfg(not(target_arch = "wasm32"))]
     #[error("Token contains invalid characters: {0}")]
@@ -24,4 +33,8 @@ pub enum Error {
     /// Provided timeout is out of range
     #[error("Out of range timeout value")]
     TimeoutOutOfRange,
+
+    /// Required builder field not set
+    #[error(transparent)]
+    UninitializedFieldError(#[from] UninitializedFieldError),
 }
