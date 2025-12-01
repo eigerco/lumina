@@ -305,6 +305,7 @@ mod tests {
         let v: u32 = from_value(rx1.next().await.unwrap().data()).unwrap();
         assert_eq!(v, 1);
         assert!(rx1.next().await.is_none());
+        // check that awaiting on closed channel is safe
         assert!(rx1.next().await.is_none());
     }
 
