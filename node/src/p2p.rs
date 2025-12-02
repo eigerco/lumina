@@ -743,9 +743,9 @@ where
 
         let shr_ex = shrex::Behaviour::new(shrex::Config {
             network_id: &args.network_id,
-            local_peer_id: args.local_keypair.public().into(),
+            local_keypair: &args.local_keypair,
             header_store: args.store.clone(),
-        });
+        })?;
 
         let behaviour = Behaviour {
             bitswap,
