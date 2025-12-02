@@ -50,6 +50,7 @@ tonic = { workspace = true, features = ["codegen"] }
 tracing.workspace = true
 uniffi = { workspace = true, optional = true, features = ["tokio"] }
 zeroize = "1.8"
+derive_builder = { version = "0.20.2", features = ["clippy"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio = { workspace = true, features = ["time"] }

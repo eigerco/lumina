@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use js_sys::Uint8Array;
 use k256::ecdsa::VerifyingKey;
 use wasm_bindgen::prelude::*;
@@ -18,6 +20,7 @@ use grpc_client::GrpcClient;
 /// ```js
 /// const client = await GrpcClient
 ///   .withUrl("http://127.0.0.1:18080")
+///   .withTimeout(5000)  // Optional: 5 second timeout
 ///   .build()
 /// ```
 ///
@@ -113,7 +116,18 @@ impl GrpcClientBuilder {
     #[wasm_bindgen(js_name = withMetadataBin)]
     pub fn with_metadata_bin(self, key: String, value: Uint8Array) -> Self {
         Self {
-            inner: self.inner.metadata_bin(&key, &value.to_vec()),
+            inner: self.inner.metadata_bin(&key, value.to_vec()),
+        }
+    }
+
+    /// Sets the request timeout in milliseconds, overriding default one from the transport.
+    ///
+    /// Note that this method **consumes** builder and returns updated instance of it.
+    /// Make sure to re-assign it if you keep builder in a variable.
+    #[wasm_bindgen(js_name = withTimeout)]
+    pub fn with_timeout(self, timeout_ms: u64) -> Self {
+        Self {
+            inner: self.inner.timeout(Duration::from_millis(timeout_ms)),
         }
     }
 

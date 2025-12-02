@@ -1,6 +1,7 @@
 //! Compatibility layer for exporting gRPC functionality via uniffi
 
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use k256::ecdsa::VerifyingKey;
 use uniffi::Object;
@@ -39,6 +40,10 @@ pub enum GrpcClientBuilderError {
         "Tls support is not enabled but requested via url, please enable it using proper feature flags"
     )]
     TlsNotSupported,
+
+    /// Required builder field has not been initialised
+    #[error("Required builder field has not been initialised: {0}")]
+    UninitializedFieldError(String),
 }
 
 /// Builder for [`GrpcClient`]
@@ -101,6 +106,13 @@ impl GrpcClientBuilder {
         self
     }
 
+    /// Sets the request timeout in milliseconds, overriding default one from the transport.
+    #[uniffi::method(name = "withTimeout")]
+    pub fn timeout(self: Arc<Self>, timeout_ms: u64) -> Arc<Self> {
+        self.map_builder(move |builder| builder.timeout(Duration::from_millis(timeout_ms)));
+        self
+    }
+
     // this function _must_ be async despite not awaiting, so that it executes in tokio runtime
     // context
     /// Build the gRPC client.
@@ -140,6 +152,9 @@ impl From<crate::GrpcClientBuilderError> for GrpcClientBuilderError {
             }
             crate::GrpcClientBuilderError::TlsNotSupported => {
                 GrpcClientBuilderError::TlsNotSupported
+            }
+            crate::GrpcClientBuilderError::UninitializedFieldError(field) => {
+                GrpcClientBuilderError::UninitializedFieldError(field.to_string())
             }
         }
     }

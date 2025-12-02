@@ -122,7 +122,7 @@ impl GrpcClient {
         }
     }
 
-    /// Create a builder for [`GrpcClient`] connected to `url`
+    /// Create a builder for the [`GrpcClient`]
     pub fn builder() -> GrpcClientBuilder {
         GrpcClientBuilder::new()
     }
@@ -909,11 +909,13 @@ mod tests {
     use lumina_utils::test_utils::async_test;
     use lumina_utils::time::sleep;
     use rand::{Rng, RngCore};
+    use tonic::Code;
 
     use super::GrpcClient;
     use crate::grpc::Context;
     use crate::test_utils::{
-        TestAccount, load_account, new_grpc_client, new_rpc_client, new_tx_client, spawn,
+        CELESTIA_GRPC_URL, TestAccount, load_account, new_grpc_client, new_rpc_client,
+        new_tx_client, spawn,
     };
     use crate::{Error, TxConfig};
 
@@ -1349,6 +1351,48 @@ mod tests {
                 )
                 .into_future(),
         );
+    }
+
+    #[async_test]
+    async fn timeouts() {
+        let account = load_account();
+        let client = new_grpc_client();
+
+        // defaults - no timeout
+        let _balance = client.get_all_balances(&account.address).await.unwrap();
+
+        // per-request too short timeout
+        let Error::TonicError(timeout) = client
+            .get_all_balances(&account.address)
+            .timeout(Duration::from_nanos(1))
+            .await
+            .unwrap_err()
+        else {
+            panic!("invalid error type, expected TonicError");
+        };
+        assert_eq!(timeout.code(), Code::DeadlineExceeded);
+
+        // too short timeout set in builder
+        let client = GrpcClient::builder()
+            .url(CELESTIA_GRPC_URL)
+            .timeout(Duration::from_nanos(1))
+            .build()
+            .unwrap();
+
+        // client-wide too-short timeout should fail
+        let Error::TonicError(timeout) =
+            client.get_all_balances(&account.address).await.unwrap_err()
+        else {
+            panic!("invalid error type, expected TonicError");
+        };
+        assert_eq!(timeout.code(), Code::DeadlineExceeded);
+
+        // per-request override
+        let _balance = client
+            .get_all_balances(&account.address)
+            .timeout(Duration::from_secs(1))
+            .await
+            .unwrap();
     }
 
     fn random_blob(size: RangeInclusive<usize>) -> Blob {

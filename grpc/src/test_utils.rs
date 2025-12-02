@@ -5,7 +5,7 @@ use tendermint::public_key::Secp256k1 as VerifyingKey;
 pub use imp::*;
 
 /// [`TestAccount`] stores celestia account credentials and information, for cases where we don't
-/// mind jusk keeping the plaintext secret key in memory
+/// mind just keeping the plaintext secret key in memory
 #[derive(Debug, Clone)]
 pub struct TestAccount {
     /// Bech32 `AccountId` of this account
@@ -68,7 +68,11 @@ mod imp {
     }
 
     pub async fn new_rpc_client() -> Client {
-        Client::new(CELESTIA_RPC_URL, None).await.unwrap()
+        Client::builder()
+            .url(CELESTIA_RPC_URL)
+            .build()
+            .await
+            .unwrap()
     }
 
     // we have to sequence the tests which submits transactions.
@@ -107,7 +111,8 @@ mod imp {
     use super::*;
     use crate::GrpcClient;
 
-    const CELESTIA_GRPCWEB_PROXY_URL: &str = "http://localhost:18080";
+    pub const CELESTIA_GRPCWEB_PROXY_URL: &str = "http://localhost:18080";
+    pub const CELESTIA_GRPC_URL: &str = CELESTIA_GRPCWEB_PROXY_URL;
     pub const CELESTIA_RPC_URL: &str = "http://localhost:26658";
 
     pub fn new_grpc_client() -> GrpcClient {
@@ -118,7 +123,11 @@ mod imp {
     }
 
     pub async fn new_rpc_client() -> RpcClient {
-        RpcClient::new(CELESTIA_RPC_URL, None).await.unwrap()
+        RpcClient::builder()
+            .url(CELESTIA_RPC_URL)
+            .build()
+            .await
+            .unwrap()
     }
 
     pub async fn new_tx_client() -> ((), GrpcClient) {

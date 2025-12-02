@@ -181,7 +181,11 @@ fn is_sled_db(path: impl AsRef<Path>) -> bool {
 async fn fetch_bridge_multiaddrs(ws_url: &str) -> Result<Vec<Multiaddr>> {
     let auth_token = env::var("CELESTIA_NODE_AUTH_TOKEN_ADMIN")
         .context("Missing CELESTIA_NODE_AUTH_TOKEN_ADMIN environment variable")?;
-    let client = Client::new(ws_url, Some(&auth_token)).await?;
+    let client = Client::builder()
+        .url(ws_url)
+        .auth_token(auth_token)
+        .build()
+        .await?;
     let bridge_info = client.p2p_info().await?;
 
     info!("bridge id: {:?}", bridge_info.id);

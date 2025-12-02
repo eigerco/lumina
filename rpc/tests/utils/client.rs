@@ -89,7 +89,11 @@ pub async fn new_test_client_with_url(
     let token = token_from_env(auth_level)?;
     let url = env_or("CELESTIA_RPC_URL", celestia_rpc_url);
 
-    let client = Client::new(&url, token.as_deref()).await?;
+    let client = Client::builder()
+        .url(&url)
+        .maybe_auth_token(token.as_deref())
+        .build()
+        .await?;
 
     Ok(client)
 }

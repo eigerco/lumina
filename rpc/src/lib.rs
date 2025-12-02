@@ -31,9 +31,9 @@ pub use crate::blobstream::BlobstreamClient;
         all(target_arch = "wasm32", feature = "wasm-bindgen")
     )))
 )]
-pub use crate::client::Client;
+pub use crate::client::{Client, ClientBuilder};
 pub use crate::das::DasClient;
-pub use crate::error::{Error, Result};
+pub use crate::error::{BuilderError, Error, Result};
 pub use crate::fraud::FraudClient;
 pub use crate::header::HeaderClient;
 #[cfg(feature = "p2p")]
