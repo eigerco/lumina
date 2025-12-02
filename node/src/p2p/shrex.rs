@@ -41,7 +41,7 @@ where
     // nodes, then if we assume those nodes correctly use only floodsub protocol,
     // we cannot be isolated in a way described in a shrex-sub spec:
     // https://github.com/celestiaorg/celestia-node/blob/76db37cc4ac09e892122a081b8bea24f87899f11/specs/src/shrex/shrex-sub.md#why-not-gossipsub
-    shr_ex_sub: gossipsub::Behaviour,
+    shrex_sub: gossipsub::Behaviour,
     _da_pools: HashMap<u64, HashSet<PeerId>>,
     _store: Arc<S>,
 }
@@ -57,7 +57,7 @@ where
         let message_authenticity =
             gossipsub::MessageAuthenticity::Signed(config.local_keypair.clone());
 
-        let shr_ex_sub_config = gossipsub::ConfigBuilder::default()
+        let shrex_sub_config = gossipsub::ConfigBuilder::default()
             // replace default meshsub protocols with something that won't match
             // note: this may create an additional, exclusive lumina-only gossip mesh :)
             .protocol_id_prefix("/nosub")
@@ -76,12 +76,12 @@ where
                 .map_err(|e| P2pError::GossipsubInit(e.to_string()))?;
 
         let topic = format!("{}/eds-sub/v0.2.0", config.network_id);
-        shr_ex_sub
+        shrex_sub
             .subscribe(&gossipsub::IdentTopic::new(topic))
             .map_err(|e| P2pError::GossipsubInit(e.to_string()))?;
 
         Ok(Self {
-            shr_ex_sub,
+            shrex_sub,
             req_resp: request_response::Behaviour::new(
                 [(
                     protocol_id(config.network_id, "/todo/v0.0.1"),
@@ -110,7 +110,7 @@ where
         remote_addr: &Multiaddr,
     ) -> Result<Self::ConnectionHandler, ConnectionDenied> {
         Ok(ConnHandler(ConnectionHandler::select(
-            self.shr_ex_sub.handle_established_inbound_connection(
+            self.shrex_sub.handle_established_inbound_connection(
                 connection_id,
                 peer,
                 local_addr,
@@ -134,7 +134,7 @@ where
         port_use: PortUse,
     ) -> Result<Self::ConnectionHandler, ConnectionDenied> {
         Ok(ConnHandler(ConnectionHandler::select(
-            self.shr_ex_sub.handle_established_outbound_connection(
+            self.shrex_sub.handle_established_outbound_connection(
                 connection_id,
                 peer,
                 addr,
@@ -157,11 +157,8 @@ where
         local_addr: &Multiaddr,
         remote_addr: &Multiaddr,
     ) -> Result<(), ConnectionDenied> {
-        self.shr_ex_sub.handle_pending_inbound_connection(
-            connection_id,
-            local_addr,
-            remote_addr,
-        )?;
+        self.shrex_sub
+            .handle_pending_inbound_connection(connection_id, local_addr, remote_addr)?;
         self.req_resp
             .handle_pending_inbound_connection(connection_id, local_addr, remote_addr)?;
         Ok(())
@@ -176,7 +173,7 @@ where
     ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
         let mut combined_addresses = Vec::new();
 
-        combined_addresses.extend(self.shr_ex_sub.handle_pending_outbound_connection(
+        combined_addresses.extend(self.shrex_sub.handle_pending_outbound_connection(
             connection_id,
             maybe_peer,
             addresses,
@@ -193,7 +190,7 @@ where
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm) {
-        self.shr_ex_sub.on_swarm_event(event);
+        self.shrex_sub.on_swarm_event(event);
         self.req_resp.on_swarm_event(event);
     }
 
@@ -204,9 +201,9 @@ where
         event: THandlerOutEvent<Self>,
     ) {
         match event {
-            Either::Left(shr_ex_sub_ev) => {
-                self.shr_ex_sub
-                    .on_connection_handler_event(peer_id, connection_id, shr_ex_sub_ev)
+            Either::Left(shrex_sub_ev) => {
+                self.shrex_sub
+                    .on_connection_handler_event(peer_id, connection_id, shrex_sub_ev)
             }
             Either::Right(req_resp_ev) => {
                 self.req_resp
@@ -219,7 +216,7 @@ where
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
-        if let Poll::Ready(ev) = self.shr_ex_sub.poll(cx) {
+        if let Poll::Ready(ev) = self.shrex_sub.poll(cx) {
             if let ToSwarm::GenerateEvent(ev) = ev {
                 println!("{ev:?}");
             } else {
