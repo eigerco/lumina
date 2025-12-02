@@ -38,7 +38,7 @@ where
     // so we work that around by using a gossipsub configured with floodsub support.
     // Gossipsub will always receive from and forward messages to all the floodsub peers.
     // Since we always maintain a connection with a few bridge (and possibly archival)
-    // nodes, then if we assume those nodes correctly use only floodsub protocol there,
+    // nodes, then if we assume those nodes correctly use only floodsub protocol,
     // we cannot be isolated in a way described in a shrex-sub spec:
     // https://github.com/celestiaorg/celestia-node/blob/76db37cc4ac09e892122a081b8bea24f87899f11/specs/src/shrex/shrex-sub.md#why-not-gossipsub
     shr_ex_sub: gossipsub::Behaviour,
@@ -71,8 +71,8 @@ where
             .map_err(|e| P2pError::GossipsubInit(e.to_string()))?;
 
         // build a gossipsub network behaviour
-        let mut shr_ex_sub: gossipsub::Behaviour =
-            gossipsub::Behaviour::new(message_authenticity, shr_ex_sub_config)
+        let mut shrex_sub: gossipsub::Behaviour =
+            gossipsub::Behaviour::new(message_authenticity, shrex_sub_config)
                 .map_err(|e| P2pError::GossipsubInit(e.to_string()))?;
 
         let topic = format!("{}/eds-sub/v0.2.0", config.network_id);
