@@ -99,22 +99,22 @@ pub struct GrpcClient {
 }
 
 struct GrpcClientInner {
-    transport: BoxedTransport,
+    transports: Arc<[BoxedTransport]>,
     account: Option<AccountState>,
     chain_state: OnceCell<ChainState>,
     context: Context,
 }
 
 impl GrpcClient {
-    /// Create a new client wrapping given transport
+    /// Create a new client wrapping given transports
     pub(crate) fn new(
-        transport: BoxedTransport,
+        transports: Arc<[BoxedTransport]>,
         account: Option<AccountState>,
         context: Context,
     ) -> Self {
         Self {
             inner: Arc::new(GrpcClientInner {
-                transport,
+                transports,
                 account,
                 chain_state: OnceCell::new(),
                 context,

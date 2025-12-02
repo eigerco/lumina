@@ -69,6 +69,19 @@ impl GrpcClientBuilder {
         GrpcClientBuilder(Mutex::new(Some(builder)))
     }
 
+    /// Create a new builder with multiple fallback URLs.
+    ///
+    /// When multiple endpoints are configured, the client will automatically
+    /// fall back to the next endpoint if a network-related error occurs.
+    #[uniffi::constructor(name = "withUrls")]
+    pub fn with_urls(urls: Vec<String>) -> Self {
+        let mut builder = RustBuilder::new();
+        for url in urls {
+            builder = builder.url(url);
+        }
+        GrpcClientBuilder(Mutex::new(Some(builder)))
+    }
+
     /// Add public key and signer to the client being built
     #[uniffi::method(name = "withPubkeyAndSigner")]
     pub fn pubkey_and_signer(

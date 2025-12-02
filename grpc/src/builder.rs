@@ -18,10 +18,7 @@ use crate::{DocSigner, GrpcClient, GrpcClientBuilderError};
 
 use imp::build_transport;
 
-#[derive(Default)]
-enum TransportSetup {
-    #[default]
-    Unset,
+enum TransportEntry {
     EndpointUrl(String),
     BoxedTransport(BoxedTransport),
 }
@@ -31,7 +28,7 @@ enum TransportSetup {
 /// Note that TLS configuration is governed using `tls-*-roots` feature flags.
 #[derive(Default)]
 pub struct GrpcClientBuilder {
-    transport: TransportSetup,
+    transports: Vec<TransportEntry>,
     signer_kind: Option<SignerKind>,
     ascii_metadata: Vec<(String, String)>,
     binary_metadata: Vec<(String, Vec<u8>)>,
@@ -50,15 +47,21 @@ impl GrpcClientBuilder {
         GrpcClientBuilder::default()
     }
 
-    /// Set the `url` to connect to using [`Channel`] transport.
+    /// Add a URL endpoint. Multiple calls add multiple fallback endpoints.
+    ///
+    /// When multiple endpoints are configured, the client will automatically
+    /// fall back to the next endpoint if a network-related error occurs.
     ///
     /// [`Channel`]: tonic::transport::Channel
     pub fn url(mut self, url: impl Into<String>) -> Self {
-        self.transport = TransportSetup::EndpointUrl(url.into());
+        self.transports.push(TransportEntry::EndpointUrl(url.into()));
         self
     }
 
-    /// Create a gRPC client builder using provided prepared transport
+    /// Add a transport endpoint. Multiple calls add multiple fallback endpoints.
+    ///
+    /// When multiple endpoints are configured, the client will automatically
+    /// fall back to the next endpoint if a network-related error occurs.
     pub fn transport<B, T>(mut self, transport: T) -> Self
     where
         B: http_body::Body<Data = Bytes> + Send + Unpin + 'static,
@@ -71,7 +74,7 @@ impl GrpcClientBuilder {
         <T as Service<http::Request<TonicBody>>>::Error: StdError + Send + Sync + 'static,
         <T as Service<http::Request<TonicBody>>>::Future: CondSend + 'static,
     {
-        self.transport = TransportSetup::BoxedTransport(boxed(transport));
+        self.transports.push(TransportEntry::BoxedTransport(boxed(transport)));
         self
     }
 
@@ -131,12 +134,23 @@ impl GrpcClientBuilder {
     }
 
     /// Build [`GrpcClient`]
+    ///
+    /// Returns error if no transports were configured.
     pub fn build(self) -> Result<GrpcClient, GrpcClientBuilderError> {
-        let transport = match self.transport {
-            TransportSetup::EndpointUrl(url) => build_transport(url)?,
-            TransportSetup::BoxedTransport(transport) => transport,
-            TransportSetup::Unset => return Err(GrpcClientBuilderError::TransportNotSet),
-        };
+        if self.transports.is_empty() {
+            return Err(GrpcClientBuilderError::TransportNotSet);
+        }
+
+        let transports: Vec<BoxedTransport> = self
+            .transports
+            .into_iter()
+            .map(|entry| match entry {
+                TransportEntry::EndpointUrl(url) => build_transport(url),
+                TransportEntry::BoxedTransport(t) => Ok(t),
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let transports: std::sync::Arc<[BoxedTransport]> = transports.into();
 
         let signer_config = self.signer_kind.map(TryInto::try_into).transpose()?;
 
@@ -151,7 +165,7 @@ impl GrpcClientBuilder {
             context.append_metadata_map(&metadata);
         }
 
-        Ok(GrpcClient::new(transport, signer_config, context))
+        Ok(GrpcClient::new(transports, signer_config, context))
     }
 }
 
@@ -245,5 +259,40 @@ mod imp {
     use super::*;
     pub(super) fn build_transport(url: String) -> Result<BoxedTransport, GrpcClientBuilderError> {
         Ok(boxed(tonic_web_wasm_client::Client::new(url)))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn empty_builder_returns_transport_not_set() {
+        let result = GrpcClientBuilder::new().build();
+
+        assert!(matches!(
+            result,
+            Err(GrpcClientBuilderError::TransportNotSet)
+        ));
+    }
+
+    #[tokio::test]
+    async fn single_url_builds_successfully() {
+        let result = GrpcClientBuilder::new()
+            .url("http://localhost:9090")
+            .build();
+
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn multiple_urls_build_successfully() {
+        let result = GrpcClientBuilder::new()
+            .url("http://localhost:9090")
+            .url("http://localhost:9091")
+            .url("http://localhost:9092")
+            .build();
+
+        assert!(result.is_ok());
     }
 }

@@ -147,6 +147,27 @@ pub enum MetadataError {
     Value(String),
 }
 
+impl Error {
+    /// Returns true if this error is network-related
+    pub fn is_network_error(&self) -> bool {
+        match self {
+            Error::TonicError(status) => {
+                // Network-related gRPC status codes
+                matches!(
+                    status.code(),
+                    tonic::Code::Unavailable
+                        | tonic::Code::Unknown
+                        | tonic::Code::DeadlineExceeded
+                        | tonic::Code::Aborted
+                )
+            }
+            #[cfg(not(target_arch = "wasm32"))]
+            Error::TransportError(_) => true,
+            _ => false,
+        }
+    }
+}
+
 impl From<Status> for Error {
     fn from(value: Status) -> Self {
         Error::TonicError(Box::new(value))
@@ -164,5 +185,83 @@ impl From<Error> for wasm_bindgen::JsValue {
 impl From<GrpcClientBuilderError> for wasm_bindgen::JsValue {
     fn from(error: GrpcClientBuilderError) -> wasm_bindgen::JsValue {
         error.to_string().into()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tonic::{Code, Status};
+
+    #[test]
+    fn network_errors_return_true() {
+        let network_codes = [
+            Code::Unavailable,
+            Code::Unknown,
+            Code::DeadlineExceeded,
+            Code::Aborted,
+        ];
+
+        for code in network_codes {
+            let error: Error = Status::new(code, "test").into();
+            assert!(
+                error.is_network_error(),
+                "Expected {:?} to be a network error",
+                code
+            );
+        }
+    }
+
+    #[test]
+    fn non_network_tonic_errors_return_false() {
+        let non_network_codes = [
+            Code::Ok,
+            Code::Cancelled,
+            Code::InvalidArgument,
+            Code::NotFound,
+            Code::AlreadyExists,
+            Code::PermissionDenied,
+            Code::ResourceExhausted,
+            Code::FailedPrecondition,
+            Code::OutOfRange,
+            Code::Unimplemented,
+            Code::Internal,
+            Code::DataLoss,
+            Code::Unauthenticated,
+        ];
+
+        for code in non_network_codes {
+            let error: Error = Status::new(code, "test").into();
+            assert!(
+                !error.is_network_error(),
+                "Expected {:?} to NOT be a network error",
+                code
+            );
+        }
+    }
+
+    #[test]
+    fn other_error_variants_return_false() {
+        assert!(!Error::FailedToParseResponse.is_network_error());
+        assert!(!Error::TxEmptyBlobList.is_network_error());
+        assert!(!Error::MissingSigner.is_network_error());
+        assert!(!Error::PublicKeyMismatch.is_network_error());
+        assert!(!Error::UnexpectedResponseType("test".into()).is_network_error());
+        assert!(!Error::SequenceParsingFailed("test".into()).is_network_error());
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[tokio::test]
+    async fn transport_error_is_network_error() {
+        use tonic::transport::Endpoint;
+
+        // Try to connect to an invalid endpoint to get a transport error
+        let endpoint = Endpoint::from_static("http://[::1]:1");
+        let result = endpoint.connect().await;
+
+        let transport_error = result.expect_err("should fail to connect");
+        let error = Error::TransportError(transport_error);
+
+        assert!(error.is_network_error());
     }
 }
