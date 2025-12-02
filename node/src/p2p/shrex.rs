@@ -270,10 +270,10 @@ where
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
-        if let Poll::Ready(ev) = self.inner.poll(cx) {
-            if let Some(ev) = self.on_to_swarm(ev) {
-                return Poll::Ready(ev);
-            }
+        if let Poll::Ready(ev) = self.inner.poll(cx)
+            && let Some(ev) = self.on_to_swarm(ev)
+        {
+            return Poll::Ready(ev);
         }
 
         Poll::Pending
