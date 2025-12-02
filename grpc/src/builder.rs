@@ -54,7 +54,8 @@ impl GrpcClientBuilder {
     ///
     /// [`Channel`]: tonic::transport::Channel
     pub fn url(mut self, url: impl Into<String>) -> Self {
-        self.transports.push(TransportEntry::EndpointUrl(url.into()));
+        self.transports
+            .push(TransportEntry::EndpointUrl(url.into()));
         self
     }
 
@@ -74,7 +75,8 @@ impl GrpcClientBuilder {
         <T as Service<http::Request<TonicBody>>>::Error: StdError + Send + Sync + 'static,
         <T as Service<http::Request<TonicBody>>>::Future: CondSend + 'static,
     {
-        self.transports.push(TransportEntry::BoxedTransport(boxed(transport)));
+        self.transports
+            .push(TransportEntry::BoxedTransport(boxed(transport)));
         self
     }
 
