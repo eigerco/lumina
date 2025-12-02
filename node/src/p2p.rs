@@ -25,7 +25,7 @@ use celestia_types::fraud_proof::BadEncodingFraudProof;
 use celestia_types::hash::Hash;
 use celestia_types::nmt::{Namespace, NamespacedSha2Hasher};
 use celestia_types::row::{Row, RowId};
-use celestia_types::row_namespace_data::{RowNamespaceData, RowNamespaceDataId};
+use celestia_types::row_namespace_data::{NamespaceData, RowNamespaceData, RowNamespaceDataId};
 use celestia_types::sample::{Sample, SampleId};
 use celestia_types::{Blob, ExtendedHeader, FraudProof};
 use cid::Cid;
@@ -568,6 +568,42 @@ impl P2p {
         Ok(row_namespace_data)
     }
 
+    pub(crate) async fn get_namespace_data<S>(
+        &self,
+        namespace: Namespace,
+        header: &ExtendedHeader,
+        timeout: Option<Duration>,
+        store: &S,
+    ) -> Result<NamespaceData>
+    where
+        S: Store,
+    {
+        let block_height: u64 = header.height().into();
+        let rows_to_fetch: Vec<_> = header
+            .dah
+            .row_roots()
+            .iter()
+            .enumerate()
+            .filter(|(_, row)| row.contains::<NamespacedSha2Hasher>(*namespace))
+            .map(|(n, _)| n as u16)
+            .collect();
+
+        let futs = rows_to_fetch
+            .into_iter()
+            .map(|row_idx| self.get_row_namespace_data(namespace, row_idx, block_height, timeout))
+            .collect::<FuturesOrdered<_>>();
+
+        let rows: Vec<_> = match futs.try_collect().await {
+            Ok(rows) => rows,
+            Err(P2pError::BitswapQueryTimeout) if !store.has_at(block_height).await => {
+                return Err(P2pError::HeaderPruned(block_height));
+            }
+            Err(e) => return Err(e),
+        };
+
+        Ok(NamespaceData { rows })
+    }
+
     /// Request all blobs with provided namespace in the block corresponding to this header
     /// using bitswap protocol.
     pub async fn get_all_blobs<S>(
@@ -593,33 +629,13 @@ impl P2p {
             }
             Err(e) => return Err(e.into()),
         };
+        let namespace_data = self
+            .get_namespace_data(namespace, &header, timeout, store)
+            .await?;
 
-        let app_version = header.app_version()?;
-        let rows_to_fetch: Vec<_> = header
-            .dah
-            .row_roots()
-            .iter()
-            .enumerate()
-            .filter(|(_, row)| row.contains::<NamespacedSha2Hasher>(*namespace))
-            .map(|(n, _)| n as u16)
-            .collect();
+        let shares = namespace_data.rows.iter().flat_map(|row| row.shares.iter());
 
-        let futs = rows_to_fetch
-            .into_iter()
-            .map(|row_idx| self.get_row_namespace_data(namespace, row_idx, block_height, timeout))
-            .collect::<FuturesOrdered<_>>();
-
-        let rows: Vec<_> = match futs.try_collect().await {
-            Ok(rows) => rows,
-            Err(P2pError::BitswapQueryTimeout) if !store.has_at(block_height).await => {
-                return Err(P2pError::HeaderPruned(block_height));
-            }
-            Err(e) => return Err(e),
-        };
-
-        let shares = rows.iter().flat_map(|row| row.shares.iter());
-
-        Ok(Blob::reconstruct_all(shares, app_version)?)
+        Ok(Blob::reconstruct_all(shares, header.app_version()?)?)
     }
 
     /// Get the addresses where [`P2p`] listens on for incoming connections.

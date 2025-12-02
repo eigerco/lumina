@@ -7,26 +7,30 @@ use std::ops::RangeBounds;
 use std::sync::Arc;
 use std::time::Duration;
 
+use libp2p::identity::Keypair;
+use libp2p::swarm::NetworkInfo;
+use libp2p::{Multiaddr, PeerId};
+use tokio::sync::{broadcast, mpsc, watch};
+use tokio_stream::wrappers::ReceiverStream;
+use tokio_util::sync::CancellationToken;
+use tracing::warn;
+
 use blockstore::Blockstore;
+use celestia_types::blob::BlobsAtHeight;
 use celestia_types::hash::Hash;
 use celestia_types::nmt::Namespace;
 use celestia_types::row::Row;
 use celestia_types::row_namespace_data::RowNamespaceData;
 use celestia_types::sample::Sample;
-use celestia_types::{Blob, ExtendedHeader};
-use libp2p::identity::Keypair;
-use libp2p::swarm::NetworkInfo;
-use libp2p::{Multiaddr, PeerId};
-use lumina_utils::executor::{JoinHandle, spawn_cancellable};
-use tokio::sync::watch;
-use tokio_util::sync::CancellationToken;
-use tracing::warn;
+use celestia_types::{Blob, ExtendedHeader, SharesAtHeight};
+use lumina_utils::executor::{JoinHandle, spawn, spawn_cancellable};
 
 use crate::blockstore::{InMemoryBlockstore, SampleBlockstore};
 use crate::daser::{
     DEFAULT_ADDITIONAL_HEADER_SUB_CONCURENCY, DEFAULT_CONCURENCY_LIMIT, Daser, DaserArgs,
 };
 use crate::events::{EventChannel, EventSubscriber, NodeEvent};
+use crate::node::subscriptions::{SubscriptionError, forward_new_blobs, forward_new_shares};
 use crate::p2p::shwap::sample_cid;
 use crate::p2p::{P2p, P2pArgs};
 use crate::pruner::{Pruner, PrunerArgs};
@@ -34,6 +38,7 @@ use crate::store::{InMemoryStore, SamplingMetadata, Store, StoreError};
 use crate::syncer::{Syncer, SyncerArgs};
 
 mod builder;
+pub mod subscriptions;
 
 pub use self::builder::{
     DEFAULT_PRUNING_WINDOW, DEFAULT_PRUNING_WINDOW_IN_MEMORY, NodeBuilder, NodeBuilderError,
@@ -497,6 +502,66 @@ where
             Err(StoreError::NotFound) => Ok(None),
             Err(e) => Err(e.into()),
         }
+    }
+
+    /// Subscribe to new headers received by the node from the network.
+    ///
+    /// Return a stream which will yield all the headers, as they are being received by the
+    /// node, starting from the first header received after the call.
+    pub async fn header_subscribe(&self) -> Result<broadcast::Receiver<ExtendedHeader>> {
+        Ok(self.syncer().subscribe_headers().await?)
+    }
+
+    /// Subscribe to the shares from the namespace, as new headers are received by the node
+    ///
+    /// Return a stream which will yield all the blobs from the namespace, as the new headers
+    /// are being received by the node, starting from the first header received after the call.
+    pub async fn blob_subscribe(
+        &self,
+        namespace: Namespace,
+    ) -> Result<ReceiverStream<Result<BlobsAtHeight, SubscriptionError>>> {
+        let header_receiver = self.header_subscribe().await?;
+        let store = self
+            .store
+            .as_ref()
+            .cloned()
+            .expect("store should be present");
+        let p2p = self.p2p.as_ref().cloned().expect("p2p should be present");
+
+        // We're keeping a small buffer of blobs, so that new headers are cached eagerly
+        // as they come in, giving consumer more time before they are no longer available.
+        // This is mostly relevant for cases where pruning window is set to zero.
+        let (tx, rx) = mpsc::channel(16);
+
+        spawn(async move { forward_new_blobs(namespace, tx, header_receiver, store, p2p).await });
+
+        Ok(ReceiverStream::new(rx))
+    }
+
+    /// Subscribe to the blobs from the namespace, as new headers are received by the node
+    ///
+    /// Return a stream which will yield all the shares from the namespace, as the new headers
+    /// are being received by the node, starting from the first header received after the call.
+    pub async fn namespace_subscribe(
+        &self,
+        namespace: Namespace,
+    ) -> Result<ReceiverStream<Result<SharesAtHeight, SubscriptionError>>> {
+        let header_receiver = self.header_subscribe().await?;
+        let store = self
+            .store
+            .as_ref()
+            .cloned()
+            .expect("store should be present");
+        let p2p = self.p2p.as_ref().cloned().expect("p2p should be present");
+
+        // We're keeping a small buffer of shares, so that new headers are cached eagerly
+        // as they come in, giving consumer more time before they are no longer available.
+        // This is mostly relevant for cases where pruning window is set to zero.
+        let (tx, rx) = mpsc::channel(16);
+
+        spawn(async move { forward_new_shares(namespace, tx, header_receiver, store, p2p).await });
+
+        Ok(ReceiverStream::new(rx))
     }
 }
 

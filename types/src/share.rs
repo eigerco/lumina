@@ -1,11 +1,18 @@
+#[cfg(feature = "uniffi")]
+use std::sync::Arc;
+
 use blockstore::block::{Block, CidError};
 use cid::CidGeneric;
 use multihash::Multihash;
 use nmt_rs::NamespaceMerkleHasher;
 use nmt_rs::simple_merkle::tree::MerkleHash;
 use serde::{Deserialize, Serialize};
+#[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
+use wasm_bindgen::prelude::*;
 
 use crate::consts::appconsts::{self, AppVersion};
+#[cfg(feature = "uniffi")]
+use crate::error::UniffiResult;
 use crate::nmt::{
     NMT_CODEC, NMT_ID_SIZE, NMT_MULTIHASH_CODE, NS_SIZE, Namespace, NamespacedSha2Hasher,
 };
@@ -39,10 +46,28 @@ const SHARE_SIGNER_OFFSET: usize = SHARE_SEQUENCE_LENGTH_OFFSET + appconsts::SEQ
 /// [`Blob::to_shares`]: crate::Blob::to_shares
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(try_from = "RawShare", into = "RawShare")]
+#[cfg_attr(
+    all(feature = "wasm-bindgen", target_arch = "wasm32"),
+    wasm_bindgen(inspectable)
+)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Object))]
 pub struct Share {
     /// A raw data of the share.
     data: [u8; appconsts::SHARE_SIZE],
     is_parity: bool,
+}
+
+/// A list of shares that were published at particular height.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(
+    all(feature = "wasm-bindgen", target_arch = "wasm32"),
+    wasm_bindgen(getter_with_clone, inspectable)
+)]
+pub struct SharesAtHeight {
+    /// height the shares were published at
+    pub height: u64,
+    /// shares published
+    pub shares: Vec<Share>,
 }
 
 impl Share {
@@ -193,6 +218,87 @@ impl Share {
     /// This will include also the [`InfoByte`] and the `sequence length`.
     pub fn to_vec(&self) -> Vec<u8> {
         self.as_ref().to_vec()
+    }
+}
+
+#[cfg(feature = "uniffi")]
+#[uniffi::export]
+impl Share {
+    /// Create a new [`Share`] from raw bytes.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if data provided isn't share sized or
+    /// if the namespace encoded in the share is invalid.
+    #[uniffi::constructor(name = "from_raw")]
+    pub fn uniffi_from_raw(data: &[u8]) -> UniffiResult<Self> {
+        Ok(Share::from_raw(data)?)
+    }
+
+    /// Create a new [`Share`] within [`Namespace::PARITY_SHARE`] from raw bytes.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if provided data isn't share sized
+    #[uniffi::constructor(name = "parity")]
+    pub fn uniffi_parity(data: &[u8]) -> UniffiResult<Share> {
+        Ok(Share::parity(data)?)
+    }
+
+    /// Check if share is valid in given [`AppVersion`]
+    #[uniffi::method(name = "validate")]
+    pub fn uniffi_validate(&self, app: AppVersion) -> UniffiResult<()> {
+        Ok(self.validate(app)?)
+    }
+
+    /// Returns true if share contains parity data.
+    #[uniffi::method(name = "is_parity")]
+    pub fn uniffi_is_parity(&self) -> bool {
+        self.is_parity()
+    }
+
+    /// Get the [`Namespace`] the [`Share`] belongs to.
+    #[uniffi::method(name = "namespace")]
+    pub fn uniffi_namespace(&self) -> Namespace {
+        self.namespace()
+    }
+
+    /// Return Share's `InfoByte`
+    ///
+    /// Returns `None` if share is parity share
+    #[uniffi::method(name = "info_byte")]
+    pub fn uniffi_info_byte(&self) -> Option<Arc<InfoByte>> {
+        self.info_byte().map(Arc::new)
+    }
+
+    /// For first share in a sequence, return sequence length, `None` for continuation shares
+    #[uniffi::method(name = "sequence_length")]
+    pub fn uniffi_sequence_length(&self) -> Option<u32> {
+        self.sequence_length()
+    }
+
+    /// Get the `signer` part of share if it's first in the sequence of sparse shares and `share_version` supprots
+    /// it. Otherwise returns `None`
+    #[uniffi::method(name = "signer")]
+    pub fn uniffi_signer(&self) -> Option<AccAddress> {
+        self.signer()
+    }
+
+    /// Get the payload of the share.
+    ///
+    /// Payload is the data that shares contain after all its metadata,
+    /// e.g. blob data in sparse shares.
+    ///
+    /// Returns `None` if share is parity share
+    #[uniffi::method(name = "payload")]
+    pub fn uniffi_payload(&self) -> Option<Vec<u8>> {
+        self.payload().map(|p| p.to_vec())
+    }
+
+    /// Get the underlying share data.
+    #[uniffi::method(name = "data")]
+    pub fn uniffi_data(&self) -> Vec<u8> {
+        self.data.to_vec()
     }
 }
 

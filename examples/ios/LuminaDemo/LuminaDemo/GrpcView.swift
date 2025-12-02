@@ -115,7 +115,7 @@ class GrpcViewModel : ObservableObject {
     }
 }
 
-enum GrpcError : Error {
+enum GrpcError: Error {
     case grpcClientNotReady
 }
 
