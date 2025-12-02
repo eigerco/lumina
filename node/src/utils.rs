@@ -1,7 +1,7 @@
 use std::io;
 use std::time::Duration;
 
-use futures::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use futures::{AsyncRead, AsyncReadExt};
 use libp2p::gossipsub::IdentTopic;
 use libp2p::multiaddr::{Multiaddr, Protocol};
 use libp2p::{PeerId, StreamProtocol};

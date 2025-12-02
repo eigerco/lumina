@@ -6,7 +6,7 @@ use std::time::Duration;
 use async_trait::async_trait;
 use celestia_proto::p2p::pb::{HeaderRequest, HeaderResponse};
 use celestia_types::ExtendedHeader;
-use futures::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use futures::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use libp2p::core::Endpoint;
 use libp2p::core::transport::PortUse;
 use libp2p::request_response::{self, Codec, InboundFailure, OutboundFailure, ProtocolSupport};
@@ -16,7 +16,7 @@ use libp2p::swarm::{
     NetworkBehaviour, SubstreamProtocol, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use libp2p::{Multiaddr, PeerId, StreamProtocol};
-use lumina_utils::time::{Instant, timeout};
+use lumina_utils::time::timeout;
 use prost::Message;
 use tracing::{debug, instrument, warn};
 

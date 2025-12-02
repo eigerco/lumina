@@ -1,9 +1,11 @@
+// TODO: remove this
+#![allow(unused)]
+
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use celestia_types::row::{Row, RowId};
-use either::Either;
 use futures::AsyncWrite;
 use libp2p::core::Endpoint;
 use libp2p::core::transport::PortUse;
@@ -11,9 +13,8 @@ use libp2p::floodsub::Topic;
 use libp2p::request_response::{self, ProtocolSupport};
 use libp2p::swarm::handler::ConnectionEvent;
 use libp2p::swarm::{
-    ConnectionDenied, ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerSelect,
-    ConnectionId, FromSwarm, NetworkBehaviour, SubstreamProtocol, THandler, THandlerInEvent,
-    THandlerOutEvent, ToSwarm,
+    ConnectionDenied, ConnectionHandler, ConnectionHandlerEvent, ConnectionId, FromSwarm,
+    NetworkBehaviour, SubstreamProtocol, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use libp2p::{Multiaddr, PeerId, floodsub};
 
