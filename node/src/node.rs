@@ -402,7 +402,7 @@ where
             .await?;
 
         // We want to immediately remove the sample from blockstore
-        // but **only if** it wasn't chosen for DASing. Otherwise we could
+        // but **only if** it wasn't chosen for DASing. Otherwise, we could
         // accidentally remove samples needed for the block reconstruction.
         //
         // There's a small possibility of permanently storing this sample if

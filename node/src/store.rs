@@ -138,16 +138,16 @@ pub trait Store: Send + Sync + Debug {
     /// Insert a range of headers into the store.
     ///
     /// New insertion should pass all the constraints in [`BlockRanges::check_insertion_constraints`],
-    /// additionaly it should be [`ExtendedHeader::verify`]ed against neighbor headers.
+    /// additionally it should be [`ExtendedHeader::verify`]ed against neighbour headers.
     async fn insert<R>(&self, headers: R) -> Result<()>
     where
         R: TryInto<VerifiedExtendedHeaders> + Send,
         <R as TryInto<VerifiedExtendedHeaders>>::Error: Display;
 
-    /// Returns a list of header ranges currenty held in store.
+    /// Returns a list of header ranges currently held in store.
     async fn get_stored_header_ranges(&self) -> Result<BlockRanges>;
 
-    /// Returns a list of blocks that were sampled and their header is currenty held in store.
+    /// Returns a list of blocks that were sampled and their header is currently held in store.
     async fn get_sampled_ranges(&self) -> Result<BlockRanges>;
 
     /// Returns a list of headers that were pruned until now.
@@ -207,8 +207,8 @@ pub enum StoreInsertionError {
     NeighborsVerificationFailed(String),
 
     /// Store constraints are not met.
-    #[error("Contraints not met: {0}")]
-    ContraintsNotMet(BlockRangesError),
+    #[error("Constraints not met: {0}")]
+    ConstraintsNotMet(BlockRangesError),
 
     // TODO: Same hash for two different heights is not really possible
     // and `ExtendedHeader::validate` would return an error.
@@ -557,7 +557,7 @@ mod tests {
         s.insert(header101.clone()).await.unwrap();
 
         let error = match s.insert(header101).await {
-            Err(StoreError::InsertionFailed(StoreInsertionError::ContraintsNotMet(e))) => e,
+            Err(StoreError::InsertionFailed(StoreInsertionError::ConstraintsNotMet(e))) => e,
             res => panic!("Invalid result: {res:?}"),
         };
 
@@ -585,7 +585,7 @@ mod tests {
         let header30 = generator.next_of(&header29);
 
         let error = match s.insert(header30).await {
-            Err(StoreError::InsertionFailed(StoreInsertionError::ContraintsNotMet(e))) => e,
+            Err(StoreError::InsertionFailed(StoreInsertionError::ConstraintsNotMet(e))) => e,
             res => panic!("Invalid result: {res:?}"),
         };
         assert_eq!(error, BlockRangesError::BlockRangeOverlap(30..=30, 30..=30));

@@ -24,10 +24,10 @@ use crate::store::utils::VerifiedExtendedHeaders;
 use crate::store::{Result, SamplingMetadata, Store, StoreError, StoreInsertionError};
 use crate::utils::{NamedLock, NamedLockError};
 
-/// indexeddb version, needs to be incremented on every schema schange
+/// IndexedDB version, needs to be incremented on every schema change
 const DB_VERSION: u32 = 5;
 
-// Data stores (SQL table analogue) used in IndexedDb
+// Data stores (SQL table analogue) used in IndexedDB
 const HEADER_STORE_NAME: &str = "headers";
 const SAMPLING_STORE_NAME: &str = "sampling";
 const RANGES_STORE_NAME: &str = "ranges";
@@ -585,7 +585,7 @@ async fn verify_against_neighbours(
 }
 
 /// Get schema version from the db, or perform a heuristic to try to determine
-/// version used (for verisons <4).
+/// version used (for versions <4).
 async fn detect_schema_version(db: &Rexie) -> Result<Option<u32>> {
     let tx = db.transaction(
         &[HEADER_STORE_NAME, RANGES_STORE_NAME, SCHEMA_STORE_NAME],
@@ -706,7 +706,7 @@ async fn insert_tx_op(
     let headers_range = head.height().value()..=tail.height().value();
     let (prev_exists, next_exists) = header_ranges
         .check_insertion_constraints(&headers_range)
-        .map_err(StoreInsertionError::ContraintsNotMet)?;
+        .map_err(StoreInsertionError::ConstraintsNotMet)?;
 
     // header range is already internally verified against itself in `P2p::get_unverified_header_ranges`
     verify_against_neighbours(
@@ -921,13 +921,13 @@ async fn migrate_v4_to_v5(db: &Rexie) -> Result<()> {
     let schema_store = tx.store(SCHEMA_STORE_NAME)?;
     let ranges_store = tx.store(RANGES_STORE_NAME)?;
 
-    // There are two chages in v5:
+    // There are two changes in v5:
     //
     // * Removal of `SamplingStatus` in `SamplingMetadata`
     // * Rename of sampled ranges database key
     //
     // For the first one we don't need to take any actions because it will
-    // be ingored by the deserializer.
+    // be ignored by the deserializer.
     let sampled_ranges = get_ranges(&ranges_store, v4::SAMPLED_RANGES_KEY).await?;
     set_ranges(&ranges_store, SAMPLED_RANGES_KEY, &sampled_ranges).await?;
     ranges_store
@@ -1121,9 +1121,9 @@ pub mod tests {
 
         const PREVIOUS_DB_VERSION: u32 = 1;
 
-        // this fn sets upt the store manually with v1 schema (original, ExtendedHeader only),
-        // and fills it with `hs` headers. It is a caller responsibility to make sure provided
-        // headers are correct and in order.
+        // Set up the store manually with v1 schema (original, ExtendedHeader only), and fill
+        // it with `hs` headers. It is a caller responsibility to make sure provided headers
+        // are correct and in order.
         async fn init_store(name: &str, hs: Vec<ExtendedHeader>) {
             let rexie = Rexie::builder(name)
                 .version(PREVIOUS_DB_VERSION)
@@ -1226,7 +1226,7 @@ pub mod tests {
         async fn migration_test() {
             let store_name = new_indexed_db_store_name().await;
 
-            // Prepare store
+            // Prepare the store
             init_store(&store_name).await;
 
             // Migrate and check

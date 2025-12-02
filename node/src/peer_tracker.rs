@@ -215,7 +215,7 @@ impl PeerTracker {
     ///
     /// Tag allows having different reasons for protection without interfering with one another.
     ///
-    /// Returns `true` if peer changes from unprotected state to protected.
+    /// Returns `true` if the peer changes state from unprotected to protected.
     pub(crate) fn protect(&mut self, peer_id: &PeerId, tag: u32) -> bool {
         let peer = self
             .peers
@@ -235,7 +235,7 @@ impl PeerTracker {
     ///
     /// Tag allows having different reasons for protection without interfering with one another.
     ///
-    /// Returns `true` if peer changes from protected state to unprotected.
+    /// Returns `true` if the peer changes state from protected to unprotected.
     pub(crate) fn unprotect(&mut self, peer_id: &PeerId, tag: u32) -> bool {
         let Some(peer) = self.peers.get_mut(peer_id) else {
             return false;
@@ -589,7 +589,7 @@ mod tests {
         assert!(!tracker.unprotect(&peer_id, 0));
         assert_eq!(tracker.protected_len(0), 0);
 
-        // Now state changed from unprotected to protected
+        // Now the state changes from unprotected to protected
         assert!(!tracker.is_protected_with_tag(&peer_id, 0));
         assert!(tracker.protect(&peer_id, 0));
         assert!(tracker.is_protected(&peer_id));

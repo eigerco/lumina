@@ -69,7 +69,7 @@ impl RedbStore {
         RedbStore::new(Arc::new(db)).await
     }
 
-    /// Open an in memory [`redb`] store.
+    /// Open an in-memory [`redb`] store.
     pub async fn in_memory() -> Result<Self> {
         let db = Database::builder()
             .create_with_backend(redb::backends::InMemoryBackend::new())
@@ -176,7 +176,7 @@ impl RedbStore {
 
     /// Execute a write transaction.
     ///
-    /// If closure returns an error the transaction is aborted, otherwise commited.
+    /// If closure returns an error the transaction is aborted, otherwise committed.
     async fn write_tx<F, T>(&self, f: F) -> Result<T>
     where
         F: FnOnce(&mut WriteTransaction) -> Result<T> + Send + 'static,
@@ -297,7 +297,7 @@ impl RedbStore {
 
             let (prev_exists, next_exists) = header_ranges
                 .check_insertion_constraints(&headers_range)
-                .map_err(StoreInsertionError::ContraintsNotMet)?;
+                .map_err(StoreInsertionError::ConstraintsNotMet)?;
 
             verify_against_neighbours(
                 &headers_table,
@@ -829,13 +829,13 @@ fn migrate_v2_to_v3(
     debug_assert_eq!(version, 2);
     warn!("Migrating DB schema from v2 to v3");
 
-    // There are two chages in v3:
+    // There are two changes in v3:
     //
     // * Removal of `SamplingStatus` in `SamplingMetadata`
     // * Rename of sampled ranges database key
     //
     // For the first one we don't need to take any actions because it will
-    // be ingored by the deserializer.
+    // be ignored by the deserializer.
     let mut ranges_table = tx.open_table(RANGES_TABLE)?;
     let sampled_ranges = get_ranges(&ranges_table, v2::SAMPLED_RANGES_KEY)?;
     set_ranges(&mut ranges_table, SAMPLED_RANGES_KEY, &sampled_ranges)?;

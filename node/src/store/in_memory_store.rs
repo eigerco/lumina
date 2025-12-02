@@ -193,7 +193,7 @@ impl InMemoryStoreInner {
         let (prev_exists, next_exists) = self
             .header_ranges
             .check_insertion_constraints(&headers_range)
-            .map_err(StoreInsertionError::ContraintsNotMet)?;
+            .map_err(StoreInsertionError::ConstraintsNotMet)?;
 
         // header range is already internally verified against itself in `P2p::get_unverified_header_ranges`
         self.verify_against_neighbours(prev_exists.then_some(head), next_exists.then_some(tail))?;

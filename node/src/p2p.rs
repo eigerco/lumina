@@ -2,7 +2,7 @@
 //!
 //! It is a high level integration of various p2p protocols used by Celestia nodes.
 //! Currently supporting:
-//! - libp2p-identitfy
+//! - libp2p-identify
 //! - libp2p-kad
 //! - libp2p-autonat
 //! - libp2p-ping
@@ -112,7 +112,7 @@ pub enum P2pError {
     #[error("Bitswap: {0}")]
     Bitswap(#[from] beetswap::Error),
 
-    /// ProtoBuf message failed to be decoded.
+    /// Protobuf message failed to be decoded.
     #[error("ProtoBuf decoding error: {0}")]
     ProtoDecodeFailed(#[from] tendermint_proto::Error),
 
@@ -326,7 +326,7 @@ impl P2p {
 
     /// Stop the worker.
     pub fn stop(&self) {
-        // Singal the Worker to stop.
+        // Signal the Worker to stop.
         self.cancellation_token.cancel();
     }
 
