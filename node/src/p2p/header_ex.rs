@@ -29,7 +29,7 @@ use crate::p2p::header_ex::client::HeaderExClientHandler;
 use crate::p2p::header_ex::server::HeaderExServerHandler;
 use crate::peer_tracker::PeerTracker;
 use crate::store::Store;
-use crate::utils::{OneshotResultSender, protocol_id};
+use crate::utils::{OneshotResultSender, protocol_id, read_up_to};
 
 /// Size limit of a request in bytes
 const REQUEST_SIZE_LIMIT: usize = 1024;
@@ -473,44 +473,6 @@ impl Codec for HeaderCodec {
 
         Ok(())
     }
-}
-
-/// Reads up to `size_limit` within `time_limit`.
-async fn read_up_to<T>(io: &mut T, size_limit: usize, time_limit: Duration) -> io::Result<Vec<u8>>
-where
-    T: AsyncRead + Unpin + Send,
-{
-    let mut buf = vec![0u8; size_limit];
-    let mut read_len = 0;
-    let now = Instant::now();
-
-    loop {
-        if read_len == buf.len() {
-            // No empty space. Buffer is full.
-            break;
-        }
-
-        let Some(time_limit) = time_limit.checked_sub(now.elapsed()) else {
-            break;
-        };
-
-        let len = match timeout(time_limit, io.read(&mut buf[read_len..])).await {
-            Ok(Ok(len)) => len,
-            Ok(Err(e)) => return Err(e),
-            Err(_) => break,
-        };
-
-        if len == 0 {
-            // EOF
-            break;
-        }
-
-        read_len += len;
-    }
-
-    buf.truncate(read_len);
-
-    Ok(buf)
 }
 
 fn parse_delimiter(mut buf: &[u8]) -> Option<(usize, &[u8])> {

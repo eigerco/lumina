@@ -37,7 +37,7 @@ pub const ROW_ID_CODEC: u64 = 0x7800;
 /// EdsId is excluded from shwap operating on top of bitswap due to possible
 /// EDS sizes exceeding bitswap block limits.
 #[derive(Debug, PartialEq, Clone, Copy)]
-struct EdsId {
+pub struct EdsId {
     height: u64,
 }
 
@@ -166,6 +166,42 @@ impl From<Row> for RawRow {
     }
 }
 
+impl EdsId {
+    pub fn new(height: u64) -> Result<Self> {
+        if height == 0 {
+            return Err(Error::ZeroBlockHeight);
+        }
+
+        Ok(EdsId { height })
+    }
+
+    /// A height of the block which contains the data.
+    pub fn block_height(&self) -> u64 {
+        self.height
+    }
+
+    pub fn encode(&self, bytes: &mut BytesMut) {
+        bytes.reserve(EDS_ID_SIZE);
+        bytes.put_u64(self.height);
+    }
+
+    pub fn decode(mut buffer: &[u8]) -> Result<Self, CidError> {
+        if buffer.len() != EDS_ID_SIZE {
+            // TODO: change error
+            return Err(CidError::InvalidMultihashLength(buffer.len()));
+        }
+
+        let height = buffer.get_u64();
+
+        if height == 0 {
+            return Err(CidError::InvalidCid("Zero block height".to_string()));
+        }
+
+        // TODO: use new after changing error type
+        Ok(EdsId { height })
+    }
+}
+
 impl RowId {
     /// Create a new [`RowId`] for the particular block.
     ///
@@ -173,13 +209,9 @@ impl RowId {
     ///
     /// This function will return an error if the block height is invalid.
     pub fn new(index: u16, height: u64) -> Result<Self> {
-        if height == 0 {
-            return Err(Error::ZeroBlockHeight);
-        }
-
         Ok(Self {
             index,
-            eds_id: EdsId { height },
+            eds_id: EdsId::new(height)?,
         })
     }
 
@@ -195,28 +227,22 @@ impl RowId {
         self.index
     }
 
-    pub(crate) fn encode(&self, bytes: &mut BytesMut) {
+    pub fn encode(&self, bytes: &mut BytesMut) {
         bytes.reserve(ROW_ID_SIZE);
-        bytes.put_u64(self.block_height());
+        self.eds_id.encode(bytes);
         bytes.put_u16(self.index);
     }
 
-    pub(crate) fn decode(mut buffer: &[u8]) -> Result<Self, CidError> {
+    pub fn decode(buffer: &[u8]) -> Result<Self, CidError> {
         if buffer.len() != ROW_ID_SIZE {
             return Err(CidError::InvalidMultihashLength(buffer.len()));
         }
 
-        let height = buffer.get_u64();
-        let index = buffer.get_u16();
+        let (eds_bytes, mut row_bytes) = buffer.split_at(EDS_ID_SIZE);
+        let eds_id = EdsId::decode(eds_bytes)?;
+        let index = row_bytes.get_u16();
 
-        if height == 0 {
-            return Err(CidError::InvalidCid("Zero block height".to_string()));
-        }
-
-        Ok(Self {
-            eds_id: EdsId { height },
-            index,
-        })
+        Ok(Self { eds_id, index })
     }
 }
 
