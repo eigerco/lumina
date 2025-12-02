@@ -48,7 +48,7 @@ use tracing::{debug, info, instrument, trace, warn};
 mod connection_control;
 mod header_ex;
 pub(crate) mod header_session;
-mod shr_ex;
+mod shrex;
 pub(crate) mod shwap;
 mod swarm;
 mod swarm_manager;
@@ -689,7 +689,7 @@ where
 {
     bitswap: beetswap::Behaviour<MAX_MH_SIZE, B>,
     header_ex: header_ex::Behaviour<S>,
-    shr_ex: shr_ex::Behaviour<S>,
+    shr_ex: shrex::Behaviour<S>,
     gossipsub: gossipsub::Behaviour,
 }
 
@@ -741,7 +741,7 @@ where
             header_store: args.store.clone(),
         });
 
-        let shr_ex = shr_ex::Behaviour::new(shr_ex::Config {
+        let shr_ex = shrex::Behaviour::new(shrex::Config {
             network_id: &args.network_id,
             local_peer_id: args.local_keypair.public().into(),
             header_store: args.store.clone(),
