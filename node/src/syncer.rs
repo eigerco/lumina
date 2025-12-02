@@ -721,6 +721,13 @@ where
 {
     p2p.wait_connected_trusted().await?;
 
+    // Wait a bit to increase the possibility of multiple
+    // trusted nodes to be connected. This benefits the
+    // "best head" algorithm of HeaderEx. In test cases
+    // this is not needed.
+    #[cfg(not(test))]
+    sleep(Duration::from_secs(1)).await;
+
     if !*event_reported {
         event_pub.send(NodeEvent::FetchingHeadHeaderStarted);
         *event_reported = true;

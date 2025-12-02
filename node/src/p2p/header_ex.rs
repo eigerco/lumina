@@ -93,6 +93,13 @@ pub enum HeaderExError {
     RequestCancelled,
 }
 
+#[derive(Debug)]
+pub(crate) enum Event {
+    SchedulePendingRequests,
+    NeedTrustedPeers,
+    NeedArchivalPeers,
+}
+
 impl<S> HeaderExBehaviour<S>
 where
     S: Store + 'static,
@@ -116,10 +123,13 @@ where
         &mut self,
         request: HeaderRequest,
         respond_to: OneshotResultSender<Vec<ExtendedHeader>, P2pError>,
-        peer_tracker: &PeerTracker,
     ) {
+        self.client_handler.on_send_request(request, respond_to);
+    }
+
+    pub(crate) fn schedule_pending_requests(&mut self, peer_tracker: &PeerTracker) {
         self.client_handler
-            .on_send_request(&mut self.req_resp, request, respond_to, peer_tracker);
+            .schedule_pending_requests(&mut self.req_resp, peer_tracker);
     }
 
     pub(crate) fn stop(&mut self) {
@@ -130,13 +140,13 @@ where
     fn on_to_swarm(
         &mut self,
         ev: ToSwarm<ReqRespEvent, THandlerInEvent<ReqRespBehaviour>>,
-    ) -> Option<ToSwarm<(), THandlerInEvent<Self>>> {
+    ) -> Option<ToSwarm<Event, THandlerInEvent<Self>>> {
         match ev {
             ToSwarm::GenerateEvent(ev) => {
                 self.on_req_resp_event(ev);
                 None
             }
-            _ => Some(ev.map_out(|_| ())),
+            _ => Some(ev.map_out(|_| unreachable!("GenerateEvent handled"))),
         }
     }
 
@@ -212,7 +222,7 @@ where
     S: Store + 'static,
 {
     type ConnectionHandler = ConnHandler;
-    type ToSwarm = ();
+    type ToSwarm = Event;
 
     fn handle_established_inbound_connection(
         &mut self,
@@ -297,8 +307,8 @@ where
                 continue;
             }
 
-            if self.client_handler.poll(cx).is_ready() {
-                continue;
+            if let Poll::Ready(ev) = self.client_handler.poll(cx) {
+                return Poll::Ready(ToSwarm::GenerateEvent(ev));
             }
 
             if self.server_handler.poll(cx, &mut self.req_resp).is_ready() {
