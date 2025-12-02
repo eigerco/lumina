@@ -522,7 +522,7 @@ mod tests {
     use super::*;
     use bytes::BytesMut;
     use celestia_proto::p2p::pb::header_request::Data;
-    use futures::io::{Cursor, Error};
+    use futures::io::{AsyncReadExt, Cursor, Error};
     use lumina_utils::test_utils::async_test;
     use prost::encode_length_delimiter;
     use std::io::ErrorKind;
