@@ -276,6 +276,7 @@ mod tests {
         ));
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     #[tokio::test]
     async fn single_url_builds_successfully() {
         let result = GrpcClientBuilder::new()
@@ -285,6 +286,7 @@ mod tests {
         assert!(result.is_ok());
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     #[tokio::test]
     async fn multiple_urls_build_successfully() {
         let result = GrpcClientBuilder::new()
