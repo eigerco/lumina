@@ -154,7 +154,7 @@ impl GrpcClientBuilder {
             })
             .collect::<Result<Vec<_>, _>>()?;
 
-        let transports: std::sync::Arc<[BoxedTransport]> = transports.into();
+        let transports = std::sync::Arc::new(tokio::sync::Mutex::new(transports));
 
         let signer_config = self.signer_kind.map(TryInto::try_into).transpose()?;
 

@@ -30,8 +30,11 @@ impl GrpcClient {
     pub fn with_url(url: String) -> GrpcClientBuilder {
         crate::GrpcClientBuilder::new().url(url).into()
     }
-
-    /// Create a builder for [`GrpcClient`] connected to `url`
+    
+    /// Create a builder for [`GrpcClient`] with multiple URL endpoints for fallback support.
+    ///
+    /// When multiple endpoints are configured, the client will automatically
+    /// fall back to the next endpoint if a network-related error occurs.
     #[wasm_bindgen(js_name = withUrls)]
     pub fn with_urls(urls: Vec<String>) -> GrpcClientBuilder {
         let mut builder = crate::GrpcClientBuilder::new();

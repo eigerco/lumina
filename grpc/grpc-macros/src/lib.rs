@@ -61,8 +61,13 @@ impl GrpcMethod {
                     const MAX_MSG_SIZE: usize = 256 * 1024 * 1024;
 
                     let mut last_error: Option<crate::Error> = None;
-                    for transport in transports.iter() {
-                        let transport = transport.clone();
+
+                    let transport_snapshot: Vec<_> = {
+                        let guard = transports.lock().await;
+                        guard.iter().cloned().collect()
+                    };
+
+                    for (idx, transport) in transport_snapshot.into_iter().enumerate() {
                         let transport_url = transport.metadata.url.clone();
                         let mut client = #grpc_client_struct::new(transport)
                             .max_decoding_message_size(MAX_MSG_SIZE)
@@ -82,6 +87,14 @@ impl GrpcMethod {
 
                         match fut.await {
                             Ok(resp) => {
+                                // If we succeeded on a fallback endpoint (idx > 0),
+                                // move it to the front for future requests
+                                if idx > 0 {
+                                    let mut guard = transports.lock().await;
+                                    if guard.len() > idx {
+                                        guard.swap(0, idx);
+                                    }
+                                }
                                 return crate::grpc::FromGrpcResponse::try_from_response(resp.into_inner());
                             }
                             Err(e) => {

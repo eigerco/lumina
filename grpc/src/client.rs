@@ -99,7 +99,7 @@ pub struct GrpcClient {
 }
 
 struct GrpcClientInner {
-    transports: Arc<[BoxedTransport]>,
+    transports: Arc<Mutex<Vec<BoxedTransport>>>,
     account: Option<AccountState>,
     chain_state: OnceCell<ChainState>,
     context: Context,
@@ -108,7 +108,7 @@ struct GrpcClientInner {
 impl GrpcClient {
     /// Create a new client wrapping given transports
     pub(crate) fn new(
-        transports: Arc<[BoxedTransport]>,
+        transports: Arc<Mutex<Vec<BoxedTransport>>>,
         account: Option<AccountState>,
         context: Context,
     ) -> Self {
