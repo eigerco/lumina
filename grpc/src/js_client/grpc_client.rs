@@ -30,7 +30,7 @@ impl GrpcClient {
     pub fn with_url(url: String) -> GrpcClientBuilder {
         crate::GrpcClientBuilder::new().url(url).into()
     }
-    
+
     /// Create a builder for [`GrpcClient`] with multiple URL endpoints for fallback support.
     ///
     /// When multiple endpoints are configured, the client will automatically
