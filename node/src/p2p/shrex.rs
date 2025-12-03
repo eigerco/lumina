@@ -1,26 +1,35 @@
+// TODO: remove this
+#![allow(unused)]
+
 use std::collections::{HashMap, HashSet};
-use std::io;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
-use async_trait::async_trait;
-use either::Either;
-use futures::{AsyncRead, AsyncWrite};
+use celestia_types::row::{Row, RowId};
+use futures::AsyncWrite;
 use libp2p::core::Endpoint;
 use libp2p::core::transport::PortUse;
 use libp2p::identity::Keypair;
-use libp2p::request_response::{self, Codec, ProtocolSupport};
+use libp2p::request_response::{self, ProtocolSupport};
 use libp2p::swarm::handler::ConnectionEvent;
 use libp2p::swarm::{
-    ConnectionDenied, ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerSelect,
-    ConnectionId, FromSwarm, NetworkBehaviour, SubstreamProtocol, THandler, THandlerInEvent,
-    THandlerOutEvent, ToSwarm,
+    ConnectionDenied, ConnectionHandler, ConnectionHandlerEvent, ConnectionId, FromSwarm,
+    NetworkBehaviour, SubstreamProtocol, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
-use libp2p::{Multiaddr, PeerId, StreamProtocol, gossipsub};
+use libp2p::{Multiaddr, PeerId, gossipsub};
+
+mod client;
+mod codec;
+
+use self::client::Client;
+use self::codec::RowCodec;
 
 use crate::p2p::P2pError;
 use crate::store::Store;
 use crate::utils::protocol_id;
+
+type RowReqRespEvent = request_response::Event<RowId, Row>;
+type RowReqRespMessage = request_response::Message<RowId, Row>;
 
 pub(crate) struct Config<'a, S> {
     pub network_id: &'a str,
@@ -32,7 +41,14 @@ pub(crate) struct Behaviour<S>
 where
     S: Store + 'static,
 {
-    req_resp: request_response::Behaviour<TodoCodec>,
+    inner: Inner,
+    _client: Client,
+    _da_pools: HashMap<u64, HashSet<PeerId>>,
+    _store: Arc<S>,
+}
+
+#[derive(NetworkBehaviour)]
+pub(crate) struct Inner {
     // TODO: this is a workaround, should be replaced with a real floodsub
     // rust-libp2p implementation of the floodsub isn't compliant with a spec,
     // so we work that around by using a gossipsub configured with floodsub support.
@@ -42,8 +58,7 @@ where
     // we cannot be isolated in a way described in a shrex-sub spec:
     // https://github.com/celestiaorg/celestia-node/blob/76db37cc4ac09e892122a081b8bea24f87899f11/specs/src/shrex/shrex-sub.md#why-not-gossipsub
     shrex_sub: gossipsub::Behaviour,
-    _da_pools: HashMap<u64, HashSet<PeerId>>,
-    _store: Arc<S>,
+    row_req_resp: request_response::Behaviour<RowCodec>,
 }
 
 #[derive(Debug)]
@@ -81,17 +96,95 @@ where
             .map_err(|e| P2pError::GossipsubInit(e.to_string()))?;
 
         Ok(Self {
-            shrex_sub,
-            req_resp: request_response::Behaviour::new(
-                [(
-                    protocol_id(config.network_id, "/todo/v0.0.1"),
-                    ProtocolSupport::Full,
-                )],
-                request_response::Config::default(),
-            ),
+            inner: Inner {
+                shrex_sub,
+                row_req_resp: request_response::Behaviour::new(
+                    [(
+                        protocol_id(config.network_id, "/shrex/v0.1.0/row_v0"),
+                        ProtocolSupport::Full,
+                    )],
+                    request_response::Config::default(),
+                ),
+            },
+            _client: Client::new(),
             _da_pools: HashMap::new(),
             _store: config.header_store,
         })
+    }
+
+    fn on_to_swarm(
+        &mut self,
+        ev: ToSwarm<InnerEvent, THandlerInEvent<Inner>>,
+    ) -> Option<ToSwarm<Event, THandlerInEvent<Self>>> {
+        match ev {
+            ToSwarm::GenerateEvent(InnerEvent::ShrexSub(ev)) => {
+                // TODO: Handle shrex sub events and do not propagate them
+                None
+            }
+            ToSwarm::GenerateEvent(InnerEvent::RowReqResp(ev)) => {
+                self.on_row_req_resp_event(ev);
+                None
+            }
+            _ => Some(ev.map_out(|_| unreachable!("GenerateEvent handled"))),
+        }
+    }
+
+    fn on_row_req_resp_event(&mut self, ev: RowReqRespEvent) {
+        match ev {
+            // Received a response for an ongoing outbound request
+            RowReqRespEvent::Message {
+                message:
+                    RowReqRespMessage::Response {
+                        request_id,
+                        response,
+                    },
+                peer,
+                ..
+            } => {
+                todo!();
+            }
+
+            // Failure while client requests
+            RowReqRespEvent::OutboundFailure {
+                peer,
+                request_id,
+                error,
+                ..
+            } => {
+                todo!();
+            }
+
+            // Received new inbound request
+            RowReqRespEvent::Message {
+                message:
+                    RowReqRespMessage::Request {
+                        request_id,
+                        request,
+                        channel,
+                    },
+                peer,
+                ..
+            } => {
+                todo!();
+            }
+
+            // Response to inbound request was sent
+            RowReqRespEvent::ResponseSent {
+                peer, request_id, ..
+            } => {
+                todo!();
+            }
+
+            // Failure while server responds
+            RowReqRespEvent::InboundFailure {
+                peer,
+                request_id,
+                error,
+                ..
+            } => {
+                todo!();
+            }
+        }
     }
 }
 
@@ -99,7 +192,7 @@ impl<S> NetworkBehaviour for Behaviour<S>
 where
     S: Store + 'static,
 {
-    type ConnectionHandler = ConnHandler;
+    type ConnectionHandler = InnerConnectionHandler;
     type ToSwarm = Event;
 
     fn handle_established_inbound_connection(
@@ -109,20 +202,12 @@ where
         local_addr: &Multiaddr,
         remote_addr: &Multiaddr,
     ) -> Result<Self::ConnectionHandler, ConnectionDenied> {
-        Ok(ConnHandler(ConnectionHandler::select(
-            self.shrex_sub.handle_established_inbound_connection(
-                connection_id,
-                peer,
-                local_addr,
-                remote_addr,
-            )?,
-            self.req_resp.handle_established_inbound_connection(
-                connection_id,
-                peer,
-                local_addr,
-                remote_addr,
-            )?,
-        )))
+        self.inner.handle_established_inbound_connection(
+            connection_id,
+            peer,
+            local_addr,
+            remote_addr,
+        )
     }
 
     fn handle_established_outbound_connection(
@@ -133,22 +218,13 @@ where
         role_override: Endpoint,
         port_use: PortUse,
     ) -> Result<Self::ConnectionHandler, ConnectionDenied> {
-        Ok(ConnHandler(ConnectionHandler::select(
-            self.shrex_sub.handle_established_outbound_connection(
-                connection_id,
-                peer,
-                addr,
-                role_override,
-                port_use,
-            )?,
-            self.req_resp.handle_established_outbound_connection(
-                connection_id,
-                peer,
-                addr,
-                role_override,
-                port_use,
-            )?,
-        )))
+        self.inner.handle_established_outbound_connection(
+            connection_id,
+            peer,
+            addr,
+            role_override,
+            port_use,
+        )
     }
 
     fn handle_pending_inbound_connection(
@@ -157,11 +233,8 @@ where
         local_addr: &Multiaddr,
         remote_addr: &Multiaddr,
     ) -> Result<(), ConnectionDenied> {
-        self.shrex_sub
-            .handle_pending_inbound_connection(connection_id, local_addr, remote_addr)?;
-        self.req_resp
-            .handle_pending_inbound_connection(connection_id, local_addr, remote_addr)?;
-        Ok(())
+        self.inner
+            .handle_pending_inbound_connection(connection_id, local_addr, remote_addr)
     }
 
     fn handle_pending_outbound_connection(
@@ -171,27 +244,16 @@ where
         addresses: &[Multiaddr],
         effective_role: Endpoint,
     ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
-        let mut combined_addresses = Vec::new();
-
-        combined_addresses.extend(self.shrex_sub.handle_pending_outbound_connection(
+        self.inner.handle_pending_outbound_connection(
             connection_id,
             maybe_peer,
             addresses,
             effective_role,
-        )?);
-        combined_addresses.extend(self.req_resp.handle_pending_outbound_connection(
-            connection_id,
-            maybe_peer,
-            addresses,
-            effective_role,
-        )?);
-
-        Ok(combined_addresses)
+        )
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm) {
-        self.shrex_sub.on_swarm_event(event);
-        self.req_resp.on_swarm_event(event);
+        self.inner.on_swarm_event(event)
     }
 
     fn on_connection_handler_event(
@@ -200,62 +262,35 @@ where
         connection_id: ConnectionId,
         event: THandlerOutEvent<Self>,
     ) {
-        match event {
-            Either::Left(shrex_sub_ev) => {
-                self.shrex_sub
-                    .on_connection_handler_event(peer_id, connection_id, shrex_sub_ev)
-            }
-            Either::Right(req_resp_ev) => {
-                self.req_resp
-                    .on_connection_handler_event(peer_id, connection_id, req_resp_ev)
-            }
-        }
+        self.inner
+            .on_connection_handler_event(peer_id, connection_id, event)
     }
 
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
-        if let Poll::Ready(ev) = self.shrex_sub.poll(cx) {
-            if let ToSwarm::GenerateEvent(ev) = ev {
-                println!("{ev:?}");
-            } else {
-                return Poll::Ready(
-                    ev.map_out(|_| unreachable!("GenerateEvent handled"))
-                        .map_in(Either::Left),
-                );
-            }
-        }
-
-        if let Poll::Ready(ev) = self.req_resp.poll(cx) {
-            if let ToSwarm::GenerateEvent(ev) = ev {
-                println!("{ev:?}");
-            } else {
-                return Poll::Ready(
-                    ev.map_out(|_| unreachable!("GenerateEvent handled"))
-                        .map_in(Either::Right),
-                );
-            }
+        if let Poll::Ready(ev) = self.inner.poll(cx)
+            && let Some(ev) = self.on_to_swarm(ev)
+        {
+            return Poll::Ready(ev);
         }
 
         Poll::Pending
     }
 }
 
-type ConnHandlerSelect = ConnectionHandlerSelect<
-    THandler<gossipsub::Behaviour>,
-    THandler<request_response::Behaviour<TodoCodec>>,
->;
+type InnerConnectionHandler = <Inner as NetworkBehaviour>::ConnectionHandler;
 
-pub(crate) struct ConnHandler(ConnHandlerSelect);
+pub(crate) struct ConnHandler(InnerConnectionHandler);
 
 impl ConnectionHandler for ConnHandler {
-    type ToBehaviour = <ConnHandlerSelect as ConnectionHandler>::ToBehaviour;
-    type FromBehaviour = <ConnHandlerSelect as ConnectionHandler>::FromBehaviour;
-    type InboundProtocol = <ConnHandlerSelect as ConnectionHandler>::InboundProtocol;
-    type InboundOpenInfo = <ConnHandlerSelect as ConnectionHandler>::InboundOpenInfo;
-    type OutboundProtocol = <ConnHandlerSelect as ConnectionHandler>::OutboundProtocol;
-    type OutboundOpenInfo = <ConnHandlerSelect as ConnectionHandler>::OutboundOpenInfo;
+    type ToBehaviour = <InnerConnectionHandler as ConnectionHandler>::ToBehaviour;
+    type FromBehaviour = <InnerConnectionHandler as ConnectionHandler>::FromBehaviour;
+    type InboundProtocol = <InnerConnectionHandler as ConnectionHandler>::InboundProtocol;
+    type InboundOpenInfo = <InnerConnectionHandler as ConnectionHandler>::InboundOpenInfo;
+    type OutboundProtocol = <InnerConnectionHandler as ConnectionHandler>::OutboundProtocol;
+    type OutboundOpenInfo = <InnerConnectionHandler as ConnectionHandler>::OutboundOpenInfo;
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
         self.0.listen_protocol()
@@ -293,61 +328,5 @@ impl ConnectionHandler for ConnHandler {
 
     fn poll_close(&mut self, cx: &mut Context<'_>) -> Poll<Option<Self::ToBehaviour>> {
         self.0.poll_close(cx)
-    }
-}
-
-#[derive(Clone, Copy, Debug, Default)]
-pub(crate) struct TodoCodec;
-
-#[async_trait]
-impl Codec for TodoCodec {
-    type Protocol = StreamProtocol;
-    type Request = ();
-    type Response = ();
-
-    async fn read_request<T>(
-        &mut self,
-        _: &Self::Protocol,
-        _io: &mut T,
-    ) -> io::Result<Self::Request>
-    where
-        T: AsyncRead + Unpin + Send,
-    {
-        todo!()
-    }
-
-    async fn read_response<T>(
-        &mut self,
-        _: &Self::Protocol,
-        _io: &mut T,
-    ) -> io::Result<Self::Response>
-    where
-        T: AsyncRead + Unpin + Send,
-    {
-        todo!()
-    }
-
-    async fn write_request<T>(
-        &mut self,
-        _: &Self::Protocol,
-        _io: &mut T,
-        _req: Self::Request,
-    ) -> io::Result<()>
-    where
-        T: AsyncWrite + Unpin + Send,
-    {
-        todo!()
-    }
-
-    async fn write_response<T>(
-        &mut self,
-        _: &Self::Protocol,
-        _io: &mut T,
-        _resps: Self::Response,
-    ) -> io::Result<()>
-    where
-        T: AsyncWrite + Unpin + Send,
-    {
-        todo!()
     }
 }

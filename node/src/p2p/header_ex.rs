@@ -6,7 +6,7 @@ use std::time::Duration;
 use async_trait::async_trait;
 use celestia_proto::p2p::pb::{HeaderRequest, HeaderResponse};
 use celestia_types::ExtendedHeader;
-use futures::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use futures::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use libp2p::core::Endpoint;
 use libp2p::core::transport::PortUse;
 use libp2p::request_response::{self, Codec, InboundFailure, OutboundFailure, ProtocolSupport};
@@ -16,7 +16,7 @@ use libp2p::swarm::{
     NetworkBehaviour, SubstreamProtocol, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use libp2p::{Multiaddr, PeerId, StreamProtocol};
-use lumina_utils::time::{Instant, timeout};
+use lumina_utils::time::timeout;
 use prost::Message;
 use tracing::{debug, instrument, warn};
 
@@ -29,7 +29,7 @@ use crate::p2p::header_ex::client::HeaderExClientHandler;
 use crate::p2p::header_ex::server::HeaderExServerHandler;
 use crate::peer_tracker::PeerTracker;
 use crate::store::Store;
-use crate::utils::{OneshotResultSender, protocol_id};
+use crate::utils::{OneshotResultSender, protocol_id, read_up_to};
 
 /// Size limit of a request in bytes
 const REQUEST_SIZE_LIMIT: usize = 1024;
@@ -485,44 +485,6 @@ impl Codec for HeaderCodec {
     }
 }
 
-/// Reads up to `size_limit` within `time_limit`.
-async fn read_up_to<T>(io: &mut T, size_limit: usize, time_limit: Duration) -> io::Result<Vec<u8>>
-where
-    T: AsyncRead + Unpin + Send,
-{
-    let mut buf = vec![0u8; size_limit];
-    let mut read_len = 0;
-    let now = Instant::now();
-
-    loop {
-        if read_len == buf.len() {
-            // No empty space. Buffer is full.
-            break;
-        }
-
-        let Some(time_limit) = time_limit.checked_sub(now.elapsed()) else {
-            break;
-        };
-
-        let len = match timeout(time_limit, io.read(&mut buf[read_len..])).await {
-            Ok(Ok(len)) => len,
-            Ok(Err(e)) => return Err(e),
-            Err(_) => break,
-        };
-
-        if len == 0 {
-            // EOF
-            break;
-        }
-
-        read_len += len;
-    }
-
-    buf.truncate(read_len);
-
-    Ok(buf)
-}
-
 fn parse_delimiter(mut buf: &[u8]) -> Option<(usize, &[u8])> {
     if buf.is_empty() {
         return None;
@@ -570,7 +532,7 @@ mod tests {
     use super::*;
     use bytes::BytesMut;
     use celestia_proto::p2p::pb::header_request::Data;
-    use futures::io::{Cursor, Error};
+    use futures::io::{AsyncReadExt, Cursor, Error};
     use lumina_utils::test_utils::async_test;
     use prost::encode_length_delimiter;
     use std::io::ErrorKind;
