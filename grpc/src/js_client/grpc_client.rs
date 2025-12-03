@@ -31,6 +31,16 @@ impl GrpcClient {
         crate::GrpcClientBuilder::new().url(url).into()
     }
 
+    /// Create a builder for [`GrpcClient`] connected to `url`
+    #[wasm_bindgen(js_name = withUrls)]
+    pub fn with_urls(urls: Vec<String>) -> GrpcClientBuilder {
+        let mut builder = crate::GrpcClientBuilder::new();
+        for url in urls {
+            builder = builder.url(url);
+        }
+        builder.into()
+    }
+
     /// Get auth params
     #[wasm_bindgen(js_name = getAuthParams)]
     pub async fn get_auth_params(&self) -> Result<JsAuthParams> {

@@ -75,8 +75,10 @@ impl GrpcClientBuilder {
         <T as Service<http::Request<TonicBody>>>::Error: StdError + Send + Sync + 'static,
         <T as Service<http::Request<TonicBody>>>::Future: CondSend + 'static,
     {
-        self.transports
-            .push(TransportEntry::BoxedTransport(boxed(transport, TransportMetadata::new())));
+        self.transports.push(TransportEntry::BoxedTransport(boxed(
+            transport,
+            TransportMetadata::new(),
+        )));
         self
     }
 

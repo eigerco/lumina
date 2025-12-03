@@ -88,8 +88,9 @@ impl GrpcMethod {
                                 let error: crate::Error = e.into();
                                 if error.is_network_error() {
                                     ::tracing::warn!(
-                                        transport_url = transport_url.as_deref().unwrap_or("unknown"),
-                                        "Transport failed with network error: {error}, trying next"
+                                        "Transport {} failed with network error: {}",
+                                        transport_url.as_deref().unwrap_or("unknown"),
+                                        error,
                                     );
                                     last_error = Some(error);
                                     continue;
