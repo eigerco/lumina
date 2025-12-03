@@ -12,6 +12,25 @@ use tonic::codegen::Service;
 
 use crate::utils::CondSend;
 
+/// Metadata associated with a transport endpoint
+#[derive(Debug, Clone, Default)]
+pub(crate) struct TransportMetadata {
+    /// URL or identifier for the transport endpoint
+    pub url: Option<String>,
+}
+
+impl TransportMetadata {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn with_url(url: impl Into<String>) -> Self {
+        Self {
+            url: Some(url.into()),
+        }
+    }
+}
+
 dyn_clone::clone_trait_object!(AbstractTransport);
 
 type BoxedResponse = http::Response<BoxedBody>;
@@ -21,6 +40,7 @@ type BoxedResponseFuture =
 
 pub(crate) struct BoxedTransport {
     inner: Box<dyn AbstractTransport + Send + Sync>,
+    pub(crate) metadata: TransportMetadata,
 }
 
 pub(crate) struct BoxedBody {
@@ -84,6 +104,7 @@ impl Clone for BoxedTransport {
     fn clone(&self) -> Self {
         Self {
             inner: clone_box(&*self.inner),
+            metadata: self.metadata.clone(),
         }
     }
 }
@@ -130,7 +151,7 @@ impl Service<http::Request<TonicBody>> for BoxedTransport {
     }
 }
 
-pub(crate) fn boxed<T, B>(transport: T) -> BoxedTransport
+pub(crate) fn boxed<T, B>(transport: T, metadata: TransportMetadata) -> BoxedTransport
 where
     B: http_body::Body<Data = Bytes> + Send + Unpin + 'static,
     <B as http_body::Body>::Error: StdError + Sync + Send,
@@ -144,6 +165,7 @@ where
 {
     BoxedTransport {
         inner: Box::new(transport),
+        metadata,
     }
 }
 
@@ -172,7 +194,7 @@ mod tests {
     #[allow(unused_variables)]
     fn can_box_tonic_channel() {
         let endpoint: tonic::transport::Endpoint = unimplemented!();
-        let _boxed = boxed(endpoint.connect_lazy());
+        let _boxed = boxed(endpoint.connect_lazy(), TransportMetadata::new());
     }
 
     // compile-only test for type compliance
@@ -183,6 +205,6 @@ mod tests {
     #[allow(unused_variables)]
     fn can_box_grpc_web_client() {
         let client: tonic_web_wasm_client::Client = unimplemented!();
-        let _boxed = boxed(client);
+        let _boxed = boxed(client, TransportMetadata::new());
     }
 }

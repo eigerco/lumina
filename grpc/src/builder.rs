@@ -9,7 +9,7 @@ use tonic::codegen::Service;
 use tonic::metadata::MetadataMap;
 use zeroize::Zeroizing;
 
-use crate::boxed::{BoxedTransport, boxed};
+use crate::boxed::{BoxedTransport, TransportMetadata, boxed};
 use crate::client::AccountState;
 use crate::grpc::Context;
 use crate::signer::BoxedDocSigner;
@@ -76,7 +76,7 @@ impl GrpcClientBuilder {
         <T as Service<http::Request<TonicBody>>>::Future: CondSend + 'static,
     {
         self.transports
-            .push(TransportEntry::BoxedTransport(boxed(transport)));
+            .push(TransportEntry::BoxedTransport(boxed(transport, TransportMetadata::new())));
         self
     }
 
@@ -224,12 +224,12 @@ mod imp {
     pub(super) fn build_transport(url: String) -> Result<BoxedTransport, GrpcClientBuilderError> {
         let tls_config = ClientTlsConfig::new().with_enabled_roots();
 
-        let channel = Endpoint::from_shared(url)?
+        let channel = Endpoint::from_shared(url.clone())?
             .user_agent("celestia-grpc")?
             .tls_config(tls_config)?
             .connect_lazy();
 
-        Ok(boxed(channel))
+        Ok(boxed(channel, TransportMetadata::with_url(url)))
     }
 }
 
@@ -248,11 +248,11 @@ mod imp {
             return Err(GrpcClientBuilderError::TlsNotSupported);
         }
 
-        let channel = Endpoint::from_shared(url)?
+        let channel = Endpoint::from_shared(url.clone())?
             .user_agent("celestia-grpc")?
             .connect_lazy();
 
-        Ok(boxed(channel))
+        Ok(boxed(channel, TransportMetadata::with_url(url)))
     }
 }
 
@@ -260,7 +260,8 @@ mod imp {
 mod imp {
     use super::*;
     pub(super) fn build_transport(url: String) -> Result<BoxedTransport, GrpcClientBuilderError> {
-        Ok(boxed(tonic_web_wasm_client::Client::new(url)))
+        let client = tonic_web_wasm_client::Client::new(url.clone());
+        Ok(boxed(client, TransportMetadata::with_url(url)))
     }
 }
 

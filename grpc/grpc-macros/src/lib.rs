@@ -63,15 +63,17 @@ impl GrpcMethod {
                     let mut last_error: Option<crate::Error> = None;
                     for transport in transports.iter() {
                         let transport = transport.clone();
+                        let transport_url = transport.metadata.url.clone();
                         let mut client = #grpc_client_struct::new(transport)
                             .max_decoding_message_size(MAX_MSG_SIZE)
                             .max_encoding_message_size(MAX_MSG_SIZE);
 
-                        let request = ::tonic::Request::from_parts(
+                        let mut request = ::tonic::Request::from_parts(
                             context.metadata.clone(),
                             ::tonic::Extensions::new(),
                             ::std::clone::Clone::clone(&param),
                         );
+                        request.set_timeout(::std::time::Duration::from_secs(30));
 
                         let fut = client.#grpc_method_name(request);
 
@@ -85,6 +87,10 @@ impl GrpcMethod {
                             Err(e) => {
                                 let error: crate::Error = e.into();
                                 if error.is_network_error() {
+                                    ::tracing::warn!(
+                                        transport_url = transport_url.as_deref().unwrap_or("unknown"),
+                                        "Transport failed with network error: {error}, trying next"
+                                    );
                                     last_error = Some(error);
                                     continue;
                                 }
