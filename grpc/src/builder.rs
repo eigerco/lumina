@@ -1,5 +1,7 @@
 use std::error::Error as StdError;
 use std::fmt;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 use bytes::Bytes;
 use k256::ecdsa::{SigningKey, VerifyingKey};
@@ -47,12 +49,21 @@ impl GrpcClientBuilder {
         GrpcClientBuilder::default()
     }
 
+    /// Add multiple URL endpoints.
+    ///
+    /// When multiple endpoints are configured, the client will automatically
+    /// fall back to the next endpoint if a network-related error occurs.
+    pub fn grpc_urls(mut self, urls: impl IntoIterator<Item = impl AsRef<str>>) -> Self {
+        for url in urls {
+            self = self.url(url.as_ref());
+        }
+        self
+    }
+
     /// Add a URL endpoint. Multiple calls add multiple fallback endpoints.
     ///
     /// When multiple endpoints are configured, the client will automatically
     /// fall back to the next endpoint if a network-related error occurs.
-    ///
-    /// [`Channel`]: tonic::transport::Channel
     pub fn url(mut self, url: impl Into<String>) -> Self {
         self.transports
             .push(TransportEntry::EndpointUrl(url.into()));
@@ -154,7 +165,7 @@ impl GrpcClientBuilder {
             })
             .collect::<Result<Vec<_>, _>>()?;
 
-        let transports = std::sync::Arc::new(tokio::sync::Mutex::new(transports));
+        let transports = Arc::new(Mutex::new(transports));
 
         let signer_config = self.signer_kind.map(TryInto::try_into).transpose()?;
 
@@ -270,6 +281,7 @@ mod imp {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use lumina_utils::test_utils::async_test;
 
     #[test]
     fn empty_builder_returns_transport_not_set() {
@@ -281,8 +293,7 @@ mod tests {
         ));
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
-    #[tokio::test]
+    #[async_test]
     async fn single_url_builds_successfully() {
         let result = GrpcClientBuilder::new()
             .url("http://localhost:9090")
@@ -291,8 +302,7 @@ mod tests {
         assert!(result.is_ok());
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
-    #[tokio::test]
+    #[async_test]
     async fn multiple_urls_build_successfully() {
         let result = GrpcClientBuilder::new()
             .url("http://localhost:9090")

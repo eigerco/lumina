@@ -84,11 +84,9 @@ impl GrpcClientBuilder {
     /// Make sure to re-assign it if you keep builder in a variable.
     #[wasm_bindgen(js_name = "withUrls")]
     pub fn with_urls(self, urls: Vec<String>) -> Self {
-        let mut inner = self.inner;
-        for url in urls {
-            inner = inner.url(url);
+        Self {
+            inner: self.inner.grpc_urls(urls),
         }
-        Self { inner }
     }
 
     /// Add public key and signer to the client being built
