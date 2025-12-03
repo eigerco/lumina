@@ -37,6 +37,11 @@ impl HeaderRequestExt for HeaderRequest {
     }
 
     fn is_valid(&self) -> bool {
+        // We cast `amount` to usize later on, so we make sure it is valid.
+        if usize::try_from(self.amount).is_err() {
+            return false;
+        }
+
         match (&self.data, self.amount) {
             (None, _) | (_, 0) => false,
             (Some(Data::Origin(0)), amount) if amount > 1 => false,

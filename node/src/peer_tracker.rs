@@ -7,9 +7,7 @@ use std::time::Duration;
 use libp2p::ping;
 use libp2p::{PeerId, swarm::ConnectionId};
 use lumina_utils::time::Instant;
-use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
-use smallvec::SmallVec;
 use tokio::sync::watch;
 use tracing::info;
 
@@ -356,24 +354,6 @@ impl PeerTracker {
                     .copied()
                     .map(|conn| (peer.id(), conn))
             })
-    }
-
-    /// Returns one of the best peers.
-    pub(crate) fn best_peer(&self) -> Option<PeerId> {
-        const MAX_PEER_SAMPLE: usize = 128;
-
-        // TODO: Implement peer score and return the best.
-        let mut peers = self
-            .peers
-            .iter()
-            .filter(|(_, peer)| peer.is_connected())
-            .take(MAX_PEER_SAMPLE)
-            .map(|(peer_id, _)| peer_id)
-            .collect::<SmallVec<[_; MAX_PEER_SAMPLE]>>();
-
-        peers.shuffle(&mut rand::thread_rng());
-
-        peers.first().copied().copied()
     }
 
     fn recount_peer_tracker_info(&self) {

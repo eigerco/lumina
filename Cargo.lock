@@ -2475,9 +2475,12 @@ dependencies = [
 
 [[package]]
 name = "indoc"
-version = "2.0.6"
+version = "2.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f4c7245a08504955605670dbf141fceab975f15ca21570696aebe9d2e71576bd"
+checksum = "79cf5c93f93228cf8efb3ba362535fb11199ac548a09ce117c9b1adc3030d706"
+dependencies = [
+ "rustversion",
+]
 
 [[package]]
 name = "informalsystems-pbjson"
@@ -3475,6 +3478,7 @@ dependencies = [
  "tendermint-proto",
  "thiserror 2.0.16",
  "tokio",
+ "tokio-stream",
  "tokio-util",
  "tracing",
  "uniffi",
@@ -3494,6 +3498,7 @@ dependencies = [
  "celestia-grpc",
  "celestia-proto",
  "celestia-types",
+ "futures",
  "k256",
  "libp2p",
  "lumina-node",
@@ -3502,6 +3507,7 @@ dependencies = [
  "tendermint",
  "thiserror 2.0.16",
  "tokio",
+ "tokio-stream",
  "tonic",
  "uniffi",
 ]
