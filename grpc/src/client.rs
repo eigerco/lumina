@@ -854,9 +854,13 @@ impl GrpcClient {
                 // this case should never happen for node that accepted a broadcast
                 // however we handle it the same as evicted for extra safety
                 TxStatus::Unknown => {
-                    let mut acc = self.lock_account(context).await?;
-                    acc.base.sequence = sequence;
-                    return Err(Error::TxNotFound(hash));
+                    if self
+                        .broadcast_tx_with_cfg(tx.clone(), &cfg, context)
+                        .await
+                        .is_err()
+                    {
+                        return Err(Error::TxNotFound(hash));
+                    }
                 }
             }
         }
