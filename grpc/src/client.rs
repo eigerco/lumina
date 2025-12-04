@@ -1402,7 +1402,7 @@ mod tests {
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    #[async_test]
+    #[tokio::test]
     async fn failover_to_second_endpoint() {
         use crate::test_utils::CELESTIA_GRPC_URL;
 
@@ -1417,7 +1417,7 @@ mod tests {
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    #[async_test]
+    #[tokio::test]
     async fn endpoint_multiple_requests() {
         use crate::test_utils::CELESTIA_GRPC_URL;
 
@@ -1437,7 +1437,7 @@ mod tests {
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    #[async_test]
+    #[tokio::test]
     async fn all_endpoints_fail_returns_error() {
         let client = GrpcClient::builder()
             .grpc_urls(["http://localhost:19999", "http://localhost:19998"])
