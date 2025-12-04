@@ -31,8 +31,11 @@ async fn request_network_head_header() {
     let info = client.network_info().await.unwrap();
     assert_eq!(info.num_peers, 1);
 
-    let bridge_head_header = rpc_client.header_network_head().await.unwrap();
-    let head_header: ExtendedHeader = client.request_head_header().await.unwrap();
+    let (bridge_head_header, head_header) = futures::try_join!(
+        rpc_client.header_network_head(),
+        client.request_head_header(),
+    )
+    .unwrap();
     assert_eq!(head_header, bridge_head_header);
     rpc_client
         .p2p_close_peer(&PeerId(
