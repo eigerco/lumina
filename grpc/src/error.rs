@@ -191,7 +191,6 @@ impl From<GrpcClientBuilderError> for wasm_bindgen::JsValue {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use lumina_utils::test_utils::async_test;
     use tonic::{Code, Status};
 
     #[test]
@@ -251,7 +250,10 @@ mod tests {
         assert!(!Error::SequenceParsingFailed("test".into()).is_network_error());
     }
 
-    #[async_test]
+    // we can't use async_test because this test should only be run for non wasm-32 archs
+    // because it uses TransportError which is not available there
+    #[cfg(not(target_arch = "wasm32"))]
+    #[tokio::test]
     async fn transport_error_is_network_error() {
         use tonic::transport::Endpoint;
 
