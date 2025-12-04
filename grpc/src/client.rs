@@ -727,16 +727,26 @@ impl GrpcClient {
         account: &mut AccountGuard<'_>,
         context: &Context,
     ) -> Result<BroadcastedTx> {
-        let resp = self.broadcast_tx_with_cfg(tx.clone(), cfg, context).await?;
-
         let sequence = account.base.sequence;
-        account.base.sequence += 1;
 
-        Ok(BroadcastedTx {
-            tx,
-            hash: resp.txhash,
-            sequence,
-        })
+        let res = self.broadcast_tx_with_cfg(tx.clone(), cfg, context).await;
+
+        let hash = match res {
+            Ok(resp) => {
+                account.base.sequence += 1;
+                resp.txhash
+            }
+            // If tx is already in mempool, we can get a confirmation for it.
+            // We presume this did happen because one of the endpoints failed with timeout.
+            // But the tx was still added.
+            Err(Error::TxBroadcastFailed(hash, ErrorCode::TxInMempoolCache, _)) => {
+                account.base.sequence += 1;
+                hash
+            }
+            Err(e) => return Err(e),
+        };
+
+        Ok(BroadcastedTx { tx, hash, sequence })
     }
 
     async fn broadcast_tx_with_cfg(
