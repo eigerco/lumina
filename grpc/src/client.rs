@@ -1400,4 +1400,51 @@ mod tests {
             .base
             .sequence += rand::thread_rng().gen_range(2..200);
     }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[async_test]
+    async fn failover_to_second_endpoint() {
+        use crate::test_utils::CELESTIA_GRPC_URL;
+
+        // First endpoint is invalid, should failover to second valid one
+        let client = GrpcClient::builder()
+            .grpc_urls(["http://localhost:19999", CELESTIA_GRPC_URL])
+            .build()
+            .unwrap();
+
+        let params = client.get_auth_params().await.unwrap();
+        assert!(params.max_memo_characters > 0);
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[async_test]
+    async fn endpoint_multiple_requests() {
+        use crate::test_utils::CELESTIA_GRPC_URL;
+
+        let client = GrpcClient::builder()
+            .grpc_urls(["http://localhost:19999", CELESTIA_GRPC_URL])
+            .build()
+            .unwrap();
+
+        client.get_auth_params().await.unwrap();
+
+        let block = client.get_latest_block().await.unwrap();
+        assert!(block.header.height.value() > 0);
+
+        for _ in 0..5 {
+            client.get_blob_params().await.unwrap();
+        }
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[async_test]
+    async fn all_endpoints_fail_returns_error() {
+        let client = GrpcClient::builder()
+            .grpc_urls(["http://localhost:19999", "http://localhost:19998"])
+            .build()
+            .unwrap();
+
+        let result = client.get_auth_params().await;
+        assert!(result.is_err());
+    }
 }
