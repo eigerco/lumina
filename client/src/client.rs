@@ -235,11 +235,8 @@ impl ClientBuilder {
     ///
     /// In WASM the endpoints need to support gRPC-Web.
     pub fn grpc_urls(mut self, urls: impl IntoIterator<Item = impl AsRef<str>>) -> ClientBuilder {
-        let mut grpc_builder = self.grpc_builder.unwrap_or_default();
-        for url in urls {
-            grpc_builder = grpc_builder.url(url.as_ref());
-        }
-        self.grpc_builder = Some(grpc_builder);
+        let grpc_builder = self.grpc_builder.unwrap_or_default();
+        self.grpc_builder = Some(grpc_builder.urls(urls));
         self
     }
 

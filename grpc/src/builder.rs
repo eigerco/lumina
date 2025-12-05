@@ -53,7 +53,7 @@ impl GrpcClientBuilder {
     ///
     /// When multiple endpoints are configured, the client will automatically
     /// fall back to the next endpoint if a network-related error occurs.
-    pub fn grpc_urls(mut self, urls: impl IntoIterator<Item = impl AsRef<str>>) -> Self {
+    pub fn urls(mut self, urls: impl IntoIterator<Item = impl AsRef<str>>) -> Self {
         for url in urls {
             self = self.url(url.as_ref());
         }

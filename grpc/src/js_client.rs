@@ -85,7 +85,7 @@ impl GrpcClientBuilder {
     #[wasm_bindgen(js_name = "withUrls")]
     pub fn with_urls(self, urls: Vec<String>) -> Self {
         Self {
-            inner: self.inner.grpc_urls(urls),
+            inner: self.inner.urls(urls),
         }
     }
 

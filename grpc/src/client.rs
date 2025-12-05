@@ -1409,7 +1409,7 @@ mod tests {
 
         // First endpoint is invalid, should failover to second valid one
         let client = GrpcClient::builder()
-            .grpc_urls(["http://localhost:19999", CELESTIA_GRPC_URL])
+            .urls(["http://localhost:19999", CELESTIA_GRPC_URL])
             .build()
             .unwrap();
 
@@ -1423,7 +1423,7 @@ mod tests {
         use crate::test_utils::CELESTIA_GRPC_URL;
 
         let client = GrpcClient::builder()
-            .grpc_urls(["http://localhost:19999", CELESTIA_GRPC_URL])
+            .urls(["http://localhost:19999", CELESTIA_GRPC_URL])
             .build()
             .unwrap();
 
@@ -1441,7 +1441,7 @@ mod tests {
     #[tokio::test]
     async fn all_endpoints_fail_returns_error() {
         let client = GrpcClient::builder()
-            .grpc_urls(["http://localhost:19999", "http://localhost:19998"])
+            .urls(["http://localhost:19999", "http://localhost:19998"])
             .build()
             .unwrap();
 

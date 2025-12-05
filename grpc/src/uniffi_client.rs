@@ -75,7 +75,7 @@ impl GrpcClientBuilder {
     /// fall back to the next endpoint if a network-related error occurs.
     #[uniffi::constructor(name = "withUrls")]
     pub fn with_urls(urls: Vec<String>) -> Self {
-        let builder = RustBuilder::new().grpc_urls(urls);
+        let builder = RustBuilder::new().urls(urls);
         GrpcClientBuilder(Mutex::new(Some(builder)))
     }
 

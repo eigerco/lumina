@@ -37,7 +37,7 @@ impl GrpcClient {
     /// fall back to the next endpoint if a network-related error occurs.
     #[wasm_bindgen(js_name = withUrls)]
     pub fn with_urls(urls: Vec<String>) -> GrpcClientBuilder {
-        crate::GrpcClientBuilder::new().grpc_urls(urls).into()
+        crate::GrpcClientBuilder::new().urls(urls).into()
     }
 
     /// Get auth params
