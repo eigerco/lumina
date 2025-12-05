@@ -1,5 +1,6 @@
 use std::ops::DerefMut;
 use std::pin::Pin;
+use std::sync::Arc;
 use std::task::{Context, Poll, ready};
 use std::{error::Error as StdError, future::Future};
 
@@ -40,7 +41,7 @@ type BoxedResponseFuture =
 
 pub(crate) struct BoxedTransport {
     inner: Box<dyn AbstractTransport + Send + Sync>,
-    pub(crate) metadata: TransportMetadata,
+    pub(crate) metadata: Arc<TransportMetadata>,
 }
 
 pub(crate) struct BoxedBody {
@@ -104,7 +105,7 @@ impl Clone for BoxedTransport {
     fn clone(&self) -> Self {
         Self {
             inner: clone_box(&*self.inner),
-            metadata: self.metadata.clone(),
+            metadata: Arc::clone(&self.metadata),
         }
     }
 }
@@ -165,7 +166,7 @@ where
 {
     BoxedTransport {
         inner: Box::new(transport),
-        metadata,
+        metadata: Arc::new(metadata),
     }
 }
 
