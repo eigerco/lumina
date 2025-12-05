@@ -36,7 +36,15 @@ async fn request_network_head_header() {
         rpc_client.header_network_head().map(Result::unwrap),
         client.request_head_header().map(Result::unwrap),
     );
-    assert_eq!(head_header, bridge_head_header);
+
+    // due to head selection algorithm, we may get the network head or a previous header
+    // if not enough nodes got a new head already
+    if head_header.height() == bridge_head_header.height() {
+        assert_eq!(head_header, bridge_head_header);
+    } else {
+        assert!(head_header.verify_adjacent(&bridge_head_header).is_ok());
+    }
+
     rpc_client
         .p2p_close_peer(&PeerId(
             client.local_peer_id().await.unwrap().parse().unwrap(),
