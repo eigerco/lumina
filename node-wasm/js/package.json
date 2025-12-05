@@ -35,7 +35,7 @@
         "typescript": "^5.6.3"
     },
     "scripts": {
-        "tsc": "tsc index.js --declaration --allowJs --emitDeclarationOnly",
+        "tsc": "tsc index.js --lib dom,dom.iterable,esnext --declaration --allowJs --emitDeclarationOnly",
         "update-readme": "typedoc --plugin typedoc-plugin-markdown --out ./docs --readme ../README.md ../pkg/lumina_node_wasm.d.ts && concat-md  --decrease-title-levels --dir-name-as-title docs > README.md"
     }
 }
