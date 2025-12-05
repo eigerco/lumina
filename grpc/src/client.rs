@@ -2,6 +2,7 @@ use std::fmt;
 use std::sync::Arc;
 
 use ::tendermint::chain::Id;
+use arc_swap::ArcSwap;
 use celestia_types::any::IntoProtobufAny;
 use k256::ecdsa::VerifyingKey;
 use lumina_utils::time::Interval;
@@ -99,7 +100,7 @@ pub struct GrpcClient {
 }
 
 struct GrpcClientInner {
-    transports: Arc<Mutex<Vec<BoxedTransport>>>,
+    transports: Arc<ArcSwap<Vec<BoxedTransport>>>,
     account: Option<AccountState>,
     chain_state: OnceCell<ChainState>,
     context: Context,
@@ -108,7 +109,7 @@ struct GrpcClientInner {
 impl GrpcClient {
     /// Create a new client wrapping given transports
     pub(crate) fn new(
-        transports: Arc<Mutex<Vec<BoxedTransport>>>,
+        transports: Arc<ArcSwap<Vec<BoxedTransport>>>,
         account: Option<AccountState>,
         context: Context,
     ) -> Self {

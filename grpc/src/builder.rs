@@ -1,7 +1,7 @@
+use arc_swap::ArcSwap;
 use std::error::Error as StdError;
 use std::fmt;
 use std::sync::Arc;
-use tokio::sync::Mutex;
 
 use bytes::Bytes;
 use k256::ecdsa::{SigningKey, VerifyingKey};
@@ -165,7 +165,7 @@ impl GrpcClientBuilder {
             })
             .collect::<Result<Vec<_>, _>>()?;
 
-        let transports = Arc::new(Mutex::new(transports));
+        let transports = Arc::new(ArcSwap::from_pointee(transports));
 
         let signer_config = self.signer_kind.map(TryInto::try_into).transpose()?;
 

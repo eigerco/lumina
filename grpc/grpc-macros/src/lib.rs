@@ -61,14 +61,11 @@ impl GrpcMethod {
                     const MAX_MSG_SIZE: usize = 256 * 1024 * 1024;
 
                     let mut last_error: Option<crate::Error> = None;
+                    let transport_snapshot = transports.load();
 
-                    let transport_snapshot: Vec<_> = {
-                        let guard = transports.lock().await;
-                        guard.iter().cloned().collect()
-                    };
-
-                    for (idx, transport) in transport_snapshot.into_iter().enumerate() {
-                        let transport_url = transport.metadata.url.clone();
+                    for idx in 0..transport_snapshot.len() {
+                        let transport_url = transport_snapshot[idx].metadata.url.as_deref();
+                        let transport = transport_snapshot[idx].clone();
                         let mut client = #grpc_client_struct::new(transport)
                             .max_decoding_message_size(MAX_MSG_SIZE)
                             .max_encoding_message_size(MAX_MSG_SIZE);
@@ -87,13 +84,10 @@ impl GrpcMethod {
 
                         match fut.await {
                             Ok(resp) => {
-                                // If we succeeded on a fallback endpoint (idx > 0),
-                                // move it to the front for future requests
                                 if idx > 0 {
-                                    let mut guard = transports.lock().await;
-                                    if guard.len() > idx {
-                                        guard.swap(0, idx);
-                                    }
+                                    let mut new_transports = transport_snapshot.as_ref().clone();
+                                    new_transports.swap(0, idx);
+                                    transports.store(::std::sync::Arc::new(new_transports));
                                 }
                                 return crate::grpc::FromGrpcResponse::try_from_response(resp.into_inner());
                             }
@@ -102,7 +96,7 @@ impl GrpcMethod {
                                 if error.is_network_error() {
                                     ::tracing::warn!(
                                         "Transport {} failed with network error: {}",
-                                        transport_url.as_deref().unwrap_or("unknown"),
+                                        transport_url.unwrap_or("unknown"),
                                         error,
                                     );
                                     last_error = Some(error);
