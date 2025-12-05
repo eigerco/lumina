@@ -226,6 +226,20 @@ impl ClientBuilder {
         self
     }
 
+    /// Add multiple gRPC endpoints at once for fallback support.
+    ///
+    /// When multiple endpoints are configured, the client will automatically
+    /// fall back to the next endpoint if a network-related error occurs.
+    ///
+    /// # Note
+    ///
+    /// In WASM the endpoints need to support gRPC-Web.
+    pub fn grpc_urls(mut self, urls: impl IntoIterator<Item = impl AsRef<str>>) -> ClientBuilder {
+        let grpc_builder = self.grpc_builder.unwrap_or_default();
+        self.grpc_builder = Some(grpc_builder.urls(urls));
+        self
+    }
+
     /// Set manually configured gRPC transport
     pub fn grpc_transport<B, T>(mut self, transport: T) -> Self
     where

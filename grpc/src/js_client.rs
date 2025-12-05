@@ -75,6 +75,20 @@ impl GrpcClientBuilder {
         }
     }
 
+    /// Add multiple URL endpoints at once for fallback support.
+    ///
+    /// When multiple endpoints are configured, the client will automatically
+    /// fall back to the next endpoint if a network-related error occurs.
+    ///
+    /// Note that this method **consumes** builder and returns updated instance of it.
+    /// Make sure to re-assign it if you keep builder in a variable.
+    #[wasm_bindgen(js_name = "withUrls")]
+    pub fn with_urls(self, urls: Vec<String>) -> Self {
+        Self {
+            inner: self.inner.urls(urls),
+        }
+    }
+
     /// Add public key and signer to the client being built
     ///
     /// Note that this method **consumes** builder and returns updated instance of it.

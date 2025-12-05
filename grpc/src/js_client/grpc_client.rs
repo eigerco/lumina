@@ -31,6 +31,15 @@ impl GrpcClient {
         crate::GrpcClientBuilder::new().url(url).into()
     }
 
+    /// Create a builder for [`GrpcClient`] with multiple URL endpoints for fallback support.
+    ///
+    /// When multiple endpoints are configured, the client will automatically
+    /// fall back to the next endpoint if a network-related error occurs.
+    #[wasm_bindgen(js_name = withUrls)]
+    pub fn with_urls(urls: Vec<String>) -> GrpcClientBuilder {
+        crate::GrpcClientBuilder::new().urls(urls).into()
+    }
+
     /// Get auth params
     #[wasm_bindgen(js_name = getAuthParams)]
     pub async fn get_auth_params(&self) -> Result<JsAuthParams> {
