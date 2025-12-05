@@ -106,6 +106,7 @@ impl GrpcMethod {
                             }
                         }
                     }
+
                     Err(last_error.expect("at least one transport should be tried"))
                 })
                 .context(&self.inner.context)
