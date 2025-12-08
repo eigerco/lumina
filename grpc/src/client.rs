@@ -2,6 +2,7 @@ use std::fmt;
 use std::sync::Arc;
 
 use ::tendermint::chain::Id;
+use arc_swap::ArcSwap;
 use celestia_types::any::IntoProtobufAny;
 use k256::ecdsa::VerifyingKey;
 use lumina_utils::time::Interval;
@@ -99,22 +100,22 @@ pub struct GrpcClient {
 }
 
 struct GrpcClientInner {
-    transport: BoxedTransport,
+    transports: Arc<ArcSwap<Vec<BoxedTransport>>>,
     account: Option<AccountState>,
     chain_state: OnceCell<ChainState>,
     context: Context,
 }
 
 impl GrpcClient {
-    /// Create a new client wrapping given transport
+    /// Create a new client wrapping given transports
     pub(crate) fn new(
-        transport: BoxedTransport,
+        transports: Arc<ArcSwap<Vec<BoxedTransport>>>,
         account: Option<AccountState>,
         context: Context,
     ) -> Self {
         Self {
             inner: Arc::new(GrpcClientInner {
-                transport,
+                transports,
                 account,
                 chain_state: OnceCell::new(),
                 context,
@@ -727,16 +728,26 @@ impl GrpcClient {
         account: &mut AccountGuard<'_>,
         context: &Context,
     ) -> Result<BroadcastedTx> {
-        let resp = self.broadcast_tx_with_cfg(tx.clone(), cfg, context).await?;
-
         let sequence = account.base.sequence;
-        account.base.sequence += 1;
 
-        Ok(BroadcastedTx {
-            tx,
-            hash: resp.txhash,
-            sequence,
-        })
+        let res = self.broadcast_tx_with_cfg(tx.clone(), cfg, context).await;
+
+        let hash = match res {
+            Ok(resp) => {
+                account.base.sequence += 1;
+                resp.txhash
+            }
+            // If tx is already in mempool, we can get a confirmation for it.
+            // We presume this did happen because one of the endpoints failed with timeout.
+            // But the tx was still added.
+            Err(Error::TxBroadcastFailed(hash, ErrorCode::TxInMempoolCache, _)) => {
+                account.base.sequence += 1;
+                hash
+            }
+            Err(e) => return Err(e),
+        };
+
+        Ok(BroadcastedTx { tx, hash, sequence })
     }
 
     async fn broadcast_tx_with_cfg(
@@ -844,9 +855,13 @@ impl GrpcClient {
                 // this case should never happen for node that accepted a broadcast
                 // however we handle it the same as evicted for extra safety
                 TxStatus::Unknown => {
-                    let mut acc = self.lock_account(context).await?;
-                    acc.base.sequence = sequence;
-                    return Err(Error::TxNotFound(hash));
+                    if self
+                        .broadcast_tx_with_cfg(tx.clone(), &cfg, context)
+                        .await
+                        .is_err()
+                    {
+                        return Err(Error::TxNotFound(hash));
+                    }
                 }
             }
         }
@@ -1385,5 +1400,52 @@ mod tests {
             .unwrap()
             .base
             .sequence += rand::thread_rng().gen_range(2..200);
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[tokio::test]
+    async fn failover_to_second_endpoint() {
+        use crate::test_utils::CELESTIA_GRPC_URL;
+
+        // First endpoint is invalid, should failover to second valid one
+        let client = GrpcClient::builder()
+            .urls(["http://localhost:19999", CELESTIA_GRPC_URL])
+            .build()
+            .unwrap();
+
+        let params = client.get_auth_params().await.unwrap();
+        assert!(params.max_memo_characters > 0);
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[tokio::test]
+    async fn endpoint_multiple_requests() {
+        use crate::test_utils::CELESTIA_GRPC_URL;
+
+        let client = GrpcClient::builder()
+            .urls(["http://localhost:19999", CELESTIA_GRPC_URL])
+            .build()
+            .unwrap();
+
+        client.get_auth_params().await.unwrap();
+
+        let block = client.get_latest_block().await.unwrap();
+        assert!(block.header.height.value() > 0);
+
+        for _ in 0..5 {
+            client.get_blob_params().await.unwrap();
+        }
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[tokio::test]
+    async fn all_endpoints_fail_returns_error() {
+        let client = GrpcClient::builder()
+            .urls(["http://localhost:19999", "http://localhost:19998"])
+            .build()
+            .unwrap();
+
+        let result = client.get_auth_params().await;
+        assert!(result.is_err());
     }
 }
