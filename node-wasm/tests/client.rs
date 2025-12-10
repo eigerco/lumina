@@ -6,7 +6,8 @@ use celestia_rpc::TxConfig;
 use celestia_rpc::prelude::*;
 use celestia_types::nmt::Namespace;
 use celestia_types::p2p::PeerId;
-use celestia_types::{AppVersion, Blob, ExtendedHeader};
+use celestia_types::{AppVersion, Blob};
+use futures::FutureExt;
 use gloo_timers::future::sleep;
 use lumina_node_wasm::utils::setup_logging;
 use wasm_bindgen_test::wasm_bindgen_test;
@@ -31,9 +32,19 @@ async fn request_network_head_header() {
     let info = client.network_info().await.unwrap();
     assert_eq!(info.num_peers, 1);
 
-    let bridge_head_header = rpc_client.header_network_head().await.unwrap();
-    let head_header: ExtendedHeader = client.request_head_header().await.unwrap();
-    assert_eq!(head_header, bridge_head_header);
+    let (bridge_head_header, head_header) = futures::join!(
+        rpc_client.header_network_head().map(Result::unwrap),
+        client.request_head_header().map(Result::unwrap),
+    );
+
+    // due to head selection algorithm, we may get the network head or a previous header
+    // if not enough nodes got a new head already
+    if head_header.height() == bridge_head_header.height() {
+        assert_eq!(head_header, bridge_head_header);
+    } else {
+        assert!(head_header.verify_adjacent(&bridge_head_header).is_ok());
+    }
+
     rpc_client
         .p2p_close_peer(&PeerId(
             client.local_peer_id().await.unwrap().parse().unwrap(),
