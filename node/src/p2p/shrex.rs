@@ -1,4 +1,3 @@
-use std::collections::{HashMap, HashSet};
 use std::io;
 use std::sync::Arc;
 use std::task::{Context, Poll};
@@ -8,6 +7,7 @@ use either::Either;
 use futures::{AsyncRead, AsyncWrite};
 use libp2p::core::Endpoint;
 use libp2p::core::transport::PortUse;
+use libp2p::gossipsub::{self, Message};
 use libp2p::identity::Keypair;
 use libp2p::request_response::{self, Codec, ProtocolSupport};
 use libp2p::swarm::handler::ConnectionEvent;
@@ -16,11 +16,15 @@ use libp2p::swarm::{
     ConnectionId, FromSwarm, NetworkBehaviour, SubstreamProtocol, THandler, THandlerInEvent,
     THandlerOutEvent, ToSwarm,
 };
-use libp2p::{Multiaddr, PeerId, StreamProtocol, gossipsub};
+use libp2p::{Multiaddr, PeerId, StreamProtocol};
+use tracing::{debug, info};
 
 use crate::p2p::P2pError;
+use crate::p2p::shrex::pool_tracker::EdsNotification;
 use crate::store::Store;
 use crate::utils::protocol_id;
+
+pub(crate) mod pool_tracker;
 
 pub(crate) struct Config<'a, S> {
     pub network_id: &'a str,
@@ -42,7 +46,7 @@ where
     // we cannot be isolated in a way described in a shrex-sub spec:
     // https://github.com/celestiaorg/celestia-node/blob/76db37cc4ac09e892122a081b8bea24f87899f11/specs/src/shrex/shrex-sub.md#why-not-gossipsub
     shrex_sub: gossipsub::Behaviour,
-    _da_pools: HashMap<u64, HashSet<PeerId>>,
+    pool_tracker: pool_tracker::PoolTracker<S>,
     _store: Arc<S>,
 }
 
@@ -89,9 +93,45 @@ where
                 )],
                 request_response::Config::default(),
             ),
-            _da_pools: HashMap::new(),
+            pool_tracker: pool_tracker::PoolTracker::new(config.header_store.clone()),
             _store: config.header_store,
         })
+    }
+
+    fn handle_shrex_event(
+        &mut self,
+        ev: ToSwarm<gossipsub::Event, THandlerInEvent<gossipsub::Behaviour>>,
+    ) -> Poll<ToSwarm<Event, THandlerInEvent<Self>>> {
+        if let ToSwarm::GenerateEvent(ev) = ev {
+            match ev {
+                gossipsub::Event::Message {
+                    message: Message { source, data, .. },
+                    ..
+                } => {
+                    if let Ok(EdsNotification { height, data_hash }) =
+                        EdsNotification::deserialize_and_validate(data.as_ref())
+                    {
+                        if let Some(peer_id) = source {
+                            self.pool_tracker
+                                .add_peer_for_hash(peer_id, data_hash, height);
+                        }
+                    } else {
+                        debug!("Invalid shrex sub message");
+                    }
+                }
+                gossipsub::Event::SlowPeer {
+                    peer_id,
+                    failed_messages,
+                } => info!("{peer_id} slow: {failed_messages:?}"),
+                _ => (),
+            }
+        } else {
+            return Poll::Ready(
+                ev.map_out(|_| unreachable!("GenerateEvent handled"))
+                    .map_in(Either::Left),
+            );
+        }
+        Poll::Pending
     }
 }
 
@@ -216,15 +256,12 @@ where
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
-        if let Poll::Ready(ev) = self.shrex_sub.poll(cx) {
-            if let ToSwarm::GenerateEvent(ev) = ev {
-                println!("{ev:?}");
-            } else {
-                return Poll::Ready(
-                    ev.map_out(|_| unreachable!("GenerateEvent handled"))
-                        .map_in(Either::Left),
-                );
-            }
+        let _ = self.pool_tracker.poll(cx);
+
+        if let Poll::Ready(ev) = self.shrex_sub.poll(cx)
+            && let Poll::Ready(ev) = self.handle_shrex_event(ev)
+        {
+            return Poll::Ready(ev);
         }
 
         if let Poll::Ready(ev) = self.req_resp.poll(cx) {
