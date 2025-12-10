@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1](https://github.com/eigerco/lumina/compare/lumina-node-uniffi-v0.5.0...lumina-node-uniffi-v0.5.1) - 2025-12-10
+
+### Added
+
+- *(node,node-wasm,node-uniffi)* Add header, blob, and namespace subscriptions ([#772](https://github.com/eigerco/lumina/pull/772))
+
 ## [0.5.0](https://github.com/eigerco/lumina/compare/lumina-node-uniffi-v0.4.0...lumina-node-uniffi-v0.5.0) - 2025-11-19
 
 ### Other
