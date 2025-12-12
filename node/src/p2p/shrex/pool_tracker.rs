@@ -8,18 +8,20 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::task::{Context, Poll, ready};
+use std::time::Duration;
 
 use celestia_proto::share::p2p::shrex::sub::RecentEdsNotification;
 use celestia_types::{ExtendedHeader, hash::Hash};
 use futures::{FutureExt, StreamExt, future::BoxFuture, stream::FuturesUnordered};
 use libp2p::PeerId;
+use lumina_utils::time::{Elapsed, timeout};
 use prost::Message;
-use smallvec::SmallVec;
-use tracing::{error, warn};
+use tracing::{debug, error, warn};
 
-use crate::store::Store;
+use crate::store::{Store, StoreError};
 
 const ROOT_HASH_WINDOW: u64 = 10;
+const POOL_VALIDATION_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Pool tracker for managing hash-specific and discovered peer pools
 pub struct PoolTracker<S> {
@@ -32,7 +34,8 @@ pub struct PoolTracker<S> {
     /// Header store
     store: Arc<S>,
 
-    new_headers_tasks: FuturesUnordered<BoxFuture<'static, SmallVec<[ExtendedHeader; 1]>>>,
+    new_headers_tasks:
+        FuturesUnordered<BoxFuture<'static, Result<ExtendedHeader, HeaderTaskError>>>,
 }
 
 enum PeerPool {
@@ -40,6 +43,12 @@ enum PeerPool {
     Candidates((HashSet<PeerId>, HashMap<Hash, Vec<PeerId>>)),
     /// Validated: hash for this height has been accepted, all peers moved to discovered
     Validated(Hash, Vec<PeerId>),
+}
+
+impl Default for PeerPool {
+    fn default() -> Self {
+        PeerPool::Candidates((HashSet::new(), HashMap::new()))
+    }
 }
 
 pub(super) struct EdsNotification {
@@ -63,6 +72,16 @@ pub enum NotifcationValidationError {
     /// Invalid notification with zero height
     #[error("Received notification with zero height")]
     InvalidZeroHeight,
+}
+
+#[derive(thiserror::Error, Debug)]
+enum HeaderTaskError {
+    /// Timeout occurred before header was received and validated by the node
+    #[error("Timeout waiting for header at height {0}")]
+    Timeout(u64),
+    /// Propagated from the [`Store`]
+    #[error("Store error when waiting for header at {height}: {source}")]
+    StoreError { height: u64, source: StoreError },
 }
 
 impl EdsNotification {
@@ -89,12 +108,29 @@ where
 {
     /// Create a new PoolTracker with custom stored heights amount
     pub fn new(store: Arc<S>) -> Self {
+        let s = store.clone();
+        let get_subjective_head = async move {
+            let header = match s.get_head().await {
+                Err(StoreError::NotFound) => {
+                    // empty store returns NotFound for head, wait for first header
+                    s.wait_new_head().await;
+                    s.get_head().await
+                }
+                other => other,
+            }
+            // Height is used only for clearing up pools so it's ok to pass dummy value
+            // as we don't have any
+            .map_err(|source| HeaderTaskError::StoreError { height: 0, source })?;
+            Ok(header)
+        }
+        .boxed();
+
         Self {
             hash_pools: HashMap::new(),
             discovered_peers: HashSet::new(),
             subjective_head: None,
             store,
-            new_headers_tasks: FuturesUnordered::new(),
+            new_headers_tasks: FuturesUnordered::from_iter([get_subjective_head]),
         }
     }
 
@@ -106,15 +142,19 @@ where
         if self
             .subjective_head
             .map(stale_height_threshold)
-            .is_some_and(|stale_height| height < stale_height)
+            .is_none_or(|stale_height| height < stale_height)
         {
             return;
         }
 
-        let pool = self
-            .hash_pools
-            .entry(height)
-            .or_insert_with(|| PeerPool::Candidates((HashSet::new(), HashMap::new())));
+        let pool = match self.hash_pools.get_mut(&height) {
+            Some(pool) => pool,
+            None => {
+                tracing::warn!("New pool for height {height}");
+                self.queue_get_header_from_store(height);
+                self.hash_pools.entry(height).or_default()
+            }
+        };
 
         match pool {
             PeerPool::Candidates((voted, candidates)) => {
@@ -148,18 +188,17 @@ where
 
         if let Some(pool) = self.hash_pools.get(&height) {
             match pool {
-                PeerPool::Candidates(_) => {
-                    // Spec says we should use _validated_ pools for peer selection
-                }
+                // Spec says we should use _validated_ pools for peer selection
+                PeerPool::Candidates(_) => (),
                 PeerPool::Validated(validated_hash, validated_peers) => {
                     if validated_hash == data_hash {
-                        // Hash matches - return validated peers first
                         peers.extend(validated_peers.iter().take(count).copied());
                     }
                 }
             }
         }
 
+        // fill out the remaining slots with other discovered peers
         let mut remaining_needed = count.saturating_sub(peers.len());
         let mut discovered_peers_iter = self.discovered_peers.iter();
         while remaining_needed > 0
@@ -171,14 +210,10 @@ where
             }
         }
 
-        if peers.is_empty() {
-            todo!()
-        }
-
         peers
     }
 
-    /// Get all peers that were discovered via valid EDS notification
+    /// Get all peers that were discovered via a valid EDS notification
     pub fn discovered_peers(&self) -> Vec<PeerId> {
         self.discovered_peers.iter().copied().collect()
     }
@@ -202,76 +237,56 @@ where
         }
     }
 
-    fn queue_store_fetch_batch(&mut self) {
-        let previous_head = self.subjective_head;
+    fn queue_get_header_from_store(&mut self, height: u64) {
         let store = self.store.clone();
+
         self.new_headers_tasks.push(
             async move {
-                let current_head = store.wait_new_head().await;
-                let end = current_head + 1;
-                let start = previous_head.unwrap_or(current_head);
-                assert!(start < end);
-                let mut hs = SmallVec::with_capacity(end.saturating_sub(start) as usize); // XXX:
-                for h in start..end {
-                    hs.push(store.get_by_height(h).await.unwrap()); // XXX:
-                }
-                hs
+                timeout(POOL_VALIDATION_TIMEOUT, store.wait_height(height))
+                    .await
+                    .map_err(|_: Elapsed| HeaderTaskError::Timeout(height))?
+                    .map_err(|source| HeaderTaskError::StoreError { height, source })?;
+                store
+                    .get_by_height(height)
+                    .await
+                    .map_err(|source| HeaderTaskError::StoreError { height, source })
             }
             .boxed(),
         );
     }
 
+    // TODO: Errror handling
     pub(super) fn poll(&mut self, cx: &mut Context<'_>) -> Poll<()> {
-        if self.new_headers_tasks.is_empty() {
-            self.queue_store_fetch_batch();
-        }
+        loop {
+            let Some(header) = ready!(self.new_headers_tasks.poll_next_unpin(cx)) else {
+                return Poll::Pending;
+            };
 
-        let headers = ready!(self.new_headers_tasks.poll_next_unpin(cx))
-            .expect("new_headers_tasks should never be empty here");
+            let header = match header {
+                Ok(h) => h,
+                Err(HeaderTaskError::Timeout(height)) => {
+                    self.hash_pools.remove(&height);
+                    continue;
+                }
+                Err(HeaderTaskError::StoreError { height, source }) => {
+                    debug!("Store error waiting for header at {height}: {source}");
+                    self.hash_pools.remove(&height);
+                    continue;
+                }
+            };
 
-        let new_subjective_height: u64 = headers
-            .last()
-            .as_ref()
-            .expect("header list should never be empty")
-            .height()
-            .into();
-        for header in headers {
             let height = header.height().into();
             let Some(data_hash) = header.header.data_hash else {
                 continue;
             };
+
             self.validate_pool(data_hash, height);
-        }
-        self.try_update_subjective_head(new_subjective_height);
 
-        Poll::Ready(()) // TODO: how did the libp2p loop worked anyway?
-    }
+            self.try_update_subjective_head(height);
 
-    /*
-    pub(super) fn poll_headers(&mut self) {
-        loop {
-            match self.header_stream.try_recv() {
-                Ok(h) => {
-                    let height = h.height().into();
-                    let Some(data_hash) = h.header.data_hash else {
-                        continue;
-                    };
-                    self.validate_pool(data_hash, height);
-                    self.try_update_subjective_head(height);
-                }
-                Err(TryRecvError::Empty) => break,
-                Err(TryRecvError::Closed) => {
-                    error!("Header stream closed");
-                    break;
-                }
-                Err(TryRecvError::Lagged(count)) => {
-                    debug!("pool_tracker header poll lagged: {count}");
-                    continue;
-                }
-            }
+            return Poll::Ready(());
         }
     }
-    */
 
     /// Validate pool on header receipt
     ///
@@ -281,16 +296,20 @@ where
         if let Some(pool) = self.hash_pools.get_mut(&height) {
             match pool {
                 PeerPool::Candidates((_, candidates)) => {
-                    let validated_peers = if let Some(peers) = candidates.get(&data_hash) {
-                        for peer_id in peers {
+                    let validated_peers = if let Some(peers) = candidates.remove(&data_hash) {
+                        for peer_id in &peers {
                             self.discovered_peers.insert(*peer_id);
                         }
-                        peers.clone()
+                        peers
                     } else {
                         Vec::new()
                     };
-                    // TODO: slashing wrong answers?
+                    // TODO: slashing wrong answers
 
+                    tracing::warn!(
+                        "Promoted valid pool pool for {height} with {} peers",
+                        validated_peers.len()
+                    );
                     *pool = PeerPool::Validated(data_hash, validated_peers);
                 }
                 PeerPool::Validated(_, _) => {
@@ -325,20 +344,59 @@ fn stale_height_threshold(subjective_head: u64) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{store::InMemoryStore, test_utils::gen_filled_store};
+    use celestia_types::test_utils::ExtendedHeaderGenerator;
+    use futures::future::poll_fn;
+    use lumina_utils::test_utils::async_test;
+    use std::fmt::Debug;
 
     fn vec_to_set<T: std::hash::Hash + Eq>(v: Vec<T>) -> HashSet<T> {
         v.into_iter().collect()
     }
 
-    #[test]
-    fn add_peer_for_hash() {
-        let mut tracker = PoolTracker::new(10);
+    async fn poll_pending_once<F, T>(mut f: F)
+    where
+        F: FnMut(&mut Context<'_>) -> Poll<T>,
+        T: Debug,
+    {
+        poll_fn(|ctx| {
+            assert!(f(ctx).is_pending());
+            Poll::Ready(())
+        })
+        .await;
+    }
+
+    async fn setup_tracker(
+        height: u64,
+    ) -> (
+        PoolTracker<InMemoryStore>,
+        Arc<InMemoryStore>,
+        ExtendedHeaderGenerator,
+    ) {
+        let (store, g) = gen_filled_store(height).await;
+        let store = Arc::new(store);
+        let mut tracker = PoolTracker::new(store.clone());
+
+        // Since pool tracker starts with empty subjective_head and a pending task
+        // to initialise it from the store, we poll until that finishes.
+        // During normal operations this would be handled naturally as libp2p polls
+        // components, but in tests we want to guarantee that the tracker is ready.
+        poll_fn(|ctx| tracker.poll(ctx)).await;
+
+        (tracker, store, g)
+    }
+
+    #[async_test]
+    async fn add_peer_for_hash() {
+        let (mut tracker, store, mut g) = setup_tracker(10).await;
         let peer0 = PeerId::random();
         let hash0 = Hash::Sha256([1u8; 32]);
 
-        tracker.add_peer_for_hash(peer0, hash0, 11);
+        let header = g.next();
+        tracker.add_peer_for_hash(peer0, header.header.data_hash.unwrap(), 11);
 
-        tracker.validate_pool(hash0, 11);
+        store.insert(header).await.unwrap();
+        poll_fn(|ctx| tracker.poll(ctx)).await;
 
         let hash_peers = tracker.get_peers_for_hash(&hash0, 11, 1);
         assert_eq!(hash_peers, vec![peer0]);
@@ -347,20 +405,24 @@ mod tests {
         assert_eq!(discovered_peers, vec![peer0]);
     }
 
-    #[test]
-    fn hash_selection() {
-        let mut tracker = PoolTracker::new(10);
+    #[async_test]
+    async fn hash_selection() {
+        let (mut tracker, store, mut g) = setup_tracker(10).await;
+        let header = g.next();
+
         let peer0 = PeerId::random();
         let peer1_0 = PeerId::random();
         let peer1_1 = PeerId::random();
         let hash0 = Hash::Sha256([1u8; 32]);
-        let hash1 = Hash::Sha256([2u8; 32]);
+        let hash1 = header.header.data_hash.unwrap();
 
         tracker.add_peer_for_hash(peer0, hash0, 11);
         tracker.add_peer_for_hash(peer1_0, hash1, 11);
         tracker.add_peer_for_hash(peer1_1, hash1, 11);
 
-        tracker.validate_pool(hash1, 11);
+        store.insert(header).await.unwrap();
+
+        poll_fn(|ctx| tracker.poll(ctx)).await;
 
         let hash_peers = vec_to_set(tracker.get_peers_for_hash(&hash1, 11, 2));
         assert_eq!(hash_peers, vec_to_set(vec![peer1_0, peer1_1]));
@@ -369,18 +431,23 @@ mod tests {
         assert_eq!(discovered_peers, vec_to_set(vec![peer1_0, peer1_1]));
     }
 
-    #[test]
-    fn add_to_validated_pool() {
-        let mut tracker = PoolTracker::new(10);
+    #[async_test]
+    async fn add_to_validated_pool() {
+        let (mut tracker, store, mut g) = setup_tracker(10).await;
+        let header = g.next();
+
         let peer0 = PeerId::random();
         let peer1 = PeerId::random();
         let peer2 = PeerId::random();
         let peer3 = PeerId::random();
-        let valid_hash = Hash::Sha256([1u8; 32]);
+        let valid_hash = header.header.data_hash.unwrap();
         let invalid_hash = Hash::Sha256([2u8; 32]);
 
         tracker.add_peer_for_hash(peer0, valid_hash, 11);
-        tracker.validate_pool(valid_hash, 11);
+
+        store.insert(header).await.unwrap();
+        poll_fn(|ctx| tracker.poll(ctx)).await;
+
         let discovered_peers = tracker.discovered_peers();
         assert_eq!(discovered_peers, vec![peer0]);
 
@@ -392,10 +459,12 @@ mod tests {
         assert_eq!(discovered_peers, vec_to_set(vec![peer0, peer1, peer2]));
     }
 
-    #[test]
-    fn duplicate_votes() {
-        let mut tracker = PoolTracker::new(10);
-        let valid_hash = Hash::Sha256([1u8; 32]);
+    #[async_test]
+    async fn duplicate_votes() {
+        let (mut tracker, store, mut g) = setup_tracker(10).await;
+        let header = g.next();
+
+        let valid_hash = header.header.data_hash.unwrap();
         let peer0 = PeerId::random();
         let invalid_hash0 = Hash::Sha256([2u8; 32]);
         let peer1 = PeerId::random();
@@ -408,35 +477,46 @@ mod tests {
         tracker.add_peer_for_hash(peer1, invalid_hash1, 11);
         tracker.add_peer_for_hash(peer1, valid_hash, 11);
 
-        tracker.validate_pool(valid_hash, 11);
+        store.insert(header).await.unwrap();
+        poll_fn(|ctx| tracker.poll(ctx)).await;
 
         let discovered_peers = tracker.discovered_peers();
         assert_eq!(discovered_peers, vec![peer0]);
     }
 
-    #[test]
-    fn ignore_old_heights() {
-        let mut tracker = PoolTracker::new(15);
-        let stale_hash = Hash::Sha256([1u8; 32]);
+    #[async_test]
+    async fn ignore_old_heights() {
+        let (mut tracker, store, mut g) = setup_tracker(1).await;
+        let old_header = g.next();
+        let headers = g.next_many(10);
+
+        let valid_stale_hash = old_header.header.data_hash.unwrap();
         let old_peer = PeerId::random();
 
-        tracker.add_peer_for_hash(old_peer, stale_hash, 4);
-        tracker.validate_pool(stale_hash, 4);
+        store.insert(old_header).await.unwrap();
+        store.insert(headers).await.unwrap();
+
+        // TODO: currently we're polled by shrex/sub notifications
+        // how to also keep up with the store?
+        tracker.add_peer_for_hash(old_peer, valid_stale_hash, 2);
 
         assert!(tracker.discovered_peers().is_empty());
     }
 
-    #[test]
-    fn eviction() {
-        let mut tracker = PoolTracker::new(3);
-        let stale_hash = Hash::Sha256([1u8; 32]);
+    #[async_test]
+    async fn eviction() {
+        let (mut tracker, store, mut g) = setup_tracker(3).await;
+        let old_header = g.next();
+        let headers = g.next_many(10);
+
+        let stale_hash = old_header.header.data_hash.unwrap();
         let old_peer = PeerId::random();
 
         tracker.add_peer_for_hash(old_peer, stale_hash, 4);
         tracker.validate_pool(stale_hash, 4);
-        for h in 5..=5 + ROOT_HASH_WINDOW {
-            tracker.validate_pool(Hash::Sha256([h as u8; 32]), h);
-        }
+        store.insert(old_header).await.unwrap();
+        store.insert(headers).await.unwrap();
+        //for h in 5..=5 + ROOT_HASH_WINDOW { tracker.validate_pool(Hash::Sha256([h as u8; 32]), h); }
         let discovered_peers = tracker.discovered_peers();
         assert_eq!(discovered_peers, vec![old_peer]);
 
@@ -448,24 +528,28 @@ mod tests {
         assert_eq!(discovered_peers, vec![old_peer]);
     }
 
-    #[test]
-    fn peer_selection() {
-        let mut tracker = PoolTracker::new(10);
+    #[async_test]
+    async fn peer_selection() {
+        let (mut tracker, store, mut g) = setup_tracker(10).await;
+        let headers = g.next_many(2);
+
         let peer0 = PeerId::random();
         let peer1 = PeerId::random();
         let peer2 = PeerId::random();
-        let hash0 = Hash::Sha256([1u8; 32]);
-        let hash1 = Hash::Sha256([2u8; 32]);
+        let hash0 = headers[0].header.data_hash.unwrap();
+        let hash1 = headers[1].header.data_hash.unwrap();
         let invalid_hash = Hash::Sha256([3u8; 32]);
 
         tracker.add_peer_for_hash(peer0, hash0, 11);
         tracker.add_peer_for_hash(peer1, hash0, 11);
-        tracker.validate_pool(hash0, 11);
+        store.insert(&headers[0]).await.unwrap();
+        poll_fn(|ctx| tracker.poll(ctx)).await;
 
         tracker.add_peer_for_hash(peer0, hash1, 12);
         tracker.add_peer_for_hash(peer1, invalid_hash, 12);
         tracker.add_peer_for_hash(peer2, hash1, 12);
-        tracker.validate_pool(hash1, 12);
+        store.insert(&headers[1]).await.unwrap();
+        poll_fn(|ctx| tracker.poll(ctx)).await;
 
         println!("P0 {peer0}");
         println!("P1 {peer1}");
@@ -478,17 +562,21 @@ mod tests {
         assert_eq!(preferred_peers, vec_to_set(vec![peer0, peer2]));
     }
 
-    #[test]
-    fn remove_peer() {
-        let mut tracker = PoolTracker::new(10);
+    #[async_test]
+    async fn remove_peer() {
+        let (mut tracker, store, mut g) = setup_tracker(10).await;
+        let headers = g.next_many(2);
         let peer0 = PeerId::random();
         let peer1 = PeerId::random();
-        let hash0 = Hash::Sha256([1u8; 32]);
-        let hash1 = Hash::Sha256([2u8; 32]);
+        let hash0 = headers[0].header.data_hash.unwrap();
+        let hash1 = headers[1].header.data_hash.unwrap();
 
         tracker.add_peer_for_hash(peer0, hash0, 11);
         tracker.add_peer_for_hash(peer1, hash0, 11);
-        tracker.validate_pool(hash0, 11);
+
+        store.insert(&headers[0]).await.unwrap();
+        poll_fn(|ctx| tracker.poll(ctx)).await;
+
         let discovered_peers = vec_to_set(tracker.discovered_peers());
         assert_eq!(discovered_peers, vec_to_set(vec![peer0, peer1]));
 
@@ -500,7 +588,8 @@ mod tests {
         let discovered_peers = vec_to_set(tracker.discovered_peers());
         assert_eq!(discovered_peers, vec_to_set(vec![peer1]));
 
-        tracker.validate_pool(hash1, 12);
+        store.insert(&headers[1]).await.unwrap();
+        poll_fn(|ctx| tracker.poll(ctx)).await;
 
         let discovered_peers = vec_to_set(tracker.discovered_peers());
         assert_eq!(discovered_peers, vec_to_set(vec![peer1]));
