@@ -17,8 +17,8 @@ use lumina_node::network::Network;
 use lumina_node::node::{DEFAULT_PRUNING_WINDOW_IN_MEMORY, Node};
 use lumina_node::store::{EitherStore, InMemoryStore, RedbStore, Store as _};
 use tokio::task::spawn_blocking;
-use tracing::info;
 use tracing::warn;
+use tracing::{info, trace};
 
 const CELESTIA_LOCAL_BRIDGE_RPC_ADDR: &str = "ws://localhost:36658";
 
