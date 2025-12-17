@@ -3,7 +3,8 @@ use serde::{Deserialize, Serialize};
 use celestia_types::Height;
 use celestia_types::hash::Hash;
 
-use crate::grpc::TxPriority;
+use crate::Error;
+use crate::grpc::{AsyncGrpcCall, TxPriority};
 
 pub use celestia_proto::cosmos::tx::v1beta1::SignDoc;
 
@@ -15,6 +16,44 @@ pub struct TxInfo {
     pub hash: Hash,
     /// Height at which transaction was submitted.
     pub height: Height,
+}
+
+/// Broadcasted, but still not confirmed transaction.
+#[derive(Debug)]
+pub struct SubmittedTx {
+    broadcasted_tx: BroadcastedTx,
+    confirm_tx: AsyncGrpcCall<TxInfo>,
+}
+
+impl SubmittedTx {
+    pub(crate) fn new(tx: BroadcastedTx, confirm_tx: AsyncGrpcCall<TxInfo>) -> SubmittedTx {
+        SubmittedTx {
+            broadcasted_tx: tx,
+            confirm_tx,
+        }
+    }
+
+    /// Get reference to [`BroadcastedTx`]
+    pub fn tx_ref(&self) -> &BroadcastedTx {
+        &self.broadcasted_tx
+    }
+
+    /// Confirm the transaction and return [`TxInfo`]
+    pub async fn confirm(self) -> Result<TxInfo, Error> {
+        self.confirm_tx.await
+    }
+}
+
+/// A transaction that was broadcasted
+#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct BroadcastedTx {
+    /// Broadcasted bytes
+    pub tx: Vec<u8>,
+    /// Transaction hash
+    pub hash: Hash,
+    /// Transaction sequence
+    pub sequence: u64,
 }
 
 /// Configuration for the transaction.
@@ -152,5 +191,28 @@ mod wbg {
                 priority: value.priority().unwrap_or_default(),
             }
         }
+    }
+}
+
+impl From<SubmittedTx> for BroadcastedTx {
+    fn from(value: SubmittedTx) -> Self {
+        value.broadcasted_tx
+    }
+}
+
+impl From<SubmittedTx> for AsyncGrpcCall<TxInfo> {
+    fn from(value: SubmittedTx) -> Self {
+        value.confirm_tx
+    }
+}
+
+impl From<SubmittedTx> for (BroadcastedTx, AsyncGrpcCall<TxInfo>) {
+    fn from(
+        SubmittedTx {
+            broadcasted_tx,
+            confirm_tx,
+        }: SubmittedTx,
+    ) -> Self {
+        (broadcasted_tx, confirm_tx)
     }
 }
