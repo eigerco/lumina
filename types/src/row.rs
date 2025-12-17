@@ -17,29 +17,16 @@ use prost::Message;
 use serde::Serialize;
 
 use crate::consts::appconsts::SHARE_SIZE;
-use crate::eds::ExtendedDataSquare;
+use crate::eds::{EDS_ID_SIZE, EdsId, ExtendedDataSquare};
 use crate::nmt::{Nmt, NmtExt};
 use crate::{DataAvailabilityHeader, Error, Result, Share};
 
-/// Number of bytes needed to represent [`EdsId`] in `multihash`.
-const EDS_ID_SIZE: usize = 8;
 /// Number of bytes needed to represent [`RowId`] in `multihash`.
-pub(crate) const ROW_ID_SIZE: usize = EDS_ID_SIZE + 2;
+pub const ROW_ID_SIZE: usize = EDS_ID_SIZE + 2;
 /// The code of the [`RowId`] hashing algorithm in `multihash`.
 pub const ROW_ID_MULTIHASH_CODE: u64 = 0x7801;
 /// The id of codec used for the [`RowId`] in `Cid`s.
 pub const ROW_ID_CODEC: u64 = 0x7800;
-
-/// Represents an EDS of a specific Height
-///
-/// # Note
-///
-/// EdsId is excluded from shwap operating on top of bitswap due to possible
-/// EDS sizes exceeding bitswap block limits.
-#[derive(Debug, PartialEq, Clone, Copy)]
-struct EdsId {
-    height: u64,
-}
 
 /// Represents particular row in a specific Data Square,
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -173,19 +160,15 @@ impl RowId {
     ///
     /// This function will return an error if the block height is invalid.
     pub fn new(index: u16, height: u64) -> Result<Self> {
-        if height == 0 {
-            return Err(Error::ZeroBlockHeight);
-        }
-
         Ok(Self {
             index,
-            eds_id: EdsId { height },
+            eds_id: EdsId::new(height)?,
         })
     }
 
     /// A height of the block which contains the data.
     pub fn block_height(&self) -> u64 {
-        self.eds_id.height
+        self.eds_id.block_height()
     }
 
     /// An index of the row in the [`ExtendedDataSquare`].
@@ -195,28 +178,22 @@ impl RowId {
         self.index
     }
 
-    pub(crate) fn encode(&self, bytes: &mut BytesMut) {
+    pub fn encode(&self, bytes: &mut BytesMut) {
         bytes.reserve(ROW_ID_SIZE);
-        bytes.put_u64(self.block_height());
+        self.eds_id.encode(bytes);
         bytes.put_u16(self.index);
     }
 
-    pub(crate) fn decode(mut buffer: &[u8]) -> Result<Self, CidError> {
+    pub fn decode(buffer: &[u8]) -> Result<Self, CidError> {
         if buffer.len() != ROW_ID_SIZE {
             return Err(CidError::InvalidMultihashLength(buffer.len()));
         }
 
-        let height = buffer.get_u64();
-        let index = buffer.get_u16();
+        let (eds_bytes, mut row_bytes) = buffer.split_at(EDS_ID_SIZE);
+        let eds_id = EdsId::decode(eds_bytes)?;
+        let index = row_bytes.get_u16();
 
-        if height == 0 {
-            return Err(CidError::InvalidCid("Zero block height".to_string()));
-        }
-
-        Ok(Self {
-            eds_id: EdsId { height },
-            index,
-        })
+        Ok(Self { eds_id, index })
     }
 }
 
@@ -371,10 +348,7 @@ mod tests {
             let dah = DataAvailabilityHeader::from_eds(&eds);
 
             let index = rand::random::<u16>() % eds.square_width();
-            let id = RowId {
-                eds_id: EdsId { height: 1 },
-                index,
-            };
+            let id = RowId::new(index, 1).unwrap();
 
             let row = Row {
                 shares: eds.row(index).unwrap(),

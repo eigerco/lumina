@@ -23,14 +23,13 @@ use blockstore::Blockstore;
 use celestia_proto::p2p::pb::{HeaderRequest, header_request};
 use celestia_types::fraud_proof::BadEncodingFraudProof;
 use celestia_types::hash::Hash;
-use celestia_types::nmt::{Namespace, NamespacedSha2Hasher};
+use celestia_types::namespace_data::NamespaceData;
+use celestia_types::nmt::Namespace;
 use celestia_types::row::{Row, RowId};
-use celestia_types::row_namespace_data::{NamespaceData, RowNamespaceData, RowNamespaceDataId};
+use celestia_types::row_namespace_data::{RowNamespaceData, RowNamespaceDataId};
 use celestia_types::sample::{Sample, SampleId};
-use celestia_types::{Blob, ExtendedHeader, FraudProof};
+use celestia_types::{Blob, ExtendedDataSquare, ExtendedHeader, FraudProof};
 use cid::Cid;
-use futures::TryStreamExt;
-use futures::stream::FuturesOrdered;
 use libp2p::gossipsub::TopicHash;
 use libp2p::identity::Keypair;
 use libp2p::swarm::{NetworkBehaviour, NetworkInfo};
@@ -52,6 +51,7 @@ mod shrex;
 pub(crate) mod shwap;
 mod swarm;
 mod swarm_manager;
+mod utils;
 
 use crate::block_ranges::BlockRange;
 use crate::events::EventPublisher;
@@ -67,6 +67,7 @@ use crate::utils::{
 };
 
 pub use crate::p2p::header_ex::HeaderExError;
+pub use crate::p2p::shrex::ShrExError;
 
 // Maximum size of a [`Multihash`].
 pub(crate) const MAX_MH_SIZE: usize = 64;
@@ -103,6 +104,10 @@ pub enum P2pError {
     /// An error propagated from the `header-ex`.
     #[error("HeaderEx: {0}")]
     HeaderEx(#[from] HeaderExError),
+
+    /// An error propagated from the `shr-ex`.
+    #[error("ShrEx: {0}")]
+    ShrEx(#[from] ShrExError),
 
     /// Bootnode address is missing its peer ID.
     #[error("Bootnode multiaddrs without peer ID: {0:?}")]
@@ -158,6 +163,7 @@ impl P2pError {
             | P2pError::ChannelClosedUnexpectedly
             | P2pError::BootnodeAddrsWithoutPeerId(_) => true,
             P2pError::HeaderEx(_)
+            | P2pError::ShrEx(_)
             | P2pError::Bitswap(_)
             | P2pError::ProtoDecodeFailed(_)
             | P2pError::Cid(_)
@@ -260,6 +266,28 @@ pub(crate) enum P2pCmd {
     },
     GetNetworkHead {
         respond_to: oneshot::Sender<Option<ExtendedHeader>>,
+    },
+    #[allow(dead_code)]
+    GetRow {
+        row_index: u16,
+        block_height: u64,
+        respond_to: OneshotResultSender<Row, P2pError>,
+    },
+    #[allow(dead_code)]
+    GetSample {
+        row_index: u16,
+        column_index: u16,
+        block_height: u64,
+        respond_to: OneshotResultSender<Sample, P2pError>,
+    },
+    GetNamespaceData {
+        namespace: Namespace,
+        block_height: u64,
+        respond_to: OneshotResultSender<NamespaceData, P2pError>,
+    },
+    GetEds {
+        block_height: u64,
+        respond_to: OneshotResultSender<ExtendedDataSquare, P2pError>,
     },
 }
 
@@ -549,6 +577,19 @@ impl P2p {
         Ok(sample)
     }
 
+    // TODO: add timeout
+    pub async fn get_eds(&self, block_height: u64) -> Result<ExtendedDataSquare> {
+        let (tx, rx) = oneshot::channel();
+
+        self.send_command(P2pCmd::GetEds {
+            block_height,
+            respond_to: tx,
+        })
+        .await?;
+
+        rx.await?
+    }
+
     /// Request a [`RowNamespaceData`] on bitswap protocol.
     pub async fn get_row_namespace_data(
         &self,
@@ -567,40 +608,22 @@ impl P2p {
         Ok(row_namespace_data)
     }
 
-    pub(crate) async fn get_namespace_data<S>(
+    pub async fn get_namespace_data(
         &self,
         namespace: Namespace,
-        header: &ExtendedHeader,
+        block_height: u64,
         timeout: Option<Duration>,
-        store: &S,
-    ) -> Result<NamespaceData>
-    where
-        S: Store,
-    {
-        let block_height: u64 = header.height().into();
-        let rows_to_fetch: Vec<_> = header
-            .dah
-            .row_roots()
-            .iter()
-            .enumerate()
-            .filter(|(_, row)| row.contains::<NamespacedSha2Hasher>(*namespace))
-            .map(|(n, _)| n as u16)
-            .collect();
+    ) -> Result<NamespaceData> {
+        let (tx, rx) = oneshot::channel();
 
-        let futs = rows_to_fetch
-            .into_iter()
-            .map(|row_idx| self.get_row_namespace_data(namespace, row_idx, block_height, timeout))
-            .collect::<FuturesOrdered<_>>();
+        self.send_command(P2pCmd::GetNamespaceData {
+            namespace,
+            block_height,
+            respond_to: tx,
+        })
+        .await?;
 
-        let rows: Vec<_> = match futs.try_collect().await {
-            Ok(rows) => rows,
-            Err(P2pError::BitswapQueryTimeout) if !store.has_at(block_height).await => {
-                return Err(P2pError::HeaderPruned(block_height));
-            }
-            Err(e) => return Err(e),
-        };
-
-        Ok(NamespaceData { rows })
+        rx.await?
     }
 
     /// Request all blobs with provided namespace in the block corresponding to this header
@@ -615,8 +638,10 @@ impl P2p {
     where
         S: Store,
     {
-        let header = match store.get_by_height(block_height).await {
-            Ok(header) => header,
+        // TODO: Figure out app_version based on network id and height instead
+        // of retrieving the header.
+        let app_version = match store.get_by_height(block_height).await {
+            Ok(header) => header.app_version()?,
             Err(StoreError::NotFound) => {
                 let pruned_ranges = store.get_pruned_ranges().await?;
 
@@ -628,13 +653,17 @@ impl P2p {
             }
             Err(e) => return Err(e.into()),
         };
+
         let namespace_data = self
-            .get_namespace_data(namespace, &header, timeout, store)
+            .get_namespace_data(namespace, block_height, timeout)
             .await?;
 
-        let shares = namespace_data.rows.iter().flat_map(|row| row.shares.iter());
+        let shares = namespace_data
+            .rows()
+            .iter()
+            .flat_map(|row| row.shares.iter());
 
-        Ok(Blob::reconstruct_all(shares, header.app_version()?)?)
+        Ok(Blob::reconstruct_all(shares, app_version)?)
     }
 
     /// Get the addresses where [`P2p`] listens on for incoming connections.
@@ -829,6 +858,7 @@ where
         }
 
         self.swarm.context().behaviour.header_ex.stop();
+        self.swarm.context().behaviour.shr_ex.stop();
         self.swarm.stop().await;
     }
 
@@ -852,9 +882,7 @@ where
             BehaviourEvent::Gossipsub(ev) => self.on_gossip_sub_event(ev).await,
             BehaviourEvent::Bitswap(ev) => self.on_bitswap_event(ev).await,
             BehaviourEvent::HeaderEx(ev) => self.on_header_ex_event(ev).await,
-            BehaviourEvent::ShrEx(_ev) => {
-                // todo: event for adding peers to peer tracker
-            }
+            BehaviourEvent::ShrEx(ev) => self.on_shrex_event(ev).await,
         }
 
         Ok(())
@@ -919,6 +947,54 @@ where
                     .as_ref()
                     .map(|state| state.known_head.clone());
                 respond_to.maybe_send(head);
+            }
+            P2pCmd::GetRow {
+                row_index,
+                block_height,
+                respond_to,
+            } => {
+                self.swarm
+                    .context()
+                    .behaviour
+                    .shr_ex
+                    .get_row(block_height, row_index, respond_to)
+                    .await
+            }
+            P2pCmd::GetSample {
+                row_index,
+                column_index,
+                block_height,
+                respond_to,
+            } => {
+                self.swarm
+                    .context()
+                    .behaviour
+                    .shr_ex
+                    .get_sample(block_height, row_index, column_index, respond_to)
+                    .await
+            }
+            P2pCmd::GetNamespaceData {
+                namespace,
+                block_height,
+                respond_to,
+            } => {
+                self.swarm
+                    .context()
+                    .behaviour
+                    .shr_ex
+                    .get_namespace_data(block_height, namespace, respond_to)
+                    .await
+            }
+            P2pCmd::GetEds {
+                block_height,
+                respond_to,
+            } => {
+                self.swarm
+                    .context()
+                    .behaviour
+                    .shr_ex
+                    .get_eds(block_height, respond_to)
+                    .await
             }
         }
 
@@ -1013,6 +1089,19 @@ where
             }
             header_ex::Event::NeedArchivalPeers => {
                 self.swarm.start_archival_node_kad_query();
+            }
+        }
+    }
+
+    #[instrument(level = "trace", skip(self))]
+    async fn on_shrex_event(&mut self, ev: shrex::Event) {
+        match ev {
+            shrex::Event::SchedulePendingRequests => {
+                let ctx = self.swarm.context();
+
+                ctx.behaviour
+                    .shr_ex
+                    .schedule_pending_requests(ctx.peer_tracker);
             }
         }
     }

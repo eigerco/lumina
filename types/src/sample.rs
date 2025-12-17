@@ -262,13 +262,13 @@ impl SampleId {
         self.column_index
     }
 
-    fn encode(&self, bytes: &mut BytesMut) {
+    pub fn encode(&self, bytes: &mut BytesMut) {
         bytes.reserve(SAMPLE_ID_SIZE);
         self.row_id.encode(bytes);
         bytes.put_u16(self.column_index);
     }
 
-    fn decode(buffer: &[u8]) -> Result<Self, CidError> {
+    pub fn decode(buffer: &[u8]) -> Result<Self, CidError> {
         if buffer.len() != SAMPLE_ID_SIZE {
             return Err(CidError::InvalidMultihashLength(buffer.len()));
         }

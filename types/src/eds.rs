@@ -3,6 +3,8 @@
 use std::cmp::Ordering;
 use std::fmt::Display;
 
+use blockstore::block::CidError;
+use bytes::{Buf, BufMut, BytesMut};
 use serde::{Deserialize, Serialize};
 
 use crate::consts::appconsts::{AppVersion, SHARE_SIZE};
@@ -12,6 +14,20 @@ use crate::consts::data_availability_header::{
 use crate::nmt::{NS_SIZE, Namespace, NamespacedSha2Hasher, Nmt, NmtExt};
 use crate::row_namespace_data::{RowNamespaceData, RowNamespaceDataId};
 use crate::{DataAvailabilityHeader, Error, InfoByte, Result, Share, bail_validation};
+
+/// Number of bytes needed to represent [`EdsId`] in `multihash`.
+pub const EDS_ID_SIZE: usize = 8;
+
+/// Represents an EDS of a specific Height
+///
+/// # Note
+///
+/// EdsId is excluded from shwap operating on top of bitswap due to possible
+/// EDS sizes exceeding bitswap block limits.
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub struct EdsId {
+    height: u64,
+}
 
 /// Represents either column or row of the [`ExtendedDataSquare`].
 ///
@@ -445,6 +461,42 @@ impl ExtendedDataSquare {
         }
 
         Ok(rows)
+    }
+}
+
+impl EdsId {
+    pub fn new(height: u64) -> Result<Self> {
+        if height == 0 {
+            return Err(Error::ZeroBlockHeight);
+        }
+
+        Ok(EdsId { height })
+    }
+
+    /// A height of the block which contains the data.
+    pub fn block_height(&self) -> u64 {
+        self.height
+    }
+
+    pub fn encode(&self, bytes: &mut BytesMut) {
+        bytes.reserve(EDS_ID_SIZE);
+        bytes.put_u64(self.height);
+    }
+
+    pub fn decode(mut buffer: &[u8]) -> Result<Self, CidError> {
+        if buffer.len() != EDS_ID_SIZE {
+            // TODO: change error
+            return Err(CidError::InvalidMultihashLength(buffer.len()));
+        }
+
+        let height = buffer.get_u64();
+
+        if height == 0 {
+            return Err(CidError::InvalidCid("Zero block height".to_string()));
+        }
+
+        // TODO: use new after changing error type
+        Ok(EdsId { height })
     }
 }
 

@@ -18,11 +18,12 @@ use tracing::warn;
 use blockstore::Blockstore;
 use celestia_types::blob::BlobsAtHeight;
 use celestia_types::hash::Hash;
+use celestia_types::namespace_data::NamespaceData;
 use celestia_types::nmt::Namespace;
 use celestia_types::row::Row;
 use celestia_types::row_namespace_data::RowNamespaceData;
 use celestia_types::sample::Sample;
-use celestia_types::{Blob, ExtendedHeader, SharesAtHeight};
+use celestia_types::{Blob, ExtendedDataSquare, ExtendedHeader, SharesAtHeight};
 use lumina_utils::executor::{JoinHandle, spawn, spawn_cancellable};
 
 use crate::blockstore::{InMemoryBlockstore, SampleBlockstore};
@@ -424,6 +425,14 @@ where
         Ok(sample)
     }
 
+    pub async fn request_extended_data_square(
+        &self,
+        block_height: u64,
+        timeout: Option<Duration>,
+    ) -> Result<ExtendedDataSquare> {
+        Ok(self.p2p().get_eds(block_height).await?)
+    }
+
     /// Request a verified [`RowNamespaceData`] from the network.
     ///
     /// # Errors
@@ -440,6 +449,25 @@ where
         Ok(self
             .p2p()
             .get_row_namespace_data(namespace, row_index, block_height, timeout)
+            .await?)
+    }
+
+    /// Request a verified [`NamespaceData`] from the network.
+    ///
+    /// # Errors
+    ///
+    /// On failure to receive a verified [`NamespaceData`] within a certain time, the
+    /// `NodeError::P2p(P2pError::BitswapQueryTimeout)` error will be returned.
+    // TODO: Fix doc comment, the error is not valid anymore because shrex is used
+    pub async fn request_namespace_data(
+        &self,
+        namespace: Namespace,
+        block_height: u64,
+        timeout: Option<Duration>,
+    ) -> Result<NamespaceData> {
+        Ok(self
+            .p2p()
+            .get_namespace_data(namespace, block_height, timeout)
             .await?)
     }
 
@@ -527,11 +555,6 @@ where
         namespace: Namespace,
     ) -> Result<ReceiverStream<Result<BlobsAtHeight, SubscriptionError>>> {
         let header_receiver = self.header_subscribe().await?;
-        let store = self
-            .store
-            .as_ref()
-            .cloned()
-            .expect("store should be present");
         let p2p = self.p2p.as_ref().cloned().expect("p2p should be present");
 
         // We're keeping a small buffer of blobs, so that new headers are cached eagerly
@@ -539,7 +562,7 @@ where
         // This is mostly relevant for cases where pruning window is set to zero.
         let (tx, rx) = mpsc::channel(16);
 
-        spawn(async move { forward_new_blobs(namespace, tx, header_receiver, store, p2p).await });
+        spawn(async move { forward_new_blobs(namespace, tx, header_receiver, p2p).await });
 
         Ok(ReceiverStream::new(rx))
     }
@@ -553,11 +576,6 @@ where
         namespace: Namespace,
     ) -> Result<ReceiverStream<Result<SharesAtHeight, SubscriptionError>>> {
         let header_receiver = self.header_subscribe().await?;
-        let store = self
-            .store
-            .as_ref()
-            .cloned()
-            .expect("store should be present");
         let p2p = self.p2p.as_ref().cloned().expect("p2p should be present");
 
         // We're keeping a small buffer of shares, so that new headers are cached eagerly
@@ -565,7 +583,7 @@ where
         // This is mostly relevant for cases where pruning window is set to zero.
         let (tx, rx) = mpsc::channel(16);
 
-        spawn(async move { forward_new_shares(namespace, tx, header_receiver, store, p2p).await });
+        spawn(async move { forward_new_shares(namespace, tx, header_receiver, p2p).await });
 
         Ok(ReceiverStream::new(rx))
     }
