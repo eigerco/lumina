@@ -38,6 +38,7 @@ pub(crate) struct Config<'a, S> {
     pub network_id: &'a str,
     pub local_keypair: &'a Keypair,
     pub header_store: Arc<S>,
+    pub stream_ctrl: libp2p_stream::Control,
 }
 
 pub(crate) struct Behaviour<S>
@@ -61,7 +62,6 @@ pub(crate) struct InnerBehaviour {
     // we cannot be isolated in a way described in a shrex-sub spec:
     // https://github.com/celestiaorg/celestia-node/blob/76db37cc4ac09e892122a081b8bea24f87899f11/specs/src/shrex/shrex-sub.md#why-not-gossipsub
     shrex_sub: gossipsub::Behaviour,
-    stream: libp2p_stream::Behaviour,
 }
 
 #[derive(Debug)]
@@ -118,12 +118,10 @@ where
             .subscribe(&gossipsub::IdentTopic::new(topic))
             .map_err(|e| P2pError::GossipsubInit(e.to_string()))?;
 
-        let stream = libp2p_stream::Behaviour::new();
-        let stream_ctrl = stream.new_control();
-        let client = Client::new(&config, stream_ctrl);
+        let client = Client::new(&config);
 
         Ok(Self {
-            inner: InnerBehaviour { shrex_sub, stream },
+            inner: InnerBehaviour { shrex_sub },
             client,
             _da_pools: HashMap::new(),
             _store: config.header_store,

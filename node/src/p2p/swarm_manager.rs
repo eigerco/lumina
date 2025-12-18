@@ -8,6 +8,7 @@ use libp2p::core::transport::ListenerId;
 use libp2p::identity::Keypair;
 use libp2p::kad::{QueryInfo, RecordKey};
 use libp2p::multiaddr::{Multiaddr, Protocol};
+use libp2p::swarm::behaviour::toggle::Toggle;
 use libp2p::swarm::dial_opts::{DialOpts, PeerCondition};
 use libp2p::swarm::{ConnectionId, DialError, NetworkBehaviour, NetworkInfo, Swarm, SwarmEvent};
 use libp2p::{PeerId, autonat, identify, kad, ping};
@@ -43,12 +44,13 @@ where
     B: NetworkBehaviour + 'static,
     B::ToSwarm: Debug,
 {
+    stream: libp2p_stream::Behaviour,
     connection_control: connection_control::Behaviour,
     autonat: autonat::Behaviour,
     ping: ping::Behaviour,
     identify: identify::Behaviour,
     kademlia: kad::Behaviour<kad::store::MemoryStore>,
-    behaviour: B,
+    behaviour: Toggle<B>,
 }
 
 pub(crate) struct SwarmManager<B>
@@ -87,7 +89,6 @@ where
         listen_on: &[Multiaddr],
         mut peer_tracker: PeerTracker,
         event_pub: EventPublisher,
-        behaviour: B,
     ) -> Result<SwarmManager<B>> {
         let local_peer_id = PeerId::from(keypair.public());
 
@@ -102,12 +103,13 @@ where
         let identify = identify::Behaviour::new(identify_config);
 
         let behaviour = SwarmBehaviour {
+            stream: libp2p_stream::Behaviour::new(),
             connection_control,
             autonat,
             ping,
             identify,
             kademlia,
-            behaviour,
+            behaviour: None.into(),
         };
 
         let mut swarm = new_swarm(keypair.to_owned(), behaviour).await?;
@@ -163,6 +165,18 @@ where
         Ok(manager)
     }
 
+    pub(crate) fn attach_behaviour(&mut self, behaviour: B) {
+        if self.swarm.behaviour_mut().behaviour.is_enabled() {
+            panic!("Behaviour can be attached on SwarmManager only once!");
+        }
+
+        self.swarm.behaviour_mut().behaviour = Some(behaviour).into();
+    }
+
+    pub(crate) fn stream_control(&self) -> libp2p_stream::Control {
+        self.swarm.behaviour().stream.new_control()
+    }
+
     pub(crate) async fn poll(&mut self) -> Result<B::ToSwarm> {
         loop {
             select! {
@@ -186,7 +200,12 @@ where
 
     pub(crate) fn context<'a>(&'a mut self) -> SwarmContext<'a, B> {
         SwarmContext {
-            behaviour: &mut self.swarm.behaviour_mut().behaviour,
+            behaviour: self
+                .swarm
+                .behaviour_mut()
+                .behaviour
+                .as_mut()
+                .expect("Behaviour not attached on SwarmManager"),
             peer_tracker: &self.peer_tracker,
         }
     }
@@ -491,7 +510,9 @@ where
                 SwarmBehaviourEvent::Identify(ev) => self.on_identify_event(ev),
                 SwarmBehaviourEvent::Kademlia(ev) => self.on_kademlia_event(ev),
                 SwarmBehaviourEvent::Ping(ev) => self.on_ping_event(ev),
-                SwarmBehaviourEvent::ConnectionControl(_) | SwarmBehaviourEvent::Autonat(_) => {}
+                SwarmBehaviourEvent::Stream(_)
+                | SwarmBehaviourEvent::ConnectionControl(_)
+                | SwarmBehaviourEvent::Autonat(_) => {}
                 SwarmBehaviourEvent::Behaviour(ev) => return Some(ev),
             },
             SwarmEvent::ConnectionEstablished {

@@ -774,6 +774,16 @@ where
         cmd_rx: mpsc::Receiver<P2pCmd>,
         peer_tracker: PeerTracker,
     ) -> Result<Self, P2pError> {
+        let mut swarm = SwarmManager::new(
+            &args.network_id,
+            &args.local_keypair,
+            &args.bootnodes,
+            &args.listen_on,
+            peer_tracker,
+            args.event_pub.clone(),
+        )
+        .await?;
+
         let header_sub_topic = gossipsub_ident_topic(&args.network_id, "/header-sub/v0.0.1");
         let bad_encoding_fraud_sub_topic =
             fraudsub_ident_topic(BadEncodingFraudProof::TYPE, &args.network_id);
@@ -794,25 +804,15 @@ where
             network_id: &args.network_id,
             local_keypair: &args.local_keypair,
             header_store: args.store.clone(),
+            stream_ctrl: swarm.stream_control(),
         })?;
 
-        let behaviour = Behaviour {
+        swarm.attach_behaviour(Behaviour {
             bitswap,
             gossipsub,
             header_ex,
             shr_ex,
-        };
-
-        let swarm = SwarmManager::new(
-            &args.network_id,
-            &args.local_keypair,
-            &args.bootnodes,
-            &args.listen_on,
-            peer_tracker,
-            args.event_pub,
-            behaviour,
-        )
-        .await?;
+        });
 
         Ok(Worker {
             cancellation_token,

@@ -188,9 +188,9 @@ impl<S> Client<S>
 where
     S: Store,
 {
-    pub(super) fn new(config: &Config<'_, S>, stream_ctrl: libp2p_stream::Control) -> Client<S> {
+    pub(super) fn new(config: &Config<'_, S>) -> Client<S> {
         Client {
-            stream_ctrl,
+            stream_ctrl: config.stream_ctrl.clone(),
             network_id: config.network_id.to_owned(),
             store: config.header_store.clone(),
             next_req_id: 0,
