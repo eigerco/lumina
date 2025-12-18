@@ -11,7 +11,7 @@ use celestia_types::nmt::Namespace;
 use celestia_types::row::{Row, RowId};
 use celestia_types::sample::{Sample, SampleId};
 use futures::future::BoxFuture;
-use futures::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use futures::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 use futures::stream::{FuturesUnordered, StreamExt};
 use integer_encoding::VarInt;
 use libp2p::{PeerId, StreamProtocol};
@@ -111,85 +111,6 @@ enum RequestError {
     OpenStreamFailed(#[from] libp2p_stream::OpenStreamError),
     #[error("IO error: {0}")]
     Io(#[from] io::Error),
-}
-
-impl<TReq, TResp> GenericRequestContext<TReq, TResp>
-where
-    TReq: RequestCodec,
-    TResp: ResponseCodec<Request = TReq>,
-{
-    fn decode_verify_respond(
-        &mut self,
-        raw_data: &[u8],
-        header: &ExtendedHeader,
-    ) -> Result<(), CodecError> {
-        let resp = TResp::decode_and_verify(raw_data, &self.req, header)?;
-        self.respond_to.maybe_send_ok(resp);
-        Ok(())
-    }
-}
-
-impl Request {
-    fn protocol_id(&self, network_id: &str) -> StreamProtocol {
-        match &self.ctx {
-            RequestContext::Row(_) => protocol_id(network_id, ROW_PROTOCOL_ID),
-            RequestContext::Sample(_) => protocol_id(network_id, SAMPLE_PROTOCOL_ID),
-            RequestContext::NamespaceData(_) => protocol_id(network_id, NAMESPACE_DATA_PROTOCOL_ID),
-            RequestContext::Eds(_) => protocol_id(network_id, EDS_PROTOCOL_ID),
-        }
-    }
-
-    fn encode(&self) -> Vec<u8> {
-        match &self.ctx {
-            RequestContext::Row(ctx) => RequestCodec::encode(&ctx.req),
-            RequestContext::Sample(ctx) => RequestCodec::encode(&ctx.req),
-            RequestContext::NamespaceData(ctx) => RequestCodec::encode(&ctx.req),
-            RequestContext::Eds(ctx) => RequestCodec::encode(&ctx.req),
-        }
-    }
-
-    fn decrease_tries(&mut self) {
-        self.tries_left = self.tries_left.saturating_sub(1)
-    }
-
-    fn can_retry(&self) -> bool {
-        self.tries_left > 0 && !self.is_respond_channel_closed()
-    }
-
-    fn decode_verify_respond(&mut self, raw_data: &[u8]) -> Result<(), CodecError> {
-        match &mut self.ctx {
-            RequestContext::Row(state) => state.decode_verify_respond(raw_data, &self.header),
-            RequestContext::Sample(state) => state.decode_verify_respond(raw_data, &self.header),
-            RequestContext::NamespaceData(state) => {
-                state.decode_verify_respond(raw_data, &self.header)
-            }
-            RequestContext::Eds(state) => state.decode_verify_respond(raw_data, &self.header),
-        }
-    }
-
-    fn is_respond_channel_closed(&self) -> bool {
-        match &self.ctx {
-            RequestContext::Row(ctx) => ctx.respond_to.is_closed(),
-            RequestContext::Sample(ctx) => ctx.respond_to.is_closed(),
-            RequestContext::NamespaceData(ctx) => ctx.respond_to.is_closed(),
-            RequestContext::Eds(ctx) => ctx.respond_to.is_closed(),
-        }
-    }
-
-    fn poll_respond_channel_closed(&mut self, cx: &mut Context<'_>) -> Poll<()> {
-        match &mut self.ctx {
-            RequestContext::Row(ctx) => ctx.respond_to.poll_closed(cx),
-            RequestContext::Sample(ctx) => ctx.respond_to.poll_closed(cx),
-            RequestContext::NamespaceData(ctx) => ctx.respond_to.poll_closed(cx),
-            RequestContext::Eds(ctx) => ctx.respond_to.poll_closed(cx),
-        }
-    }
-}
-
-impl Drop for Request {
-    fn drop(&mut self) {
-        self.cancellation_token.cancel();
-    }
 }
 
 impl<S> Client<S>
@@ -455,6 +376,85 @@ where
     }
 }
 
+impl<TReq, TResp> GenericRequestContext<TReq, TResp>
+where
+    TReq: RequestCodec,
+    TResp: ResponseCodec<Request = TReq>,
+{
+    fn decode_verify_respond(
+        &mut self,
+        raw_data: &[u8],
+        header: &ExtendedHeader,
+    ) -> Result<(), CodecError> {
+        let resp = TResp::decode_and_verify(raw_data, &self.req, header)?;
+        self.respond_to.maybe_send_ok(resp);
+        Ok(())
+    }
+}
+
+impl Request {
+    fn protocol_id(&self, network_id: &str) -> StreamProtocol {
+        match &self.ctx {
+            RequestContext::Row(_) => protocol_id(network_id, ROW_PROTOCOL_ID),
+            RequestContext::Sample(_) => protocol_id(network_id, SAMPLE_PROTOCOL_ID),
+            RequestContext::NamespaceData(_) => protocol_id(network_id, NAMESPACE_DATA_PROTOCOL_ID),
+            RequestContext::Eds(_) => protocol_id(network_id, EDS_PROTOCOL_ID),
+        }
+    }
+
+    fn encode(&self) -> Vec<u8> {
+        match &self.ctx {
+            RequestContext::Row(ctx) => RequestCodec::encode(&ctx.req),
+            RequestContext::Sample(ctx) => RequestCodec::encode(&ctx.req),
+            RequestContext::NamespaceData(ctx) => RequestCodec::encode(&ctx.req),
+            RequestContext::Eds(ctx) => RequestCodec::encode(&ctx.req),
+        }
+    }
+
+    fn decrease_tries(&mut self) {
+        self.tries_left = self.tries_left.saturating_sub(1)
+    }
+
+    fn can_retry(&self) -> bool {
+        self.tries_left > 0 && !self.is_respond_channel_closed()
+    }
+
+    fn decode_verify_respond(&mut self, raw_data: &[u8]) -> Result<(), CodecError> {
+        match &mut self.ctx {
+            RequestContext::Row(state) => state.decode_verify_respond(raw_data, &self.header),
+            RequestContext::Sample(state) => state.decode_verify_respond(raw_data, &self.header),
+            RequestContext::NamespaceData(state) => {
+                state.decode_verify_respond(raw_data, &self.header)
+            }
+            RequestContext::Eds(state) => state.decode_verify_respond(raw_data, &self.header),
+        }
+    }
+
+    fn is_respond_channel_closed(&self) -> bool {
+        match &self.ctx {
+            RequestContext::Row(ctx) => ctx.respond_to.is_closed(),
+            RequestContext::Sample(ctx) => ctx.respond_to.is_closed(),
+            RequestContext::NamespaceData(ctx) => ctx.respond_to.is_closed(),
+            RequestContext::Eds(ctx) => ctx.respond_to.is_closed(),
+        }
+    }
+
+    fn poll_respond_channel_closed(&mut self, cx: &mut Context<'_>) -> Poll<()> {
+        match &mut self.ctx {
+            RequestContext::Row(ctx) => ctx.respond_to.poll_closed(cx),
+            RequestContext::Sample(ctx) => ctx.respond_to.poll_closed(cx),
+            RequestContext::NamespaceData(ctx) => ctx.respond_to.poll_closed(cx),
+            RequestContext::Eds(ctx) => ctx.respond_to.poll_closed(cx),
+        }
+    }
+}
+
+impl Drop for Request {
+    fn drop(&mut self) {
+        self.cancellation_token.cancel();
+    }
+}
+
 async fn get_header(store: &impl Store, height: u64) -> Result<ExtendedHeader, P2pError> {
     match store.get_by_height(height).await {
         Ok(header) => Ok(header),
@@ -559,21 +559,4 @@ where
     })?;
 
     Ok(resp.status)
-}
-
-async fn write_status<T>(io: &mut T, status: ProtoStatus) -> io::Result<()>
-where
-    T: AsyncWrite + Unpin + Send,
-{
-    let resp = ProtoResponse {
-        status: status as i32,
-    };
-
-    let data = resp.encode_to_vec();
-    let varint = data.len().encode_var_vec();
-
-    io.write_all(&varint).await?;
-    io.write_all(&data).await?;
-
-    Ok(())
 }

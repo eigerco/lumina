@@ -577,8 +577,11 @@ impl P2p {
         Ok(sample)
     }
 
-    // TODO: add timeout
-    pub async fn get_eds(&self, block_height: u64) -> Result<ExtendedDataSquare> {
+    pub async fn get_eds(
+        &self,
+        block_height: u64,
+        timeout: Option<Duration>,
+    ) -> Result<ExtendedDataSquare> {
         let (tx, rx) = oneshot::channel();
 
         self.send_command(P2pCmd::GetEds {
@@ -587,7 +590,12 @@ impl P2p {
         })
         .await?;
 
-        rx.await?
+        match timeout {
+            Some(dur) => time::timeout(dur, rx)
+                .await
+                .map_err(|_| P2pError::RequestTimedOut)??,
+            None => rx.await?,
+        }
     }
 
     /// Request a [`RowNamespaceData`] on bitswap protocol.

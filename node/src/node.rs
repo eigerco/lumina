@@ -430,7 +430,7 @@ where
         block_height: u64,
         timeout: Option<Duration>,
     ) -> Result<ExtendedDataSquare> {
-        Ok(self.p2p().get_eds(block_height).await?)
+        Ok(self.p2p().get_eds(block_height, timeout).await?)
     }
 
     /// Request a verified [`RowNamespaceData`] from the network.
