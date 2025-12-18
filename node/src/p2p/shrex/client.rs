@@ -174,12 +174,21 @@ impl Request {
         }
     }
 
-    fn respond_channel_is_closed(&self) -> bool {
+    fn is_respond_channel_closed(&self) -> bool {
         match self {
             Request::Row(state) => state.respond_to.is_closed(),
             Request::Sample(state) => state.respond_to.is_closed(),
             Request::NamespaceData(state) => state.respond_to.is_closed(),
             Request::Eds(state) => state.respond_to.is_closed(),
+        }
+    }
+
+    fn poll_respond_channel_closed(&mut self, cx: &mut Context<'_>) -> Poll<()> {
+        match self {
+            Request::Row(state) => state.respond_to.poll_closed.poll_closed(cx),
+            Request::Sample(state) => state.respond_to.poll_closed(cx),
+            Request::NamespaceData(state) => state.respond_to.poll_closed(cx),
+            Request::Eds(state) => state.respond_to.poll_closed(cx),
         }
     }
 }
@@ -341,7 +350,7 @@ where
                 .pending_reqs
                 .drain(..)
                 // We filter before enumerate, just for keeping `i` correct
-                .filter(|req| !req.respond_channel_is_closed())
+                .filter(|req| !req.is_respond_channel_closed())
                 .enumerate()
             {
                 // Choose different peer for each request

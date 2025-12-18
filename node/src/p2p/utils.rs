@@ -1,4 +1,5 @@
 use std::fmt::{self, Debug};
+use std::task::{Context, Poll};
 
 use tokio::sync::oneshot;
 
@@ -23,6 +24,13 @@ impl<T> OneshotSender<T> {
 
     pub(super) fn is_closed(&self) -> bool {
         self.tx.as_ref().is_none_or(|tx| tx.is_closed())
+    }
+
+    pub(super) fn poll_closed(&mut self, cx: &mut Context<'_>) -> Poll<()> {
+        match self.tx {
+            Some(tx) => tx.poll_closed(cx),
+            None => Poll::Ready(()),
+        }
     }
 
     pub(super) fn maybe_send(&mut self, result: Result<T, P2pError>) {
