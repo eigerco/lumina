@@ -124,9 +124,6 @@ impl NamespaceDataId {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Blob;
-    use crate::consts::appconsts::AppVersion;
-    use crate::test_utils::{generate_dummy_eds, generate_eds};
 
     #[test]
     fn decode_namespaced_shares() {
