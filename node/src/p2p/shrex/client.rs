@@ -62,22 +62,27 @@ where
     schedule_pending_interval: Option<Interval>,
 }
 
-enum Request {
-    Row(State<RowId, Row>),
-    Sample(State<SampleId, Sample>),
-    NamespaceData(State<NamespaceDataId, NamespaceData>),
-    Eds(State<EdsId, ExtendedDataSquare>),
+struct Request {
+    ctx: RequestContext,
+    header: ExtendedHeader,
+    tries_left: usize,
+    cancellation_token: CancellationToken,
 }
 
-struct State<TReq, TResp>
+enum RequestContext {
+    Row(GenericRequestContext<RowId, Row>),
+    Sample(GenericRequestContext<SampleId, Sample>),
+    NamespaceData(GenericRequestContext<NamespaceDataId, NamespaceData>),
+    Eds(GenericRequestContext<EdsId, ExtendedDataSquare>),
+}
+
+struct GenericRequestContext<TReq, TResp>
 where
     TReq: RequestCodec,
     TResp: ResponseCodec<Request = TReq>,
 {
     req: TReq,
-    header: ExtendedHeader,
     respond_to: OneshotSender<TResp>,
-    tries_left: usize,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -108,21 +113,17 @@ enum RequestError {
     Io(#[from] io::Error),
 }
 
-impl<TReq, TResp> State<TReq, TResp>
+impl<TReq, TResp> GenericRequestContext<TReq, TResp>
 where
     TReq: RequestCodec,
     TResp: ResponseCodec<Request = TReq>,
 {
-    fn can_retry(&self) -> bool {
-        self.tries_left > 0 && !self.respond_to.is_closed()
-    }
-
-    fn decrease_tries(&mut self) {
-        self.tries_left = self.tries_left.saturating_sub(1)
-    }
-
-    fn decode_verify_respond(&mut self, raw_data: &[u8]) -> Result<(), CodecError> {
-        let resp = TResp::decode_and_verify(raw_data, &self.req, &self.header)?;
+    fn decode_verify_respond(
+        &mut self,
+        raw_data: &[u8],
+        header: &ExtendedHeader,
+    ) -> Result<(), CodecError> {
+        let resp = TResp::decode_and_verify(raw_data, &self.req, header)?;
         self.respond_to.maybe_send_ok(resp);
         Ok(())
     }
@@ -130,66 +131,64 @@ where
 
 impl Request {
     fn protocol_id(&self, network_id: &str) -> StreamProtocol {
-        match self {
-            Request::Row(_) => protocol_id(network_id, ROW_PROTOCOL_ID),
-            Request::Sample(_) => protocol_id(network_id, SAMPLE_PROTOCOL_ID),
-            Request::NamespaceData(_) => protocol_id(network_id, NAMESPACE_DATA_PROTOCOL_ID),
-            Request::Eds(_) => protocol_id(network_id, EDS_PROTOCOL_ID),
+        match &self.ctx {
+            RequestContext::Row(_) => protocol_id(network_id, ROW_PROTOCOL_ID),
+            RequestContext::Sample(_) => protocol_id(network_id, SAMPLE_PROTOCOL_ID),
+            RequestContext::NamespaceData(_) => protocol_id(network_id, NAMESPACE_DATA_PROTOCOL_ID),
+            RequestContext::Eds(_) => protocol_id(network_id, EDS_PROTOCOL_ID),
         }
     }
 
     fn encode(&self) -> Vec<u8> {
-        match self {
-            Request::Row(state) => RequestCodec::encode(&state.req),
-            Request::Sample(state) => RequestCodec::encode(&state.req),
-            Request::NamespaceData(state) => RequestCodec::encode(&state.req),
-            Request::Eds(state) => RequestCodec::encode(&state.req),
+        match &self.ctx {
+            RequestContext::Row(ctx) => RequestCodec::encode(&ctx.req),
+            RequestContext::Sample(ctx) => RequestCodec::encode(&ctx.req),
+            RequestContext::NamespaceData(ctx) => RequestCodec::encode(&ctx.req),
+            RequestContext::Eds(ctx) => RequestCodec::encode(&ctx.req),
         }
     }
 
     fn decrease_tries(&mut self) {
-        match self {
-            Request::Row(state) => state.decrease_tries(),
-            Request::Sample(state) => state.decrease_tries(),
-            Request::NamespaceData(state) => state.decrease_tries(),
-            Request::Eds(state) => state.decrease_tries(),
-        }
+        self.tries_left = self.tries_left.saturating_sub(1)
     }
 
-    fn can_retry(&mut self) -> bool {
-        match self {
-            Request::Row(state) => state.can_retry(),
-            Request::Sample(state) => state.can_retry(),
-            Request::NamespaceData(state) => state.can_retry(),
-            Request::Eds(state) => state.can_retry(),
-        }
+    fn can_retry(&self) -> bool {
+        self.tries_left > 0 && !self.is_respond_channel_closed()
     }
 
     fn decode_verify_respond(&mut self, raw_data: &[u8]) -> Result<(), CodecError> {
-        match self {
-            Request::Row(state) => state.decode_verify_respond(raw_data),
-            Request::Sample(state) => state.decode_verify_respond(raw_data),
-            Request::NamespaceData(state) => state.decode_verify_respond(raw_data),
-            Request::Eds(state) => state.decode_verify_respond(raw_data),
+        match &mut self.ctx {
+            RequestContext::Row(state) => state.decode_verify_respond(raw_data, &self.header),
+            RequestContext::Sample(state) => state.decode_verify_respond(raw_data, &self.header),
+            RequestContext::NamespaceData(state) => {
+                state.decode_verify_respond(raw_data, &self.header)
+            }
+            RequestContext::Eds(state) => state.decode_verify_respond(raw_data, &self.header),
         }
     }
 
     fn is_respond_channel_closed(&self) -> bool {
-        match self {
-            Request::Row(state) => state.respond_to.is_closed(),
-            Request::Sample(state) => state.respond_to.is_closed(),
-            Request::NamespaceData(state) => state.respond_to.is_closed(),
-            Request::Eds(state) => state.respond_to.is_closed(),
+        match &self.ctx {
+            RequestContext::Row(ctx) => ctx.respond_to.is_closed(),
+            RequestContext::Sample(ctx) => ctx.respond_to.is_closed(),
+            RequestContext::NamespaceData(ctx) => ctx.respond_to.is_closed(),
+            RequestContext::Eds(ctx) => ctx.respond_to.is_closed(),
         }
     }
 
     fn poll_respond_channel_closed(&mut self, cx: &mut Context<'_>) -> Poll<()> {
-        match self {
-            Request::Row(state) => state.respond_to.poll_closed.poll_closed(cx),
-            Request::Sample(state) => state.respond_to.poll_closed(cx),
-            Request::NamespaceData(state) => state.respond_to.poll_closed(cx),
-            Request::Eds(state) => state.respond_to.poll_closed(cx),
+        match &mut self.ctx {
+            RequestContext::Row(ctx) => ctx.respond_to.poll_closed(cx),
+            RequestContext::Sample(ctx) => ctx.respond_to.poll_closed(cx),
+            RequestContext::NamespaceData(ctx) => ctx.respond_to.poll_closed(cx),
+            RequestContext::Eds(ctx) => ctx.respond_to.poll_closed(cx),
         }
+    }
+}
+
+impl Drop for Request {
+    fn drop(&mut self) {
+        self.cancellation_token.cancel();
     }
 }
 
@@ -249,12 +248,15 @@ where
             Err(e) => return respond_to.maybe_send_err(ShrExError::invalid_request(e)),
         };
 
-        self.pending_reqs.push_back(Request::Row(State {
-            req: row_id,
+        self.pending_reqs.push_back(Request {
+            ctx: RequestContext::Row(GenericRequestContext {
+                req: row_id,
+                respond_to,
+            }),
             header,
-            respond_to,
             tries_left: MAX_TRIES,
-        }));
+            cancellation_token: self.cancellation_token.child_token(),
+        });
     }
 
     pub(super) async fn get_sample(
@@ -273,12 +275,15 @@ where
             Err(e) => return respond_to.maybe_send_err(ShrExError::invalid_request(e)),
         };
 
-        self.pending_reqs.push_back(Request::Sample(State {
-            req: sample_id,
+        self.pending_reqs.push_back(Request {
+            ctx: RequestContext::Sample(GenericRequestContext {
+                req: sample_id,
+                respond_to,
+            }),
             header,
-            respond_to,
             tries_left: MAX_TRIES,
-        }));
+            cancellation_token: self.cancellation_token.child_token(),
+        });
     }
 
     pub(super) async fn get_namespace_data(
@@ -296,12 +301,15 @@ where
             Err(e) => return respond_to.maybe_send_err(ShrExError::invalid_request(e)),
         };
 
-        self.pending_reqs.push_back(Request::NamespaceData(State {
-            req: nd_id,
+        self.pending_reqs.push_back(Request {
+            ctx: RequestContext::NamespaceData(GenericRequestContext {
+                req: nd_id,
+                respond_to,
+            }),
             header,
-            respond_to,
             tries_left: MAX_TRIES,
-        }));
+            cancellation_token: self.cancellation_token.child_token(),
+        });
     }
 
     pub(super) async fn get_eds(
@@ -318,12 +326,15 @@ where
             Err(e) => return respond_to.maybe_send_err(ShrExError::invalid_request(e)),
         };
 
-        self.pending_reqs.push_back(Request::Eds(State {
-            req: eds_id,
+        self.pending_reqs.push_back(Request {
+            ctx: RequestContext::Eds(GenericRequestContext {
+                req: eds_id,
+                respond_to,
+            }),
             header,
-            respond_to,
             tries_left: MAX_TRIES,
-        }));
+            cancellation_token: self.cancellation_token.child_token(),
+        });
     }
 
     fn has_pending_requests(&self) -> bool {
@@ -361,7 +372,7 @@ where
                 let stream_ctrl = self.stream_ctrl.clone();
                 let raw_req = req.encode();
                 let protocol_id = req.protocol_id(&self.network_id);
-                let cancellation_token = self.cancellation_token.clone();
+                let cancellation_token = req.cancellation_token.clone();
 
                 self.ongoing_reqs_tasks.push(Box::pin(
                     cancellation_token.run_until_cancelled_owned(async move {
@@ -394,7 +405,6 @@ where
             Ok(raw_data) => raw_data,
             Err(e) => return self.on_error(req, e.into()),
         };
-
         if let Err(e) = req.decode_verify_respond(&raw_data) {
             self.on_error(req, e.into());
         }
@@ -412,6 +422,13 @@ where
     }
 
     pub(super) fn poll(&mut self, cx: &mut Context<'_>) -> Poll<Event> {
+        // Any tasks associeted with the request will be canceled because of
+        // `cancellation_token.cacel()` in `Request::drop`.
+        self.pending_reqs
+            .retain_mut(|req| !req.poll_respond_channel_closed(cx).is_ready());
+        self.ongoing_reqs
+            .retain(|_, req| !req.poll_respond_channel_closed(cx).is_ready());
+
         while let Poll::Ready(Some(opt)) = self.ongoing_reqs_tasks.poll_next_unpin(cx) {
             // `None` is returned on cancellation, we should still continue polling.
             if let Some((req_id, res)) = opt {

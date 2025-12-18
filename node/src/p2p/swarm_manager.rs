@@ -178,6 +178,10 @@ where
     }
 
     pub(crate) async fn poll(&mut self) -> Result<B::ToSwarm> {
+        if !self.swarm.behaviour_mut().behaviour.is_enabled() {
+            panic!("Behaviour not attached on SwarmManager");
+        }
+
         loop {
             select! {
                 _ = self.peer_tracker_info_watcher.changed() => {

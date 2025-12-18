@@ -374,7 +374,7 @@ where
     /// # Errors
     ///
     /// On failure to receive a verified [`Row`] within a certain time, the
-    /// `NodeError::P2p(P2pError::BitswapQueryTimeout)` error will be returned.
+    /// `NodeError::P2p(P2pError::RequestTimedOut)` error will be returned.
     pub async fn request_row(
         &self,
         row_index: u16,
@@ -389,7 +389,7 @@ where
     /// # Errors
     ///
     /// On failure to receive a verified [`Sample`] within a certain time, the
-    /// `NodeError::P2p(P2pError::BitswapQueryTimeout)` error will be returned.
+    /// `NodeError::P2p(P2pError::RequestTimedOut)` error will be returned.
     pub async fn request_sample(
         &self,
         row_index: u16,
@@ -438,7 +438,7 @@ where
     /// # Errors
     ///
     /// On failure to receive a verified [`RowNamespaceData`] within a certain time, the
-    /// `NodeError::P2p(P2pError::BitswapQueryTimeout)` error will be returned.
+    /// `NodeError::P2p(P2pError::RequestTimedOut)` error will be returned.
     pub async fn request_row_namespace_data(
         &self,
         namespace: Namespace,
@@ -457,8 +457,7 @@ where
     /// # Errors
     ///
     /// On failure to receive a verified [`NamespaceData`] within a certain time, the
-    /// `NodeError::P2p(P2pError::BitswapQueryTimeout)` error will be returned.
-    // TODO: Fix doc comment, the error is not valid anymore because shrex is used
+    /// `NodeError::P2p(P2pError::RequestTimedOut)` error will be returned.
     pub async fn request_namespace_data(
         &self,
         namespace: Namespace,

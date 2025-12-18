@@ -125,9 +125,9 @@ pub enum P2pError {
     #[error("CID error: {0}")]
     Cid(celestia_types::Error),
 
-    /// Bitswap query timed out.
-    #[error("Bitswap query timed out")]
-    BitswapQueryTimeout,
+    /// Request timed out.
+    #[error("Request timed out")]
+    RequestTimedOut,
 
     /// Shwap protocol error.
     #[error("Shwap: {0}")]
@@ -167,7 +167,7 @@ impl P2pError {
             | P2pError::Bitswap(_)
             | P2pError::ProtoDecodeFailed(_)
             | P2pError::Cid(_)
-            | P2pError::BitswapQueryTimeout
+            | P2pError::RequestTimedOut
             | P2pError::Shwap(_)
             | P2pError::CelestiaTypes(_)
             | P2pError::HeaderPruned(_)
@@ -539,7 +539,7 @@ impl P2p {
         let data = match timeout {
             Some(dur) => time::timeout(dur, rx)
                 .await
-                .map_err(|_| P2pError::BitswapQueryTimeout)???,
+                .map_err(|_| P2pError::RequestTimedOut)???,
             None => rx.await??,
         };
 
@@ -623,7 +623,12 @@ impl P2p {
         })
         .await?;
 
-        rx.await?
+        match timeout {
+            Some(dur) => time::timeout(dur, rx)
+                .await
+                .map_err(|_| P2pError::RequestTimedOut)??,
+            None => rx.await?,
+        }
     }
 
     /// Request all blobs with provided namespace in the block corresponding to this header

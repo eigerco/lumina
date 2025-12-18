@@ -532,7 +532,7 @@ where
                     // If the sample is not valid, it will never be delivered to us
                     // as the data of the CID. Because of that, the only signal
                     // that data sampling verification failed is query timing out.
-                    Err(P2pError::BitswapQueryTimeout) => true,
+                    Err(P2pError::RequestTimedOut) => true,
                     Err(e) => return Err(e.into()),
                 };
 
@@ -889,7 +889,7 @@ mod tests {
         while let Some(cmd) = handle.try_recv_cmd().await {
             match cmd {
                 P2pCmd::GetShwapCid { respond_to, .. } => {
-                    let _ = respond_to.send(Err(P2pError::BitswapQueryTimeout));
+                    let _ = respond_to.send(Err(P2pError::RequestTimedOut));
                 }
                 cmd => panic!("Unexpected command: {cmd:?}"),
             }
@@ -1162,7 +1162,7 @@ mod tests {
 
         for idx in indexes.into_iter().rev() {
             let (_cid, respond_to) = responders.remove(idx);
-            respond_to.send(Err(P2pError::BitswapQueryTimeout)).unwrap();
+            respond_to.send(Err(P2pError::RequestTimedOut)).unwrap();
         }
     }
 
@@ -1328,7 +1328,7 @@ mod tests {
 
             // Simulate sampling timeout
             if info.simulate_sampling_timeout && info.requests_count == REQ_TIMEOUT_SHARE_NUM {
-                respond_to.send(Err(P2pError::BitswapQueryTimeout)).unwrap();
+                respond_to.send(Err(P2pError::RequestTimedOut)).unwrap();
                 continue;
             }
 

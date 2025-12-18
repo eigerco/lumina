@@ -28,7 +28,7 @@ impl<T> OneshotSender<T> {
 
     pub(super) fn poll_closed(&mut self, cx: &mut Context<'_>) -> Poll<()> {
         match self.tx {
-            Some(tx) => tx.poll_closed(cx),
+            Some(ref mut tx) => tx.poll_closed(cx),
             None => Poll::Ready(()),
         }
     }
