@@ -46,6 +46,8 @@ const OPEN_STREAM_TIMEOUT: Duration = Duration::from_secs(1);
 const SEND_REQ_TIMEOUT: Duration = Duration::from_secs(1);
 const RECV_RESP_TIMEOUT: Duration = Duration::from_secs(10);
 
+type OngoingReqTaskResult = (u64, Result<Vec<u8>, RequestError>);
+
 pub(super) struct Client<S>
 where
     S: Store + 'static,
@@ -57,8 +59,7 @@ where
     cancellation_token: CancellationToken,
     pending_reqs: VecDeque<Request>,
     ongoing_reqs: HashMap<u64, Request>,
-    ongoing_reqs_tasks:
-        FuturesUnordered<BoxFuture<'static, Option<(u64, Result<Vec<u8>, RequestError>)>>>,
+    ongoing_reqs_tasks: FuturesUnordered<BoxFuture<'static, Option<OngoingReqTaskResult>>>,
     schedule_pending_interval: Option<Interval>,
 }
 
@@ -536,7 +537,7 @@ where
         }
     }
 
-    Err(io::Error::other("shrex: failed to read valid varint"))
+    Err(io::Error::other("failed to read valid varint"))
 }
 
 async fn read_status<T>(io: &mut T) -> io::Result<i32>
@@ -546,15 +547,16 @@ where
     let len = read_varint(io).await?;
 
     if len > STATUS_MAX_SIZE {
-        let s = format!("shrex: status message bigger than STATUS_MAX_SIZE");
-        return Err(io::Error::other(s));
+        return Err(io::Error::other(
+            "status message bigger than STATUS_MAX_SIZE",
+        ));
     }
 
     let mut buf = vec![0u8; len];
     io.read_exact(&mut buf[..]).await?;
 
     let resp = ProtoResponse::decode(&buf[..]).map_err(|e| {
-        let s = format!("shrex: failed to decode `Response`: {e}");
+        let s = format!("failed to decode `Response`: {e}");
         io::Error::other(s)
     })?;
 

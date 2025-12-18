@@ -20,24 +20,24 @@ type Result<T, E = CodecError> = std::result::Result<T, E>;
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum CodecError {
     #[error("Request decode failed: {0}")]
-    RequestDecodeFailed(String),
+    RequestDecode(String),
     #[error("Response decode failed: {0}")]
-    ResponseDecodeFailed(String),
+    ResponseDecode(String),
     #[error("Response verification failed: {0}")]
-    ResponseVerificationFailed(String),
+    ResponseVerification(String),
 }
 
 impl CodecError {
-    fn request_decode_failed(s: impl Display) -> CodecError {
-        CodecError::RequestDecodeFailed(s.to_string())
+    fn request_decode(s: impl Display) -> CodecError {
+        CodecError::RequestDecode(s.to_string())
     }
 
-    fn response_decode_failed(s: impl Display) -> CodecError {
-        CodecError::ResponseDecodeFailed(s.to_string())
+    fn response_decode(s: impl Display) -> CodecError {
+        CodecError::ResponseDecode(s.to_string())
     }
 
-    fn response_verification_failed(s: impl Display) -> CodecError {
-        CodecError::ResponseVerificationFailed(s.to_string())
+    fn response_verification(s: impl Display) -> CodecError {
+        CodecError::ResponseVerification(s.to_string())
     }
 }
 
@@ -66,7 +66,7 @@ impl RequestCodec for RowId {
     }
 
     fn decode(raw_data: &[u8]) -> Result<RowId> {
-        RowId::decode(raw_data).map_err(CodecError::request_decode_failed)
+        RowId::decode(raw_data).map_err(CodecError::request_decode)
     }
 }
 
@@ -79,14 +79,13 @@ impl ResponseCodec for Row {
     }
 
     fn decode_and_verify(raw_data: &[u8], req: &RowId, header: &ExtendedHeader) -> Result<Row> {
-        let raw_row = RawRow::decode_length_delimited(raw_data)
-            .map_err(CodecError::response_decode_failed)?;
+        let raw_row =
+            RawRow::decode_length_delimited(raw_data).map_err(CodecError::response_decode)?;
 
-        let row =
-            Row::from_raw(req.to_owned(), raw_row).map_err(CodecError::response_decode_failed)?;
+        let row = Row::from_raw(req.to_owned(), raw_row).map_err(CodecError::response_decode)?;
 
         row.verify(req.to_owned(), &header.dah)
-            .map_err(CodecError::response_verification_failed)?;
+            .map_err(CodecError::response_verification)?;
 
         Ok(row)
     }
@@ -100,7 +99,7 @@ impl RequestCodec for SampleId {
     }
 
     fn decode(raw_data: &[u8]) -> Result<SampleId> {
-        SampleId::decode(raw_data).map_err(CodecError::request_decode_failed)
+        SampleId::decode(raw_data).map_err(CodecError::request_decode)
     }
 }
 
@@ -117,15 +116,15 @@ impl ResponseCodec for Sample {
         req: &SampleId,
         header: &ExtendedHeader,
     ) -> Result<Sample> {
-        let raw_sample = RawSample::decode_length_delimited(raw_data)
-            .map_err(CodecError::response_decode_failed)?;
+        let raw_sample =
+            RawSample::decode_length_delimited(raw_data).map_err(CodecError::response_decode)?;
 
-        let sample = Sample::from_raw(req.to_owned(), raw_sample)
-            .map_err(CodecError::response_decode_failed)?;
+        let sample =
+            Sample::from_raw(req.to_owned(), raw_sample).map_err(CodecError::response_decode)?;
 
         sample
             .verify(req.to_owned(), &header.dah)
-            .map_err(CodecError::response_verification_failed)?;
+            .map_err(CodecError::response_verification)?;
 
         Ok(sample)
     }
@@ -139,7 +138,7 @@ impl RequestCodec for EdsId {
     }
 
     fn decode(raw_data: &[u8]) -> Result<EdsId> {
-        EdsId::decode(raw_data).map_err(CodecError::request_decode_failed)
+        EdsId::decode(raw_data).map_err(CodecError::request_decode)
     }
 }
 
@@ -167,13 +166,13 @@ impl ResponseCodec for ExtendedDataSquare {
         req: &EdsId,
         header: &ExtendedHeader,
     ) -> Result<ExtendedDataSquare> {
-        if raw_data.len() == 0 {
-            return Err(CodecError::response_decode_failed("Empty raw data"));
+        if raw_data.is_empty() {
+            return Err(CodecError::response_decode("Empty raw data"));
         }
 
-        if raw_data.len() % SHARE_SIZE != 0 {
-            return Err(CodecError::response_decode_failed(
-                "Number of shares not divisible by SHARE_SIZE",
+        if raw_data.len().is_multiple_of(SHARE_SIZE) {
+            return Err(CodecError::response_decode(
+                "Length of raw data of shares is not multiple of SHARE_SIZE",
             ));
         }
 
@@ -183,17 +182,15 @@ impl ResponseCodec for ExtendedDataSquare {
             ods_shares.push(raw_share.to_vec());
         }
 
-        let app_version = header
-            .app_version()
-            .map_err(CodecError::response_decode_failed)?;
+        let app_version = header.app_version().map_err(CodecError::response_decode)?;
 
         let eds = ExtendedDataSquare::from_ods(ods_shares, app_version)
-            .map_err(CodecError::response_decode_failed)?;
+            .map_err(CodecError::response_decode)?;
 
         let dah = DataAvailabilityHeader::from_eds(&eds);
 
         if dah.hash() != header.dah.hash() {
-            return Err(CodecError::response_decode_failed(
+            return Err(CodecError::response_decode(
                 "EDS verification failed: Hash missmatch",
             ));
         }
@@ -210,7 +207,7 @@ impl RequestCodec for NamespaceDataId {
     }
 
     fn decode(raw_data: &[u8]) -> Result<NamespaceDataId> {
-        NamespaceDataId::decode(raw_data).map_err(CodecError::request_decode_failed)
+        NamespaceDataId::decode(raw_data).map_err(CodecError::request_decode)
     }
 }
 
@@ -244,17 +241,17 @@ impl ResponseCodec for NamespaceData {
 
         while !raw_data.is_empty() {
             let raw_row = RawRowNamespaceData::decode_length_delimited(&mut raw_data)
-                .map_err(CodecError::response_decode_failed)?;
+                .map_err(CodecError::response_decode)?;
 
             raw_rows.push(raw_row);
         }
 
         let ns_data =
-            NamespaceData::from_raw(*req, raw_rows).map_err(CodecError::response_decode_failed)?;
+            NamespaceData::from_raw(*req, raw_rows).map_err(CodecError::response_decode)?;
 
         ns_data
             .verify(*req, &header.dah)
-            .map_err(CodecError::response_verification_failed)?;
+            .map_err(CodecError::response_verification)?;
 
         Ok(ns_data)
     }
