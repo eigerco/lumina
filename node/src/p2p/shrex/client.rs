@@ -430,7 +430,7 @@ where
             .retain(|_, req| !req.poll_respond_channel_closed(cx).is_ready());
 
         while let Poll::Ready(Some(opt)) = self.ongoing_reqs_tasks.poll_next_unpin(cx) {
-            // `None` is returned on cancellation, we should still continue polling.
+            // When a task is cancelled via its `cancellation_token`, then `None` is returned.
             if let Some((req_id, res)) = opt {
                 self.on_result(req_id, res);
             }
