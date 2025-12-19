@@ -270,6 +270,7 @@ where
 
         let mut peers = peer_tracker
             .peers()
+            // TODO
             .filter(|peer| peer.is_full() && peer.is_connected() && peer.is_trusted())
             .collect::<Vec<_>>();
 
@@ -340,6 +341,8 @@ where
         if req.can_retry() {
             // move failed request to pending
             self.pending_reqs.push_back(req);
+        } else {
+            req.respond_with_error(ShrExError::MaxTriesReached);
         }
     }
 
@@ -428,6 +431,15 @@ impl Request {
                 state.decode_verify_respond(raw_data, &self.header)
             }
             RequestContext::Eds(state) => state.decode_verify_respond(raw_data, &self.header),
+        }
+    }
+
+    fn respond_with_error(&mut self, error: impl Into<P2pError>) {
+        match &mut self.ctx {
+            RequestContext::Row(ctx) => ctx.respond_to.maybe_send_err(error),
+            RequestContext::Sample(ctx) => ctx.respond_to.maybe_send_err(error),
+            RequestContext::NamespaceData(ctx) => ctx.respond_to.maybe_send_err(error),
+            RequestContext::Eds(ctx) => ctx.respond_to.maybe_send_err(error),
         }
     }
 

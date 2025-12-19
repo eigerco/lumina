@@ -79,6 +79,9 @@ pub enum ShrExError {
 
     #[error("Invalid request: {0}")]
     InvalidRequest(String),
+
+    #[error("Max tries reached")]
+    MaxTriesReached,
 }
 
 impl ShrExError {
