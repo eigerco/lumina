@@ -51,7 +51,12 @@ where
 }
 
 #[derive(Debug)]
-pub(crate) enum Event {}
+pub(crate) enum Event {
+    PoolUpdate {
+        add_peers: Vec<PeerId>,
+        blacklist_peers: Vec<PeerId>,
+    },
+}
 
 impl<S> Behaviour<S>
 where
@@ -256,7 +261,9 @@ where
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
-        let _ = self.pool_tracker.poll(cx);
+        if let Poll::Ready(Some(ev)) = self.pool_tracker.poll(cx) {
+            return Poll::Ready(ToSwarm::GenerateEvent(ev));
+        }
 
         if let Poll::Ready(ev) = self.shrex_sub.poll(cx)
             && let Poll::Ready(ev) = self.handle_shrex_event(ev)

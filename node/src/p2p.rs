@@ -852,9 +852,7 @@ where
             BehaviourEvent::Gossipsub(ev) => self.on_gossip_sub_event(ev).await,
             BehaviourEvent::Bitswap(ev) => self.on_bitswap_event(ev).await,
             BehaviourEvent::HeaderEx(ev) => self.on_header_ex_event(ev).await,
-            BehaviourEvent::ShrEx(_ev) => {
-                // todo: event for adding peers to peer tracker
-            }
+            BehaviourEvent::ShrEx(ev) => self.on_shrex_event(ev).await,
         }
 
         Ok(())
@@ -993,6 +991,20 @@ where
                 if let Some(respond_to) = self.bitswap_queries.remove(&query_id) {
                     let error: P2pError = error.into();
                     respond_to.maybe_send_err(error);
+                }
+            }
+        }
+    }
+
+    #[instrument(level = "trace", skip(self))]
+    async fn on_shrex_event(&mut self, ev: shrex::Event) {
+        match ev {
+            shrex::Event::PoolUpdate {
+                add_peers,
+                blacklist_peers,
+            } => {
+                for peer_id in add_peers {
+                    self.swarm.peer_maybe_discovered(&peer_id);
                 }
             }
         }

@@ -18,6 +18,7 @@ use lumina_utils::time::{Elapsed, timeout};
 use prost::Message;
 use tracing::{debug, error, warn};
 
+use crate::p2p::shrex::Event;
 use crate::store::{Store, StoreError};
 
 const ROOT_HASH_WINDOW: u64 = 10;
@@ -138,13 +139,18 @@ where
     ///
     /// Called when receiving a ShrEx/Sub notification. The peer is added to the hash-specific pool.
     /// If the pool is already validated, the peer is immediately promoted to discovered peers.
-    pub fn add_peer_for_hash(&mut self, peer_id: PeerId, data_hash: Hash, height: u64) {
+    pub fn add_peer_for_hash(
+        &mut self,
+        peer_id: PeerId,
+        data_hash: Hash,
+        height: u64,
+    ) -> Option<Event> {
         if self
             .subjective_head
             .map(stale_height_threshold)
             .is_none_or(|stale_height| height < stale_height)
         {
-            return;
+            return None;
         }
 
         let pool = match self.hash_pools.get_mut(&height) {
@@ -159,8 +165,11 @@ where
         match pool {
             PeerPool::Candidates((voted, candidates)) => {
                 if !voted.insert(peer_id) {
-                    // Ignore duplicate votes
-                    return;
+                    // duplicate vote
+                    return Some(Event::PoolUpdate {
+                        blacklist_peers: vec![peer_id],
+                        add_peers: vec![],
+                    });
                 }
                 candidates
                     .entry(data_hash)
@@ -171,11 +180,21 @@ where
                 if *validated_hash == data_hash {
                     // Hash matches - add to both validated peers list and discovered peers
                     peers.push(peer_id);
-                    self.discovered_peers.insert(peer_id);
+                    if !self.discovered_peers.insert(peer_id) {
+                        return Some(Event::PoolUpdate {
+                            blacklist_peers: vec![],
+                            add_peers: vec![peer_id],
+                        });
+                    }
+                } else {
+                    return Some(Event::PoolUpdate {
+                        blacklist_peers: vec![peer_id],
+                        add_peers: vec![],
+                    });
                 }
-                // TODO: slashing wrong answers?
             }
         }
+        None
     }
 
     /// Return peers suitable to be queried about hash
@@ -256,7 +275,7 @@ where
     }
 
     // TODO: Errror handling
-    pub(super) fn poll(&mut self, cx: &mut Context<'_>) -> Poll<()> {
+    pub(super) fn poll(&mut self, cx: &mut Context<'_>) -> Poll<Option<Event>> {
         loop {
             let Some(header) = ready!(self.new_headers_tasks.poll_next_unpin(cx)) else {
                 return Poll::Pending;
@@ -280,11 +299,9 @@ where
                 continue;
             };
 
-            self.validate_pool(data_hash, height);
-
             self.try_update_subjective_head(height);
 
-            return Poll::Ready(());
+            return Poll::Ready(self.validate_pool(data_hash, height));
         }
     }
 
@@ -292,31 +309,38 @@ where
     ///
     /// Validates the pool with a valid header, promoting all peers for the matching hash to
     /// discovered peers.
-    fn validate_pool(&mut self, data_hash: Hash, height: u64) {
+    fn validate_pool(&mut self, data_hash: Hash, height: u64) -> Option<Event> {
         if let Some(pool) = self.hash_pools.get_mut(&height) {
             match pool {
                 PeerPool::Candidates((_, candidates)) => {
-                    let validated_peers = if let Some(peers) = candidates.remove(&data_hash) {
-                        for peer_id in &peers {
-                            self.discovered_peers.insert(*peer_id);
-                        }
-                        peers
-                    } else {
-                        Vec::new()
-                    };
-                    // TODO: slashing wrong answers
+                    let validated_peers = candidates.remove(&data_hash).unwrap_or_default();
+                    let new_peers = validated_peers
+                        .iter()
+                        .copied()
+                        .filter(|p| self.discovered_peers.insert(*p))
+                        .collect();
+
+                    let wrong_peers: Vec<PeerId> = candidates
+                        .values()
+                        .flat_map(|pool| pool.into_iter().cloned())
+                        .collect();
 
                     tracing::warn!(
                         "Promoted valid pool pool for {height} with {} peers",
                         validated_peers.len()
                     );
                     *pool = PeerPool::Validated(data_hash, validated_peers);
+                    return Some(Event::PoolUpdate {
+                        add_peers: new_peers,
+                        blacklist_peers: wrong_peers,
+                    });
                 }
                 PeerPool::Validated(_, _) => {
                     warn!("Multiple validate_pool for the same height, should not happen");
                 }
             }
         }
+        None
     }
 
     fn try_update_subjective_head(&mut self, height: u64) {

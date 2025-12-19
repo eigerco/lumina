@@ -6,6 +6,7 @@ use std::time::Duration;
 use blockstore::Blockstore;
 use celestia_rpc::{Client, TxConfig, prelude::*};
 use celestia_types::Blob;
+use celestia_types::nmt::Namespace;
 use libp2p::{Multiaddr, PeerId, multiaddr::Protocol};
 use lumina_node::NodeBuilder;
 use lumina_node::blockstore::InMemoryBlockstore;
@@ -84,4 +85,53 @@ pub async fn blob_submit(client: &Client, blobs: &[Blob]) -> u64 {
         .blob_submit(blobs, TxConfig::default())
         .await
         .unwrap()
+}
+
+/// Continuously submits blobs to the test network at a regular interval.
+/// This utility ensures that the network has continuous activity and generates
+/// EDS notifications for testing purposes.
+///
+/// # Arguments
+/// * `interval` - Duration between blob submissions
+/// * `blob_size` - Size of the blob data to submit (in bytes)
+///
+/// # Returns
+/// A `JoinHandle` that can be used to cancel the background task
+pub fn spawn_continuous_blob_submitter(
+    interval: Duration,
+    blob_size: usize,
+) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        let client = bridge_client().await;
+        let mut counter = 0u64;
+
+        // Create a unique namespace for test blobs
+        let namespace = Namespace::new_v0(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+            .expect("Failed to create namespace");
+
+        loop {
+            // Create a blob with incrementing counter data
+            let data = format!("test-blob-{}-{}", counter, "x".repeat(blob_size.saturating_sub(20)));
+            let blob = Blob::new(
+                namespace,
+                data.into_bytes(),
+                None,
+                celestia_types::AppVersion::V3,
+            )
+            .expect("Failed to create blob");
+
+            // Submit the blob
+            match client.blob_submit(&[blob], TxConfig::default()).await {
+                Ok(height) => {
+                    println!("Submitted blob {} at height {}", counter, height);
+                }
+                Err(e) => {
+                    eprintln!("Failed to submit blob {}: {:?}", counter, e);
+                }
+            }
+
+            counter += 1;
+            sleep(interval).await;
+        }
+    })
 }
