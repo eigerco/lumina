@@ -470,7 +470,6 @@ impl GrpcClient {
                 broadcasted_tx.clone(),
                 AsyncGrpcCall::new(move |context| async move {
                     this.confirm_tx_impl(broadcasted_tx, cfg, &context).await?;
-                    todo!()
                 })
                 .context(&context),
             ))
