@@ -4,12 +4,12 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::time::Duration;
 
-use celestia_types::ExtendedHeader;
 use celestia_types::eds::{EdsId, ExtendedDataSquare};
 use celestia_types::namespace_data::{NamespaceData, NamespaceDataId};
 use celestia_types::nmt::Namespace;
 use celestia_types::row::{Row, RowId};
 use celestia_types::sample::{Sample, SampleId};
+use celestia_types::{AxisType, ExtendedHeader};
 use futures::future::BoxFuture;
 use futures::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 use futures::stream::{FuturesUnordered, StreamExt};
@@ -29,8 +29,8 @@ use crate::p2p::P2pError;
 use crate::p2p::shrex::codec::{CodecError, RequestCodec, ResponseCodec};
 use crate::p2p::shrex::pool_tracker::PoolTracker;
 use crate::p2p::shrex::{
-    Config, EDS_PROTOCOL_ID, Event, NAMESPACE_DATA_PROTOCOL_ID, ROW_PROTOCOL_ID, Result,
-    SAMPLE_PROTOCOL_ID, ShrExError,
+    Config, EDS_PROTOCOL_ID, EMPTY_EDS, EMPTY_EDS_DAH, Event, NAMESPACE_DATA_PROTOCOL_ID,
+    ROW_PROTOCOL_ID, Result, SAMPLE_PROTOCOL_ID, ShrExError,
 };
 use crate::p2p::utils::OneshotSender;
 use crate::peer_tracker::PeerTracker;
@@ -166,6 +166,17 @@ where
             return;
         };
 
+        if index >= header.dah.square_width() {
+            respond_to.maybe_send_err(ShrExError::invalid_request("`index` out of bound"));
+            return;
+        }
+
+        if header.dah == *EMPTY_EDS_DAH {
+            let shares = EMPTY_EDS.row(index).expect("coordinates already checked");
+            respond_to.maybe_send_ok(Row { shares });
+            return;
+        }
+
         let row_id = match RowId::new(index, height) {
             Ok(row_id) => row_id,
             Err(e) => return respond_to.maybe_send_err(ShrExError::invalid_request(e)),
@@ -193,6 +204,23 @@ where
             return;
         };
 
+        if row_index >= header.dah.square_width() {
+            respond_to.maybe_send_err(ShrExError::invalid_request("`row_index` out of bound"));
+            return;
+        }
+
+        if column_index >= header.dah.square_width() {
+            respond_to.maybe_send_err(ShrExError::invalid_request("`column_index` out of bound"));
+            return;
+        }
+
+        if header.dah == *EMPTY_EDS_DAH {
+            let sample = Sample::new(row_index, column_index, AxisType::Row, &*EMPTY_EDS)
+                .expect("coordinates already checked");
+            respond_to.maybe_send_ok(sample);
+            return;
+        }
+
         let sample_id = match SampleId::new(row_index, column_index, height) {
             Ok(sample_id) => sample_id,
             Err(e) => return respond_to.maybe_send_err(ShrExError::invalid_request(e)),
@@ -219,6 +247,17 @@ where
             return;
         };
 
+        if header.dah == *EMPTY_EDS_DAH {
+            let rows = EMPTY_EDS
+                .get_namespace_data(namespace, &*EMPTY_EDS_DAH, height)
+                .expect("invalid eds or dah")
+                .into_iter()
+                .map(|(_, row)| row)
+                .collect();
+            respond_to.maybe_send_ok(NamespaceData::new(rows));
+            return;
+        }
+
         let nd_id = match NamespaceDataId::new(namespace, height) {
             Ok(nd_id) => nd_id,
             Err(e) => return respond_to.maybe_send_err(ShrExError::invalid_request(e)),
@@ -243,6 +282,11 @@ where
         let Some((mut respond_to, header)) = self.common_req_init(height, respond_to).await else {
             return;
         };
+
+        if header.dah == *EMPTY_EDS_DAH {
+            respond_to.maybe_send_ok(EMPTY_EDS.clone());
+            return;
+        }
 
         let eds_id = match EdsId::new(height) {
             Ok(eds_id) => eds_id,

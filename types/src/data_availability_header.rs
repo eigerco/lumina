@@ -15,7 +15,7 @@ use crate::consts::data_availability_header::{
 };
 use crate::eds::AxisType;
 use crate::hash::Hash;
-use crate::nmt::{NamespacedHash, NamespacedHashExt};
+use crate::nmt::{Namespace, NamespacedHash, NamespacedHashExt, NamespacedSha2Hasher};
 use crate::{
     Error, ExtendedDataSquare, MerkleProof, Result, ValidateBasicWithAppVersion, ValidationError,
     bail_validation, bail_verification, validation_error,
@@ -148,6 +148,13 @@ impl DataAvailabilityHeader {
     pub fn row_root(&self, row: u16) -> Option<NamespacedHash> {
         let row = usize::from(row);
         self.row_roots.get(row).cloned()
+    }
+
+    pub fn row_contains(&self, row: u16, namespace: Namespace) -> Result<bool> {
+        let row_root = self
+            .row_root(row)
+            .ok_or(Error::IndexOutOfRange(row as usize, self.row_roots.len()))?;
+        Ok(row_root.contains::<NamespacedSha2Hasher>(*namespace))
     }
 
     /// Get the a root of the column with the given index.

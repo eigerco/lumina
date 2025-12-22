@@ -1,7 +1,8 @@
 use std::fmt::Display;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 use std::task::{Context, Poll};
 
+use celestia_types::DataAvailabilityHeader;
 use celestia_types::eds::ExtendedDataSquare;
 use celestia_types::namespace_data::NamespaceData;
 use celestia_types::nmt::Namespace;
@@ -34,6 +35,10 @@ const ROW_PROTOCOL_ID: &str = "/shrex/v0.1.0/row_v0";
 const SAMPLE_PROTOCOL_ID: &str = "/shrex/v0.1.0/sample_v0";
 const NAMESPACE_DATA_PROTOCOL_ID: &str = "/shrex/v0.1.0/nd_v0";
 const EDS_PROTOCOL_ID: &str = "/shrex/v0.1.0/eds_v0";
+
+static EMPTY_EDS: LazyLock<ExtendedDataSquare> = LazyLock::new(|| ExtendedDataSquare::empty());
+static EMPTY_EDS_DAH: LazyLock<DataAvailabilityHeader> =
+    LazyLock::new(|| DataAvailabilityHeader::from_eds(&*EMPTY_EDS));
 
 pub(crate) type Result<T, E = ShrExError> = std::result::Result<T, E>;
 

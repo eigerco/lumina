@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::eds::{EDS_ID_SIZE, EdsId};
 use crate::nmt::{NS_SIZE, Namespace};
 use crate::row_namespace_data::{RowNamespaceData, RowNamespaceDataId};
-use crate::{DataAvailabilityHeader, Error, Result};
+use crate::{DataAvailabilityHeader, Error, Result, bail_verification};
 
 /// Number of bytes needed to represent [`RowNamespaceDataId`] in `multihash`.
 pub const NAMESPACE_DATA_ID_SIZE: usize = EDS_ID_SIZE + NS_SIZE;
@@ -49,9 +49,20 @@ impl NamespaceData {
             return Err(Error::NamespaceDataTooLarge);
         }
 
-        for (row_index, row) in self.rows.iter().enumerate() {
-            let ns_row_id =
-                RowNamespaceDataId::new(id.namespace, row_index as u16, id.block_height())?;
+        let row_idxs = (0..dah.square_width())
+            .filter(|&row| dah.row_contains(row, id.namespace).unwrap_or(false))
+            .collect::<Vec<_>>();
+
+        if row_idxs.len() != self.rows.len() {
+            bail_verification!(
+                "expected {} rows, found {} rows",
+                row_idxs.len(),
+                self.rows.len()
+            );
+        }
+
+        for (row, row_index) in self.rows.iter().zip(row_idxs.into_iter()) {
+            let ns_row_id = RowNamespaceDataId::new(id.namespace, row_index, id.block_height())?;
             row.verify(ns_row_id, dah)?;
         }
 

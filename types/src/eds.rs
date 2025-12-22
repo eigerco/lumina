@@ -11,7 +11,7 @@ use crate::consts::appconsts::{AppVersion, SHARE_SIZE};
 use crate::consts::data_availability_header::{
     MIN_EXTENDED_SQUARE_WIDTH, max_extended_square_width,
 };
-use crate::nmt::{NS_SIZE, Namespace, NamespacedSha2Hasher, Nmt, NmtExt};
+use crate::nmt::{NS_SIZE, Namespace, Nmt, NmtExt};
 use crate::row_namespace_data::{RowNamespaceData, RowNamespaceDataId};
 use crate::{DataAvailabilityHeader, Error, InfoByte, Result, Share, bail_validation};
 
@@ -428,11 +428,7 @@ impl ExtendedDataSquare {
         let mut rows = Vec::new();
 
         for row in 0..self.square_width {
-            let Some(row_root) = dah.row_root(row) else {
-                break;
-            };
-
-            if !row_root.contains::<NamespacedSha2Hasher>(*namespace) {
+            if !dah.row_contains(row, namespace)? {
                 continue;
             }
 
