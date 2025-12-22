@@ -234,10 +234,9 @@ mod wbg {
             Ok(BroadcastedTx {
                 tx: value.tx(),
                 hash: value.hash().parse()?,
-                sequence: value
-                    .sequence()
-                    .try_into()
-                    .map_err(|_| crate::Error::InvalidBroadcastedTx(format!("invalid sequence")))?,
+                sequence: value.sequence().try_into().map_err(|i| {
+                    crate::Error::InvalidBroadcastedTx(format!("invalid sequence: {i}"))
+                })?,
             })
         }
     }

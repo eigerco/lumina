@@ -499,8 +499,15 @@ impl GrpcClient {
         .context(&self.inner.context)
     }
 
-    /// Manually confirm transaction broadcasted with [`broadcast_blobs`] or [`broadcast_message`].
-    pub fn confirm_broadcasted_tx(
+    /// Manually confirm transaction broadcasted with [`GrpcClient::broadcast_blobs`] or [`GrpcClient::broadcast_message`].
+    #[cfg_attr(
+        not(any(
+            feature = "uniffi",
+            all(feature = "wasm-bindgen", target_arch = "wasm32")
+        )),
+        allow(dead_code)
+    )]
+    pub(crate) fn confirm_broadcasted_tx(
         &self,
         tx: BroadcastedTx,
         cfg: TxConfig,
