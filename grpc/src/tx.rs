@@ -103,7 +103,8 @@ pub use wbg::*;
 
 #[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
 mod wbg {
-    use super::{TxConfig, TxInfo, TxPriority};
+    use super::{BroadcastedTx, TxConfig, TxInfo, TxPriority};
+    use js_sys::{BigInt, Uint8Array};
     use lumina_utils::make_object;
     use wasm_bindgen::{JsCast, prelude::*};
 
@@ -121,6 +122,24 @@ mod wbg {
        * Height at which transaction was submitted.
        */
       height: bigint;
+    }
+
+    /**
+     * A transaction that was broadcasted
+     */
+    export interface BroadcastedTx {
+      /**
+       * Broadcasted bytes
+       */
+      tx: Uint8Array;
+      /**
+       * Transaction hash
+       */
+      hash: string;
+      /**
+       * Transaction sequence
+       */
+      sequence: bigint;
     }
 
     /**
@@ -154,6 +173,19 @@ mod wbg {
         #[wasm_bindgen(typescript_type = "TxInfo")]
         pub type JsTxInfo;
 
+        /// BroadcastedTx exposed to javascript
+        #[wasm_bindgen(typescript_type = "BroadcastedTx")]
+        pub type JsBroadcastedTx;
+
+        #[wasm_bindgen(method, getter, js_name = tx)]
+        pub fn tx(this: &JsBroadcastedTx) -> Vec<u8>;
+
+        #[wasm_bindgen(method, getter, js_name = hash)]
+        pub fn hash(this: &JsBroadcastedTx) -> String;
+
+        #[wasm_bindgen(method, getter, js_name = sequence)]
+        pub fn sequence(this: &JsBroadcastedTx) -> BigInt;
+
         /// TxConfig exposed to javascript
         #[wasm_bindgen(typescript_type = "TxConfig")]
         pub type JsTxConfig;
@@ -175,10 +207,38 @@ mod wbg {
         fn from(value: TxInfo) -> JsTxInfo {
             let obj = make_object!(
                 "hash" => value.hash.to_string().into(),
-                "height" => js_sys::BigInt::from(value.height.value())
+                "height" => BigInt::from(value.height.value())
             );
 
             obj.unchecked_into()
+        }
+    }
+
+    impl From<BroadcastedTx> for JsBroadcastedTx {
+        fn from(value: BroadcastedTx) -> JsBroadcastedTx {
+            let tx_bytes = Uint8Array::from(value.tx.as_slice());
+            let obj = make_object!(
+                "tx" => tx_bytes.into(),
+                "hash" => value.hash.to_string().into(),
+                "sequence" => BigInt::from(value.sequence)
+            );
+
+            obj.unchecked_into()
+        }
+    }
+
+    impl TryFrom<JsBroadcastedTx> for BroadcastedTx {
+        type Error = crate::Error;
+
+        fn try_from(value: JsBroadcastedTx) -> Result<BroadcastedTx, Self::Error> {
+            Ok(BroadcastedTx {
+                tx: value.tx(),
+                hash: value.hash().parse()?,
+                sequence: value
+                    .sequence()
+                    .try_into()
+                    .map_err(|_| crate::Error::InvalidBroadcastedTx(format!("invalid sequence")))?,
+            })
         }
     }
 

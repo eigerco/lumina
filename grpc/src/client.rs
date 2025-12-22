@@ -324,7 +324,7 @@ impl GrpcClient {
             let tx = this
                 .submit_message_impl(message, cfg.clone(), &context)
                 .await?;
-            this.confirm_tx_impl(tx, cfg, &context).await
+            this.confirm_tx(tx, cfg, &context).await
         })
         .context(&self.inner.context)
     }
@@ -375,7 +375,7 @@ impl GrpcClient {
             Ok(SubmittedTx::new(
                 broadcasted_tx.clone(),
                 AsyncGrpcCall::new(move |context| async move {
-                    this.confirm_tx_impl(broadcasted_tx, cfg, &context).await
+                    this.confirm_tx(broadcasted_tx, cfg, &context).await
                 })
                 .context(&context),
             ))
@@ -421,7 +421,7 @@ impl GrpcClient {
             let tx = this
                 .submit_blobs_impl(&blobs, cfg.clone(), &context)
                 .await?;
-            this.confirm_tx_impl(tx, cfg, &context).await
+            this.confirm_tx(tx, cfg, &context).await
         })
         .context(&self.inner.context)
     }
@@ -469,24 +469,10 @@ impl GrpcClient {
             Ok(SubmittedTx::new(
                 broadcasted_tx.clone(),
                 AsyncGrpcCall::new(move |context| async move {
-                    this.confirm_tx_impl(broadcasted_tx, cfg, &context).await?;
+                    this.confirm_tx(broadcasted_tx, cfg, &context).await
                 })
                 .context(&context),
             ))
-        })
-        .context(&self.inner.context)
-    }
-
-    /// Manually confirm transaction broadcasted with [`broadcast_blobs`] or [`broadcast_message`].
-    pub fn confirm_tx(
-        &self,
-        broadcasted_tx: BroadcastedTx,
-        cfg: TxConfig,
-    ) -> AsyncGrpcCall<TxInfo> {
-        let this = self.clone();
-
-        AsyncGrpcCall::new(move |context| async move {
-            this.confirm_tx_impl(broadcasted_tx, cfg, &context).await
         })
         .context(&self.inner.context)
     }
@@ -511,6 +497,18 @@ impl GrpcClient {
             Ok(chain_id.clone())
         })
         .context(&self.inner.context)
+    }
+
+    /// Manually confirm transaction broadcasted with [`broadcast_blobs`] or [`broadcast_message`].
+    pub fn confirm_broadcasted_tx(
+        &self,
+        tx: BroadcastedTx,
+        cfg: TxConfig,
+    ) -> AsyncGrpcCall<TxInfo> {
+        let this = self.clone();
+
+        AsyncGrpcCall::new(move |context| async move { this.confirm_tx(tx, cfg, &context).await })
+            .context(&self.inner.context)
     }
 
     /// Get client's account public key if the signer is set
@@ -888,7 +886,7 @@ impl GrpcClient {
         }
     }
 
-    async fn confirm_tx_impl(
+    async fn confirm_tx(
         &self,
         tx: BroadcastedTx,
         cfg: TxConfig,
@@ -1339,7 +1337,7 @@ mod tests {
                     let was_evicted = status == TxStatus::Evicted;
 
                     match client
-                        .confirm_tx_impl(tx, TxConfig::default(), &Context::default())
+                        .confirm_tx(tx, TxConfig::default(), &Context::default())
                         .await
                     {
                         // some of the retransmitted tx's will still be evicted because
@@ -1413,6 +1411,54 @@ mod tests {
 
         assert_eq!(coins.len(), 1);
         assert_eq!(amount, coins[0]);
+    }
+
+    #[async_test]
+    async fn broadcast_message() {
+        let account = load_account();
+        let other_account = TestAccount::random();
+        let amount = Coin::utia(12345);
+        let (_lock, tx_client) = new_tx_client().await;
+
+        let msg = MsgSend {
+            from_address: account.address.to_string(),
+            to_address: other_account.address.to_string(),
+            amount: vec![amount.clone().into()],
+        };
+
+        let submitted_tx = tx_client
+            .broadcast_message(msg, TxConfig::default())
+            .await
+            .unwrap();
+
+        submitted_tx.confirm().await.unwrap();
+
+        let coins = tx_client
+            .get_all_balances(&other_account.address)
+            .await
+            .unwrap();
+
+        assert_eq!(coins.len(), 1);
+        assert_eq!(amount, coins[0]);
+    }
+
+    #[async_test]
+    async fn broadcast_blobs() {
+        let (_lock, tx_client) = new_tx_client().await;
+
+        let submitted_tx = tx_client
+            .broadcast_blobs(
+                &[random_blob(10..=1000)],
+                TxConfig::default().with_memo("broadcast test"),
+            )
+            .await
+            .unwrap();
+
+        let tx_info = submitted_tx.confirm().await.unwrap();
+        let tx = tx_client.get_tx(tx_info.hash).await.unwrap();
+
+        assert_eq!(tx_info.hash, tx.tx_response.txhash);
+        assert_eq!(tx.tx.body.memo, "broadcast test");
     }
 
     #[async_test]
