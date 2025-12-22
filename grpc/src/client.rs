@@ -324,7 +324,7 @@ impl GrpcClient {
             let tx = this
                 .submit_message_impl(message, cfg.clone(), &context)
                 .await?;
-            this.confirm_tx(tx, cfg, &context).await
+            this.confirm_tx_impl(tx, cfg, &context).await
         })
         .context(&self.inner.context)
     }
@@ -375,7 +375,7 @@ impl GrpcClient {
             Ok(SubmittedTx::new(
                 broadcasted_tx.clone(),
                 AsyncGrpcCall::new(move |context| async move {
-                    this.confirm_tx(broadcasted_tx, cfg, &context).await
+                    this.confirm_tx_impl(broadcasted_tx, cfg, &context).await
                 })
                 .context(&context),
             ))
@@ -421,7 +421,7 @@ impl GrpcClient {
             let tx = this
                 .submit_blobs_impl(&blobs, cfg.clone(), &context)
                 .await?;
-            this.confirm_tx(tx, cfg, &context).await
+            this.confirm_tx_impl(tx, cfg, &context).await
         })
         .context(&self.inner.context)
     }
@@ -469,11 +469,25 @@ impl GrpcClient {
             Ok(SubmittedTx::new(
                 broadcasted_tx.clone(),
                 AsyncGrpcCall::new(move |context| async move {
-                    this.confirm_tx(broadcasted_tx, cfg, &context).await?;
+                    this.confirm_tx_impl(broadcasted_tx, cfg, &context).await?;
                     todo!()
                 })
                 .context(&context),
             ))
+        })
+        .context(&self.inner.context)
+    }
+
+    /// Manually confirm transaction broadcasted with [`broadcast_blobs`] or [`broadcast_message`].
+    pub fn confirm_tx(
+        &self,
+        broadcasted_tx: BroadcastedTx,
+        cfg: TxConfig,
+    ) -> AsyncGrpcCall<TxInfo> {
+        let this = self.clone();
+
+        AsyncGrpcCall::new(move |context| async move {
+            this.confirm_tx_impl(broadcasted_tx, cfg, &context).await
         })
         .context(&self.inner.context)
     }
@@ -875,7 +889,7 @@ impl GrpcClient {
         }
     }
 
-    pub async fn confirm_tx(
+    async fn confirm_tx_impl(
         &self,
         tx: BroadcastedTx,
         cfg: TxConfig,
@@ -1326,7 +1340,7 @@ mod tests {
                     let was_evicted = status == TxStatus::Evicted;
 
                     match client
-                        .confirm_tx(tx, TxConfig::default(), &Context::default())
+                        .confirm_tx_impl(tx, TxConfig::default(), &Context::default())
                         .await
                     {
                         // some of the retransmitted tx's will still be evicted because
