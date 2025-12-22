@@ -26,7 +26,7 @@ pub(crate) mod pool_tracker;
 
 use crate::p2p::P2pError;
 use crate::p2p::shrex::client::Client;
-use crate::p2p::shrex::pool_tracker::EdsNotification;
+use crate::p2p::shrex::pool_tracker::{EdsNotification, PoolTracker};
 use crate::peer_tracker::PeerTracker;
 use crate::store::Store;
 
@@ -50,7 +50,7 @@ where
 {
     inner: InnerBehaviour,
     client: Client<S>,
-    pool_tracker: pool_tracker::PoolTracker<S>,
+    pool_tracker: PoolTracker<S>,
     _store: Arc<S>,
 }
 
@@ -184,7 +184,8 @@ where
     }
 
     pub(crate) fn schedule_pending_requests(&mut self, peer_tracker: &PeerTracker) {
-        self.client.schedule_pending_requests(peer_tracker);
+        self.client
+            .schedule_pending_requests(peer_tracker, &self.pool_tracker);
     }
 
     #[allow(dead_code)]

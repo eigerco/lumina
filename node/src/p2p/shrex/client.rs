@@ -27,6 +27,7 @@ use celestia_proto::{Response as ProtoResponse, Status as ProtoStatus};
 
 use crate::p2p::P2pError;
 use crate::p2p::shrex::codec::{CodecError, RequestCodec, ResponseCodec};
+use crate::p2p::shrex::pool_tracker::PoolTracker;
 use crate::p2p::shrex::{
     Config, EDS_PROTOCOL_ID, Event, NAMESPACE_DATA_PROTOCOL_ID, ROW_PROTOCOL_ID, Result,
     SAMPLE_PROTOCOL_ID, ShrExError,
@@ -263,7 +264,11 @@ where
         !self.pending_reqs.is_empty()
     }
 
-    pub(super) fn schedule_pending_requests(&mut self, peer_tracker: &PeerTracker) {
+    pub(super) fn schedule_pending_requests(
+        &mut self,
+        peer_tracker: &PeerTracker,
+        pool_tracker: &PoolTracker<S>,
+    ) {
         if self.cancellation_token.is_cancelled() || self.pending_reqs.is_empty() {
             return;
         }
