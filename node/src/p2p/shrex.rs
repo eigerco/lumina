@@ -1,4 +1,3 @@
-use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
 use std::sync::Arc;
 use std::task::{Context, Poll};
@@ -10,20 +9,24 @@ use celestia_types::row::Row;
 use celestia_types::sample::Sample;
 use libp2p::core::Endpoint;
 use libp2p::core::transport::PortUse;
+use libp2p::gossipsub::{self, Message};
 use libp2p::identity::Keypair;
 use libp2p::swarm::{
     ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, THandlerInEvent, THandlerOutEvent,
     ToSwarm,
 };
-use libp2p::{Multiaddr, PeerId, gossipsub};
+use libp2p::{Multiaddr, PeerId};
 use thiserror::Error;
 use tokio::sync::oneshot;
+use tracing::{debug, info};
 
 mod client;
 mod codec;
+pub(crate) mod pool_tracker;
 
-use self::client::Client;
 use crate::p2p::P2pError;
+use crate::p2p::shrex::client::Client;
+use crate::p2p::shrex::pool_tracker::EdsNotification;
 use crate::peer_tracker::PeerTracker;
 use crate::store::Store;
 
@@ -47,7 +50,7 @@ where
 {
     inner: InnerBehaviour,
     client: Client<S>,
-    _da_pools: HashMap<u64, HashSet<PeerId>>,
+    pool_tracker: pool_tracker::PoolTracker<S>,
     _store: Arc<S>,
 }
 
@@ -67,6 +70,11 @@ pub(crate) struct InnerBehaviour {
 #[derive(Debug)]
 pub(crate) enum Event {
     SchedulePendingRequests,
+
+    PoolUpdate {
+        add_peers: Vec<PeerId>,
+        blacklist_peers: Vec<PeerId>,
+    },
 }
 
 #[derive(Debug, Error)]
@@ -126,7 +134,7 @@ where
         Ok(Self {
             inner: InnerBehaviour { shrex_sub },
             client,
-            _da_pools: HashMap::new(),
+            pool_tracker: pool_tracker::PoolTracker::new(config.header_store.clone()),
             _store: config.header_store,
         })
     }
@@ -136,11 +144,38 @@ where
         ev: ToSwarm<InnerBehaviourEvent, THandlerInEvent<InnerBehaviour>>,
     ) -> Option<ToSwarm<Event, THandlerInEvent<Self>>> {
         match ev {
-            ToSwarm::GenerateEvent(InnerBehaviourEvent::ShrexSub(_ev)) => {
-                // TODO: Handle shrex sub events and do not propagate them
+            ToSwarm::GenerateEvent(InnerBehaviourEvent::ShrexSub(ev)) => {
+                self.on_shrex_sub_event(ev);
                 None
             }
             _ => Some(ev.map_out(|_| unreachable!("GenerateEvent handled"))),
+        }
+    }
+
+    fn on_shrex_sub_event(&mut self, ev: gossipsub::Event) {
+        match ev {
+            gossipsub::Event::Message {
+                message: Message { source, data, .. },
+                ..
+            } => {
+                if let Ok(EdsNotification { height, data_hash }) =
+                    EdsNotification::deserialize_and_validate(data.as_ref())
+                {
+                    if let Some(peer_id) = source {
+                        self.pool_tracker
+                            .add_peer_for_hash(peer_id, data_hash, height);
+                    }
+                } else {
+                    debug!("Invalid shrex sub message");
+                }
+            }
+
+            gossipsub::Event::SlowPeer {
+                peer_id,
+                failed_messages,
+            } => info!("{peer_id} slow: {failed_messages:?}"),
+
+            _ => {}
         }
     }
 
@@ -281,6 +316,10 @@ where
             && let Some(ev) = self.on_to_swarm(ev)
         {
             return Poll::Ready(ev);
+        }
+
+        if let Poll::Ready(Some(ev)) = self.pool_tracker.poll(cx) {
+            return Poll::Ready(ToSwarm::GenerateEvent(ev));
         }
 
         if let Poll::Ready(ev) = self.client.poll(cx) {

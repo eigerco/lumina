@@ -1116,6 +1116,15 @@ where
                     .shr_ex
                     .schedule_pending_requests(ctx.peer_tracker);
             }
+
+            shrex::Event::PoolUpdate {
+                add_peers,
+                blacklist_peers,
+            } => {
+                for peer_id in add_peers {
+                    self.swarm.peer_maybe_discovered(&peer_id);
+                }
+            }
         }
     }
 
