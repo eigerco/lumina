@@ -1347,6 +1347,7 @@ mod tests {
         let (_lock, tx_client) = new_tx_client().await;
         is_send_and_sync(&tx_client);
 
+        is_send(&tx_client.submit_blobs(&[], TxConfig::default()));
         is_send(
             &tx_client
                 .submit_blobs(&[], TxConfig::default())
