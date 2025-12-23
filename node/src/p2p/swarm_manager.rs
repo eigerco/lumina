@@ -50,6 +50,13 @@ where
     ping: ping::Behaviour,
     identify: identify::Behaviour,
     kademlia: kad::Behaviour<kad::store::MemoryStore>,
+    // We use `Toggle` here because we want a way to initialize `SwarmManager`
+    // without the need to pass user's Behaviour in the constructor.
+    //
+    // The main reason we want this, is because `SwarmBehaviour` has its own
+    // `libp2p_stream::Behaviour`, and user's Behaviour may need an allocated
+    // `libp2p_stream::Control` from it, which creates chicken and the egg situation.
+    // With `Toggle` we allow user to attach its Behaviour, after `SwarmManager` construction.
     behaviour: Toggle<B>,
 }
 

@@ -66,6 +66,7 @@ where
 
 struct Request {
     ctx: RequestContext,
+    // TODO: actually only DataAvailabilityHeader is needed
     header: ExtendedHeader,
     tries_left: usize,
     cancellation_token: CancellationToken,
@@ -566,6 +567,7 @@ async fn request_response_task(
         let mut data = Vec::new();
 
         if status == ProtoStatus::Ok as i32 {
+            // TODO: Limit the receiving size
             stream.read_to_end(&mut data).await?;
         }
 

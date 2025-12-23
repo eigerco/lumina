@@ -193,7 +193,6 @@ where
             .schedule_pending_requests(peer_tracker, &self.pool_tracker);
     }
 
-    #[allow(dead_code)]
     pub(crate) async fn get_row(
         &mut self,
         height: u64,
@@ -215,7 +214,6 @@ where
             .await;
     }
 
-    #[allow(dead_code)]
     pub(crate) async fn get_namespace_data(
         &mut self,
         height: u64,

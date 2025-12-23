@@ -78,11 +78,11 @@ pub enum HeaderExError {
     #[error("Invalid request")]
     InvalidRequest,
 
-    /// Error when handling connection from the server.
+    /// Error when handling connection from the client.
     #[error("Inbound failure: {0}")]
     InboundFailure(InboundFailure),
 
-    /// Error when handling connection to the client.
+    /// Error when handling connection to the server.
     #[error("Outbound failure: {0}")]
     OutboundFailure(OutboundFailure),
 

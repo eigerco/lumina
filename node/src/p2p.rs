@@ -267,12 +267,16 @@ pub(crate) enum P2pCmd {
     GetNetworkHead {
         respond_to: oneshot::Sender<Option<ExtendedHeader>>,
     },
+    // This is dead code because `get_row` still uses Bitswap.
+    // We can use this when celestia-node#4288 is merged.
     #[allow(dead_code)]
     GetRow {
         row_index: u16,
         block_height: u64,
         respond_to: OneshotResultSender<Row, P2pError>,
     },
+    // This is dead code because `get_sample` still uses Bitswap.
+    // We can use this when celestia-node#4288 is merged.
     #[allow(dead_code)]
     GetSample {
         row_index: u16,
@@ -1122,6 +1126,8 @@ where
                 blacklist_peers,
             } => {
                 for peer_id in add_peers {
+                    // TODO: I think `peer_maybe_discovered` doesn't have any functionality,
+                    // so we can remove it entirely.
                     self.swarm.peer_maybe_discovered(&peer_id);
                 }
             }
