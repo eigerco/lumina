@@ -1,14 +1,11 @@
-// TODO: remove this
-#![allow(unused)]
-
-use bytes::{Buf, BufMut, BytesMut};
+use bytes::{BufMut, BytesMut};
 use celestia_proto::shwap::{
-    Row as RawRow, RowNamespaceData as RawRowNamespaceData, Sample as RawSample, Share as RawShare,
+    Row as RawRow, RowNamespaceData as RawRowNamespaceData, Sample as RawSample,
 };
 use celestia_types::consts::appconsts::SHARE_SIZE;
 use celestia_types::eds::{EdsId, ExtendedDataSquare};
 use celestia_types::namespace_data::{NamespaceData, NamespaceDataId};
-use celestia_types::row::{ROW_ID_SIZE, Row, RowId};
+use celestia_types::row::{Row, RowId};
 use celestia_types::sample::{Sample, SampleId};
 use celestia_types::{DataAvailabilityHeader, ExtendedHeader};
 use integer_encoding::VarInt;
@@ -28,6 +25,7 @@ pub(crate) enum CodecError {
 }
 
 impl CodecError {
+    #[allow(dead_code)]
     fn request_decode(s: impl Display) -> CodecError {
         CodecError::RequestDecode(s.to_string())
     }
@@ -43,12 +41,15 @@ impl CodecError {
 
 pub(crate) trait RequestCodec: Send + Sized {
     fn encode(&self) -> Vec<u8>;
+
+    #[allow(dead_code)]
     fn decode(raw_data: &[u8]) -> Result<Self>;
 }
 
 pub(crate) trait ResponseCodec: Send + Sized {
     type Request;
 
+    #[allow(dead_code)]
     fn encode(&self) -> Vec<u8>;
 
     fn decode_and_verify(
@@ -163,7 +164,7 @@ impl ResponseCodec for ExtendedDataSquare {
 
     fn decode_and_verify(
         raw_data: &[u8],
-        req: &EdsId,
+        _req: &EdsId,
         header: &ExtendedHeader,
     ) -> Result<ExtendedDataSquare> {
         if raw_data.is_empty() {

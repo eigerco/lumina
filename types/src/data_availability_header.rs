@@ -163,6 +163,14 @@ impl DataAvailabilityHeader {
         self.column_roots.get(column).cloned()
     }
 
+    pub fn column_contains(&self, column: u16, namespace: Namespace) -> Result<bool> {
+        let column_root = self.column_root(column).ok_or(Error::IndexOutOfRange(
+            column as usize,
+            self.column_roots.len(),
+        ))?;
+        Ok(column_root.contains::<NamespacedSha2Hasher>(*namespace))
+    }
+
     /// Compute the combined hash of all rows and columns.
     ///
     /// This is the data commitment for the block.

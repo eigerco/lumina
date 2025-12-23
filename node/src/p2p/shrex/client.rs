@@ -216,7 +216,7 @@ where
         }
 
         if header.dah == *EMPTY_EDS_DAH {
-            let sample = Sample::new(row_index, column_index, AxisType::Row, &*EMPTY_EDS)
+            let sample = Sample::new(row_index, column_index, AxisType::Row, &EMPTY_EDS)
                 .expect("coordinates already checked");
             respond_to.maybe_send_ok(sample);
             return;
@@ -250,7 +250,7 @@ where
 
         if header.dah == *EMPTY_EDS_DAH {
             let rows = EMPTY_EDS
-                .get_namespace_data(namespace, &*EMPTY_EDS_DAH, height)
+                .get_namespace_data(namespace, &EMPTY_EDS_DAH, height)
                 .expect("invalid eds or dah")
                 .into_iter()
                 .map(|(_, row)| row)
@@ -317,6 +317,26 @@ where
         if self.cancellation_token.is_cancelled() || self.pending_reqs.is_empty() {
             return;
         }
+
+        // TODO: incorporate pool_tracker
+        //
+        // The following scenarios need be handled:
+        //
+        // 1. User requests a shrex ID and we have validated pool for it
+        // 2. User requests a shrex ID and we have validated pool but it is empty
+        // 3. User requests a shrex ID for a block from the future.
+        //    In this case:
+        //      * Pool tracker may have pool in Caditates. We need to skip this request
+        //        and retry later when the pool is validated.
+        //      * The block maybe is too far to the future an pool tracker doesn't even
+        //        have it as candidate. What should we do in this case? Wait for the
+        //        height or return an error? One option is to wait forever and user needs
+        //        to use the `timeout` parameter in `p2p.rs`. (NOTE: `timeout` in `p2p.rs`
+        //        is not related to shrex recv timeout, the `timeout` in `p2p.rs` is the timeout
+        //        for the whole action and shrex nows nothing about it).
+        // 4. User requests a shrex ID from the past. In this case we can we need to
+        //    send the request to any connected full node.
+        //
 
         let mut peers = peer_tracker
             .peers()
@@ -523,6 +543,7 @@ async fn get_header(store: &impl Store, height: u64) -> Result<ExtendedHeader, P
         Err(StoreError::NotFound) => {
             let pruned_ranges = store.get_pruned_ranges().await?;
 
+            // TODO: Should these be part of `StoreError`? instead of manually handle it
             if pruned_ranges.contains(height) {
                 Err(P2pError::HeaderPruned(height))
             } else {
