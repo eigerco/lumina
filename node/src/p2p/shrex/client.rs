@@ -385,8 +385,6 @@ where
     fn on_error(&mut self, mut req: Request, error: ClientError) {
         warn!("shrex error: {error}");
 
-        req.decrease_tries();
-
         if req.can_retry() {
             // move failed request to pending
             self.pending_reqs.push_back(req);
