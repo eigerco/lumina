@@ -533,8 +533,7 @@ mod tests {
             .undelegate(&validator_addr, 10, TxConfig::default())
             .await
             .unwrap()
-            .height
-            .value();
+            .height;
 
         let unbond = client
             .state()

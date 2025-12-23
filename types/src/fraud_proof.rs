@@ -5,7 +5,6 @@
 use std::fmt;
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
-use tendermint::block::Height;
 use tendermint_proto::Protobuf;
 
 pub use crate::byzantine::BadEncodingFraudProof;
@@ -21,7 +20,7 @@ pub trait FraudProof {
     fn header_hash(&self) -> Hash;
 
     /// Height returns the block height corresponding to the Proof.
-    fn height(&self) -> Height;
+    fn height(&self) -> u64;
 
     /// Checks the validity of the fraud proof.
     ///

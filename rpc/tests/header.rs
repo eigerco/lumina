@@ -14,10 +14,7 @@ async fn local_head() {
 
     let head_height = local_head.height();
     let genesis_header = client.header_get_by_height(1).await.unwrap();
-    let adjacent_header = client
-        .header_get_by_height(head_height.value() - 1)
-        .await
-        .unwrap();
+    let adjacent_header = client.header_get_by_height(head_height - 1).await.unwrap();
 
     local_head.validate().unwrap();
     genesis_header.verify(&local_head).unwrap();
@@ -79,7 +76,7 @@ async fn network_head() {
 
     let genesis_header = client.header_get_by_height(1).await.unwrap();
     let adjacent_header = client
-        .header_get_by_height(network_head.height().value() - 1)
+        .header_get_by_height(network_head.height() - 1)
         .await
         .unwrap();
 

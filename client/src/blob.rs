@@ -79,11 +79,7 @@ impl BlobApi {
             .rpc
             .blob_get(height, namespace, commitment)
             .await?;
-        let app_version = self
-            .inner
-            .get_header_validated(height)
-            .await?
-            .app_version()?;
+        let app_version = self.inner.get_header_validated(height).await?.app_version();
 
         blob.validate_with_commitment(&commitment, app_version)?;
 
@@ -100,11 +96,7 @@ impl BlobApi {
             return Ok(None);
         };
 
-        let app_version = self
-            .inner
-            .get_header_validated(height)
-            .await?
-            .app_version()?;
+        let app_version = self.inner.get_header_validated(height).await?.app_version();
 
         for blob in &blobs {
             blob.validate(app_version)?;
@@ -213,7 +205,7 @@ mod tests {
 
         let received_blob = client
             .blob()
-            .get(tx_info.height.value(), ns, submitted_commitment)
+            .get(tx_info.height, ns, submitted_commitment)
             .await
             .unwrap();
 
@@ -233,7 +225,7 @@ mod tests {
 
         client
             .blob()
-            .get(head.height().value(), ns, commitment)
+            .get(head.height(), ns, commitment)
             .await
             .unwrap_err();
     }

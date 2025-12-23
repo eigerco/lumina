@@ -189,7 +189,7 @@ impl InMemoryStoreInner {
             return Ok(());
         };
 
-        let headers_range = head.height().value()..=tail.height().value();
+        let headers_range = head.height()..=tail.height();
         let (prev_exists, next_exists) = self
             .header_ranges
             .check_insertion_constraints(&headers_range)
@@ -200,7 +200,7 @@ impl InMemoryStoreInner {
 
         for header in headers.into_iter() {
             let hash = header.hash();
-            let height = header.height().value();
+            let height = header.height();
 
             debug_assert!(
                 !self.height_to_hash.contains_key(&height),
@@ -237,7 +237,7 @@ impl InMemoryStoreInner {
     ) -> Result<()> {
         if let Some(lowest_header) = lowest_header {
             let prev = self
-                .get_by_height(lowest_header.height().value() - 1)
+                .get_by_height(lowest_header.height() - 1)
                 .map_err(|e| match e {
                     StoreError::NotFound => {
                         panic!("inconsistency between headers and ranges table")
@@ -251,7 +251,7 @@ impl InMemoryStoreInner {
 
         if let Some(highest_header) = highest_header {
             let next = self
-                .get_by_height(highest_header.height().value() + 1)
+                .get_by_height(highest_header.height() + 1)
                 .map_err(|e| match e {
                     StoreError::NotFound => {
                         panic!("inconsistency between headers and ranges table")

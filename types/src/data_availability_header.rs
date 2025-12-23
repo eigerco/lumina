@@ -38,7 +38,7 @@ use crate::{
 /// # fn extended_header() -> ExtendedHeader {
 /// #     unimplemented!();
 /// # }
-/// # fn shares_with_proof(_: Height, _: &Namespace) -> (Vec<Share>, NamespaceProof) {
+/// # fn shares_with_proof(_: u64, _: &Namespace) -> (Vec<Share>, NamespaceProof) {
 /// #     unimplemented!();
 /// # }
 /// // fetch the block header and data for your namespace

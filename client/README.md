@@ -90,7 +90,7 @@ async fn main() -> Result<()> {
     // we don't need to do anything else.
     let received_blob = client
         .blob()
-        .get(tx_info.height.value(), ns, commitment)
+        .get(tx_info.height, ns, commitment)
         .await?;
 
     println!("Data: {:?}", str::from_utf8(&received_blob.data).unwrap());

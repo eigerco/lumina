@@ -143,7 +143,7 @@ pub trait ShareClient: ClientT {
                 Error::Custom(e)
             })?;
 
-            let raw_eds = rpc::ShareClient::share_get_eds(self, root.height().value()).await?;
+            let raw_eds = rpc::ShareClient::share_get_eds(self, root.height()).await?;
 
             // Correct `Share` construction and validation is done inside `ExtendedDataSquare::from_raw`
             ExtendedDataSquare::from_raw(raw_eds, app_version).map_err(custom_client_error)
@@ -165,10 +165,9 @@ pub trait ShareClient: ClientT {
         Self: Sized + Sync + 'fut,
     {
         async move {
-            let resp =
-                rpc::ShareClient::share_get_range(self, root.height().value(), start, end).await?;
+            let resp = rpc::ShareClient::share_get_range(self, root.height(), start, end).await?;
 
-            let app = root.app_version().map_err(custom_client_error)?;
+            let app = root.app_version();
             for share in &resp.shares {
                 share.validate(app).map_err(custom_client_error)?;
             }
@@ -199,8 +198,8 @@ pub trait ShareClient: ClientT {
             .collect::<Vec<_>>();
 
         async move {
-            let app = root.app_version().map_err(custom_client_error)?;
-            let height = root.height().value();
+            let app = root.app_version();
+            let height = root.height();
 
             let raw_samples =
                 rpc::ShareClient::share_get_samples(self, height, &coordinates).await?;
@@ -234,9 +233,8 @@ pub trait ShareClient: ClientT {
         Self: Sized + Sync + 'fut,
     {
         async move {
-            let app = root.app_version().map_err(custom_client_error)?;
-            let square_width = root.dah.square_width();
-            let resp = rpc::ShareClient::share_get_row(self, root.height().value(), row).await?;
+            let resp = rpc::ShareClient::share_get_row(self, root.height(), row).await?;
+            let square_width = root.square_width();
 
             let expected_len = match resp.side {
                 RowSide::Left | RowSide::Right => square_width / 2,
@@ -271,7 +269,9 @@ pub trait ShareClient: ClientT {
                     }
                     .map_err(custom_client_error)?;
 
-                    share.validate(app).map_err(custom_client_error)?;
+                    share
+                        .validate(root.app_version())
+                        .map_err(custom_client_error)?;
 
                     Ok(share)
                 })
@@ -297,8 +297,7 @@ pub trait ShareClient: ClientT {
         Self: Sized + Sync + 'fut,
     {
         async move {
-            let share =
-                rpc::ShareClient::share_get_share(self, root.height().value(), row, col).await?;
+            let share = rpc::ShareClient::share_get_share(self, root.height(), row, col).await?;
             let share = if is_ods_square(row, col, root.dah.square_width()) {
                 Share::from_raw(&share.data)
             } else {
@@ -306,7 +305,7 @@ pub trait ShareClient: ClientT {
             }
             .map_err(custom_client_error)?;
 
-            let app = root.app_version().map_err(custom_client_error)?;
+            let app = root.app_version();
             share.validate(app).map_err(custom_client_error)?;
 
             Ok(share)
@@ -330,10 +329,9 @@ pub trait ShareClient: ClientT {
     {
         async move {
             let ns_data =
-                rpc::ShareClient::share_get_namespace_data(self, root.height().value(), namespace)
-                    .await?;
+                rpc::ShareClient::share_get_namespace_data(self, root.height(), namespace).await?;
 
-            let app = root.app_version().map_err(custom_client_error)?;
+            let app = root.app_version();
             for shr in ns_data.rows.iter().flat_map(|row| &row.shares) {
                 shr.validate(app).map_err(custom_client_error)?;
             }
