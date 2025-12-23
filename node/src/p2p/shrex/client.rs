@@ -377,6 +377,7 @@ where
             Ok(raw_data) => raw_data,
             Err(e) => return self.on_error(req, e.into()),
         };
+
         if let Err(e) = req.decode_verify_respond(&raw_data) {
             self.on_error(req, e.into());
         }

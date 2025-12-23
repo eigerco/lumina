@@ -189,9 +189,9 @@ impl ResponseCodec for ExtendedDataSquare {
 
         let dah = DataAvailabilityHeader::from_eds(&eds);
 
-        if dah.hash() != header.dah.hash() {
+        if dah != header.dah {
             return Err(CodecError::response_decode(
-                "EDS verification failed: Hash missmatch",
+                "EDS verification failed: DAH missmatch",
             ));
         }
 
