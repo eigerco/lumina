@@ -152,7 +152,7 @@ async fn shwap_request_sample() {
         )
         .await
         .unwrap_err();
-    assert!(matches!(err, NodeError::P2p(P2pError::BitswapQueryTimeout)));
+    assert!(matches!(err, NodeError::P2p(P2pError::RequestTimedOut)));
 }
 
 #[tokio::test]
@@ -181,7 +181,7 @@ async fn shwap_request_row() {
         .request_row(square_width + 1, height, Some(Duration::from_secs(1)))
         .await
         .unwrap_err();
-    assert!(matches!(err, NodeError::P2p(P2pError::BitswapQueryTimeout)));
+    assert!(matches!(err, NodeError::P2p(P2pError::RequestTimedOut)));
 }
 
 #[tokio::test]
@@ -224,7 +224,7 @@ async fn shwap_request_row_namespace_data() {
         .request_row_namespace_data(ns, square_width + 1, height, Some(Duration::from_secs(1)))
         .await
         .unwrap_err();
-    assert!(matches!(err, NodeError::P2p(P2pError::BitswapQueryTimeout)));
+    assert!(matches!(err, NodeError::P2p(P2pError::RequestTimedOut)));
 
     // check nonexisting namespace row namespace data
     // for namespace that row actually contains
@@ -243,7 +243,7 @@ async fn shwap_request_row_namespace_data() {
         .request_row_namespace_data(unknown_ns, 0, height, Some(Duration::from_secs(1)))
         .await
         .unwrap_err();
-    assert!(matches!(err, NodeError::P2p(P2pError::BitswapQueryTimeout)));
+    assert!(matches!(err, NodeError::P2p(P2pError::RequestTimedOut)));
 }
 
 #[tokio::test]

@@ -250,6 +250,10 @@ pub enum Error {
     #[error("Blob too large")]
     BlobTooLarge,
 
+    /// NamespaceData too large, length must fit u16
+    #[error("NamespaceData too large")]
+    NamespaceDataTooLarge,
+
     /// Invalid comittment length
     #[error("Invalid committment length")]
     InvalidComittmentLength,
@@ -698,6 +702,10 @@ pub enum UniffiError {
     #[error("Blob too large")]
     BlobTooLarge,
 
+    /// NamespaceData too large, length must fit u16
+    #[error("NamespaceData too large")]
+    NamespaceDataTooLarge,
+
     /// Invalid comittment length
     #[error("Invalid committment length")]
     InvalidComittmentLength,
@@ -821,6 +829,7 @@ impl From<Error> for UniffiError {
             Error::UnexpectedSequenceStart => UniffiError::UnexpectedSequenceStart,
             Error::BlobSharesMetadataMismatch(s) => UniffiError::BlobSharesMetadataMismatch(s),
             Error::BlobTooLarge => UniffiError::BlobTooLarge,
+            Error::NamespaceDataTooLarge => UniffiError::NamespaceDataTooLarge,
             Error::InvalidComittmentLength => UniffiError::InvalidComittmentLength,
             Error::MissingSigner => UniffiError::MissingSigner,
             Error::SignerNotSupported => UniffiError::SignerNotSupported,

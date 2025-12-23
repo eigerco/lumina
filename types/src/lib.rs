@@ -18,6 +18,7 @@ mod extended_header;
 pub mod fraud_proof;
 pub mod hash;
 mod merkle_proof;
+pub mod namespace_data;
 pub mod nmt;
 #[cfg(feature = "p2p")]
 #[cfg_attr(docsrs, doc(cfg(feature = "p2p")))]

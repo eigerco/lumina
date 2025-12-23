@@ -1,6 +1,6 @@
 use std::cmp::Reverse;
 use std::collections::{HashMap, VecDeque};
-use std::fmt::{self, Debug};
+use std::fmt::Debug;
 use std::hash::Hash;
 use std::task::{Context, Poll};
 use std::time::Duration;
@@ -23,8 +23,8 @@ use tracing::{debug, instrument, trace};
 use crate::p2p::P2pError;
 use crate::p2p::header_ex::utils::{HeaderRequestExt, HeaderResponseExt};
 use crate::p2p::header_ex::{Event, HeaderExError, ReqRespBehaviour};
+use crate::p2p::utils::OneshotSender;
 use crate::peer_tracker::PeerTracker;
-use crate::utils::OneshotResultSender;
 
 const MAX_PEERS: usize = 10;
 const MAX_TRIES: usize = 3;
@@ -36,7 +36,7 @@ where
     S: RequestSender,
 {
     reqs: HashMap<S::RequestId, State>,
-    head_reqs: VecDeque<OneshotSender>,
+    head_reqs: VecDeque<OneshotSender<Vec<ExtendedHeader>>>,
     head_req_scheduled: bool,
     pending_reqs: HashMap<PeerKind, VecDeque<State>>,
     cancellation_token: CancellationToken,
@@ -64,12 +64,9 @@ enum PeerKind {
 struct State {
     peer_kind: PeerKind,
     request: HeaderRequest,
-    respond_to: OneshotSender,
+    respond_to: OneshotSender<Vec<ExtendedHeader>>,
     tries_left: usize,
 }
-
-/// Oneshot sender that responds with `RequestCancelled` if not used.
-struct OneshotSender(Option<OneshotResultSender<Vec<ExtendedHeader>, P2pError>>);
 
 pub(super) trait RequestSender {
     type RequestId: Clone + Copy + Hash + Eq + Debug + Send + Sync + 'static;
@@ -82,46 +79,6 @@ impl RequestSender for ReqRespBehaviour {
 
     fn send_request(&mut self, peer: &PeerId, request: HeaderRequest) -> OutboundRequestId {
         self.send_request(peer, request)
-    }
-}
-
-impl OneshotSender {
-    fn new(tx: oneshot::Sender<Result<Vec<ExtendedHeader>, P2pError>>) -> Self {
-        OneshotSender(Some(tx))
-    }
-
-    fn is_closed(&self) -> bool {
-        self.0.as_ref().is_none_or(|tx| tx.is_closed())
-    }
-
-    fn maybe_send(&mut self, result: Result<Vec<ExtendedHeader>, P2pError>) {
-        if let Some(tx) = self.0.take() {
-            let _ = tx.send(result);
-        }
-    }
-
-    fn maybe_send_ok(&mut self, val: Vec<ExtendedHeader>) {
-        self.maybe_send(Ok(val));
-    }
-
-    fn maybe_send_err<E>(&mut self, err: E)
-    where
-        E: Into<P2pError>,
-    {
-        self.maybe_send(Err(err.into()));
-    }
-}
-
-impl Drop for OneshotSender {
-    fn drop(&mut self) {
-        // If sender is dropped without being used, then `RequestCancelled` is send.
-        self.maybe_send_err(HeaderExError::RequestCancelled);
-    }
-}
-
-impl Debug for OneshotSender {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("OneshotSender { .. }")
     }
 }
 
@@ -148,9 +105,9 @@ where
     pub(super) fn on_send_request(
         &mut self,
         request: HeaderRequest,
-        respond_to: OneshotResultSender<Vec<ExtendedHeader>, P2pError>,
+        respond_to: oneshot::Sender<Result<Vec<ExtendedHeader>, P2pError>>,
     ) {
-        let mut respond_to = OneshotSender::new(respond_to);
+        let mut respond_to = OneshotSender::new(respond_to, HeaderExError::RequestCancelled);
 
         if self.cancellation_token.is_cancelled() {
             respond_to.maybe_send_err(HeaderExError::RequestCancelled);
@@ -269,7 +226,7 @@ where
                     peer.is_connected() && peer.is_trusted() && peer.is_archival()
                 }
             })
-            .collect::<SmallVec<[_; MAX_PEERS]>>();
+            .collect::<Vec<_>>();
 
         if !peers.is_empty() {
             // TODO: We can add a parameter for what kind of sorting we want for the peers.
@@ -324,7 +281,7 @@ where
             let state = State {
                 peer_kind: PeerKind::Trusted,
                 request: request.clone(),
-                respond_to: OneshotSender::new(tx),
+                respond_to: OneshotSender::new(tx, HeaderExError::RequestCancelled),
                 tries_left: 0,
             };
 
