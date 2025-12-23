@@ -28,10 +28,7 @@ async fn header_subscription() {
     let h3 = header_stream.recv().await.unwrap();
     assert_eq!(h2.height() + 1, h3.height());
 
-    let tail_header = node
-        .get_header_by_height(h3.height())
-        .await
-        .unwrap();
+    let tail_header = node.get_header_by_height(h3.height()).await.unwrap();
     assert_eq!(h3, tail_header);
 }
 

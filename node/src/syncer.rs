@@ -1389,11 +1389,7 @@ mod tests {
         assert_syncing(&syncer, &store, &[1..=11], 11).await;
 
         assert_eq!(
-            received_headers
-                .recv()
-                .await
-                .unwrap()
-                .map(|h| h.height()),
+            received_headers.recv().await.unwrap().map(|h| h.height()),
             Some(2)
         );
         assert_eq!(received_headers.recv().await.unwrap(), None);

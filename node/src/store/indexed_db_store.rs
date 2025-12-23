@@ -233,14 +233,7 @@ impl IndexedDbStore {
             )
             .await?;
 
-        if tail.height()
-            > self
-                .head
-                .borrow()
-                .as_ref()
-                .map(|h| h.height())
-                .unwrap_or(0)
-        {
+        if tail.height() > self.head.borrow().as_ref().map(|h| h.height()).unwrap_or(0) {
             self.head.replace(Some(tail));
         }
 
