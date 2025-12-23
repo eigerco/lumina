@@ -95,6 +95,10 @@ pub enum Error {
     /// Couldn't parse expected sequence from the error message
     #[error("Couldn't parse expected sequence from: '{0}'")]
     SequenceParsingFailed(String),
+
+    /// Invalid parameter provided
+    #[error("Invalid BroadcastedTx parameter provided: {0}")]
+    InvalidBroadcastedTx(String),
 }
 
 /// Representation of all the errors that can occur when building [`GrpcClient`] using
