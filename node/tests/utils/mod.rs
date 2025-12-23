@@ -62,7 +62,7 @@ where
             .get_network_head_header()
             .await
             .unwrap()
-            .is_some_and(|head| head.height().value() >= 3)
+            .is_some_and(|head| head.height() >= 3)
         {
             break;
         }

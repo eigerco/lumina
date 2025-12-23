@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
 
-use celestia_types::Height;
 use celestia_types::hash::Hash;
 
 use crate::grpc::TxPriority;
@@ -14,7 +13,7 @@ pub struct TxInfo {
     /// Hash of the transaction.
     pub hash: Hash,
     /// Height at which transaction was submitted.
-    pub height: Height,
+    pub height: u64,
 }
 
 /// Configuration for the transaction.
@@ -136,7 +135,7 @@ mod wbg {
         fn from(value: TxInfo) -> JsTxInfo {
             let obj = make_object!(
                 "hash" => value.hash.to_string().into(),
-                "height" => js_sys::BigInt::from(value.height.value())
+                "height" => js_sys::BigInt::from(value.height)
             );
 
             obj.unchecked_into()

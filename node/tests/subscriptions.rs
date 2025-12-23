@@ -17,19 +17,19 @@ async fn header_subscription() {
 
     // we'll get either current_head, or the next header
     let h0 = header_stream.recv().await.unwrap();
-    assert!(h0.height().value() - current_head.height().value() <= 1);
+    assert!(h0.height() - current_head.height() <= 1);
 
     let h1 = header_stream.recv().await.unwrap();
-    assert_eq!(h0.height().value() + 1, h1.height().value());
+    assert_eq!(h0.height() + 1, h1.height());
 
     let h2 = header_stream.recv().await.unwrap();
-    assert_eq!(h1.height().value() + 1, h2.height().value());
+    assert_eq!(h1.height() + 1, h2.height());
 
     let h3 = header_stream.recv().await.unwrap();
-    assert_eq!(h2.height().value() + 1, h3.height().value());
+    assert_eq!(h2.height() + 1, h3.height());
 
     let tail_header = node
-        .get_header_by_height(h3.height().value())
+        .get_header_by_height(h3.height())
         .await
         .unwrap();
     assert_eq!(h3, tail_header);

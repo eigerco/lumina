@@ -174,7 +174,7 @@ impl IndexedDbStore {
         self.head
             .borrow()
             .as_ref()
-            .map(|h| h.height().value())
+            .map(|h| h.height())
             .ok_or(StoreError::NotFound)
     }
 
@@ -233,12 +233,12 @@ impl IndexedDbStore {
             )
             .await?;
 
-        if tail.height().value()
+        if tail.height()
             > self
                 .head
                 .borrow()
                 .as_ref()
-                .map(|h| h.height().value())
+                .map(|h| h.height())
                 .unwrap_or(0)
         {
             self.head.replace(Some(tail));
@@ -547,7 +547,7 @@ async fn verify_against_neighbours(
     highest_header: Option<&ExtendedHeader>,
 ) -> Result<()> {
     if let Some(lowest_header) = lowest_header {
-        let prev = get_by_height(header_store, lowest_header.height().value() - 1)
+        let prev = get_by_height(header_store, lowest_header.height() - 1)
             .await
             .map_err(|e| {
                 if let StoreError::NotFound = e {
@@ -564,7 +564,7 @@ async fn verify_against_neighbours(
     }
 
     if let Some(highest_header) = highest_header {
-        let next = get_by_height(header_store, highest_header.height().value() + 1)
+        let next = get_by_height(header_store, highest_header.height() + 1)
             .await
             .map_err(|e| {
                 if let StoreError::NotFound = e {
@@ -703,7 +703,7 @@ async fn insert_tx_op(
     let mut sampled_ranges = get_ranges(&ranges_store, SAMPLED_RANGES_KEY).await?;
     let mut pruned_ranges = get_ranges(&ranges_store, PRUNED_RANGES_KEY).await?;
 
-    let headers_range = head.height().value()..=tail.height().value();
+    let headers_range = head.height()..=tail.height();
     let (prev_exists, next_exists) = header_ranges
         .check_insertion_constraints(&headers_range)
         .map_err(StoreInsertionError::ContraintsNotMet)?;
@@ -727,7 +727,7 @@ async fn insert_tx_op(
             return Err(StoreInsertionError::HashExists(hash).into());
         }
 
-        let height = header.height().value();
+        let height = header.height();
         let header_entry = ExtendedHeaderEntry {
             height,
             hash,
@@ -879,7 +879,7 @@ async fn migrate_older_to_v4(db: &Rexie) -> Result<()> {
     let ranges = if version <= 2 {
         match v2::get_head_header(&header_store).await {
             // On v2 there were no gaps between headers.
-            Ok(head) => BlockRanges::from_vec(smallvec![1..=head.height().value()])
+            Ok(head) => BlockRanges::from_vec(smallvec![1..=head.height()])
                 .map_err(|e| StoreError::StoredDataError(e.to_string()))?,
             Err(StoreError::NotFound) => BlockRanges::new(),
             Err(e) => return Err(e),
@@ -1012,7 +1012,7 @@ pub mod tests {
                 .expect("updating sampling metadata failed");
         }
 
-        assert_eq!(s.get_head().unwrap().height().value(), expected_height);
+        assert_eq!(s.get_head().unwrap().height(), expected_height);
 
         drop(s);
         // re-open the store, to force re-calculation of the cached heights
@@ -1020,7 +1020,7 @@ pub mod tests {
             .await
             .expect("re-opening large test store failed");
 
-        assert_eq!(s.get_head().unwrap().height().value(), expected_height);
+        assert_eq!(s.get_head().unwrap().height(), expected_height);
     }
 
     #[wasm_bindgen_test]
@@ -1041,12 +1041,12 @@ pub mod tests {
             .expect("failed to reopen store");
 
         assert_eq!(
-            original_headers.as_ref().last().unwrap().height().value(),
+            original_headers.as_ref().last().unwrap().height(),
             reopened_store.head_height().await.unwrap()
         );
         for original_header in original_headers.as_ref() {
             let stored_header = reopened_store
-                .get_by_height(original_header.height().value())
+                .get_by_height(original_header.height())
                 .await
                 .unwrap();
             assert_eq!(original_header, &stored_header);
@@ -1069,12 +1069,12 @@ pub mod tests {
             .expect("failed to reopen store");
 
         assert_eq!(
-            final_headers.last().unwrap().height().value(),
+            final_headers.last().unwrap().height(),
             reopened_store.head_height().await.unwrap()
         );
         for original_header in &final_headers {
             let stored_header = reopened_store
-                .get_by_height(original_header.height().value())
+                .get_by_height(original_header.height())
                 .await
                 .unwrap();
             assert_eq!(original_header, &stored_header);
@@ -1145,7 +1145,7 @@ pub mod tests {
 
             for header in hs {
                 let header_entry = ExtendedHeaderEntry {
-                    height: header.height().value(),
+                    height: header.height(),
                     hash: header.hash(),
                     header: header.encode_vec(),
                 };
@@ -1172,7 +1172,7 @@ pub mod tests {
                 .expect("opening migrated store failed");
 
             for header in headers {
-                let height = header.height().value();
+                let height = header.height();
 
                 let header_by_hash = store.get_by_hash(&header.hash()).await.unwrap();
                 assert_eq!(header, header_by_hash);

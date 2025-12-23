@@ -304,7 +304,7 @@ where
                 res = &mut try_init_fut => {
                     // `try_init_task` propagates only fatal errors
                     let (network_head, took) = res?;
-                    let network_head_height = network_head.height().value();
+                    let network_head_height = network_head.height();
 
                     info!("Setting initial subjective head to {network_head_height}");
                     self.set_subjective_head_height(network_head_height);
@@ -436,7 +436,7 @@ where
 
     #[instrument(skip_all)]
     async fn on_header_sub_message(&mut self, new_head: ExtendedHeader) -> Result<()> {
-        let new_head_height = new_head.height().value();
+        let new_head_height = new_head.height();
 
         self.set_subjective_head_height(new_head_height);
 
@@ -601,7 +601,7 @@ where
         for header in headers.iter().rev() {
             if self
                 .highest_slow_sync_height
-                .is_some_and(|height| header.height().value() <= height)
+                .is_some_and(|height| header.height() <= height)
             {
                 // `highest_slow_sync_height` is already higher than `header`
                 // so we don't need to check anything else.
@@ -611,7 +611,7 @@ where
             // If `header` is after the pruning edge, we mark it as the
             // `highest_slow_sync_height` and we stop checking lower headers.
             if header.time() <= pruning_cutoff {
-                self.highest_slow_sync_height = Some(header.height().value());
+                self.highest_slow_sync_height = Some(header.height());
                 break;
             }
         }
@@ -1289,7 +1289,7 @@ mod tests {
         let (tx, mut received_heights) = mpsc::unbounded_channel();
         spawn(async move {
             while let Ok(header) = header_receiver.recv().await {
-                tx.send(header.height().value()).unwrap();
+                tx.send(header.height()).unwrap();
             }
         });
 
@@ -1393,13 +1393,13 @@ mod tests {
                 .recv()
                 .await
                 .unwrap()
-                .map(|h| h.height().value()),
+                .map(|h| h.height()),
             Some(2)
         );
         assert_eq!(received_headers.recv().await.unwrap(), None);
         for i in 3..=11 {
             let header = received_headers.recv().await.unwrap().unwrap();
-            assert_eq!(header.height().value(), i);
+            assert_eq!(header.height(), i);
         }
     }
 
@@ -1462,7 +1462,7 @@ mod tests {
         let head_from_syncer = handle.expect_init_header_sub().await;
         assert_eq!(head_from_syncer, head);
 
-        let head_height = head.height().value();
+        let head_height = head.height();
         assert_syncing(&syncer, &store, &[head_height..=head_height], head_height).await;
 
         (syncer, store, handle)
@@ -1491,7 +1491,7 @@ mod tests {
             if respond {
                 let header_index = remaining_headers
                     .iter()
-                    .position(|h| h.height().value() == height)
+                    .position(|h| h.height() == height)
                     .expect("height not found in provided headers");
 
                 let response_range =

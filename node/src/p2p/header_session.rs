@@ -89,7 +89,6 @@ impl HeaderSession {
             span.first()
                 .expect("empty spans aren't added in receiving loop")
                 .height()
-                .value()
         });
 
         Ok(responses.into_iter().flatten().collect())

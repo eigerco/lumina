@@ -72,7 +72,7 @@ async fn shwap_sampling_forward() {
 async fn shwap_sampling_backward() {
     let (node, mut events) = new_connected_node().await;
 
-    let current_head = node.get_local_head_header().await.unwrap().height().value();
+    let current_head = node.get_local_head_header().await.unwrap().height();
 
     // wait for some past headers to be synchronized
     let new_batch_synced = async {
@@ -132,7 +132,7 @@ async fn shwap_request_sample() {
 
     let height = blob_submit(&client, &[blob]).await;
     let header = node.get_header_by_height(height).await.unwrap();
-    let square_width = header.dah.square_width();
+    let square_width = header.square_width();
 
     // check existing sample
     let expected = client.share_get_share(&header, 0, 0).await.unwrap();
@@ -167,7 +167,7 @@ async fn shwap_request_row() {
     let height = blob_submit(&client, &[blob]).await;
     let header = node.get_header_by_height(height).await.unwrap();
     let eds = client.share_get_eds(&header).await.unwrap();
-    let square_width = header.dah.square_width();
+    let square_width = header.square_width();
 
     // check existing row
     let row = node
@@ -196,7 +196,7 @@ async fn shwap_request_row_namespace_data() {
     let height = blob_submit(&client, &[blob]).await;
     let header = node.get_header_by_height(height).await.unwrap();
     let eds = client.share_get_eds(&header).await.unwrap();
-    let square_width = header.dah.square_width();
+    let square_width = header.square_width();
 
     // check existing row namespace data
     let rows_with_ns: Vec<_> = header
@@ -402,11 +402,11 @@ impl Blockstore for TestBlockstore {
 }
 
 fn random_sample(header: &ExtendedHeader) -> (u16, u16, Cid) {
-    let square = header.dah.square_width();
+    let square = header.square_width();
     let id = SampleId::new(
         rand::random::<u16>() % square,
         rand::random::<u16>() % square,
-        header.height().value(),
+        header.height(),
     )
     .unwrap();
 

@@ -9,8 +9,8 @@ use celestia_proto::header::pb::ExtendedHeader as RawExtendedHeader;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 #[cfg(all(feature = "wasm-bindgen", target_arch = "wasm32"))]
 use serde_wasm_bindgen::to_value;
+use tendermint::block::Commit;
 use tendermint::block::header::Header;
-use tendermint::block::{Commit, Height};
 use tendermint::chain::id::Id;
 use tendermint::{Time, validator};
 use tendermint_proto::Protobuf;
@@ -112,13 +112,14 @@ impl ExtendedHeader {
 
     /// Get the app version.
     ///
-    /// # Errors
+    /// # Panics
     ///
-    /// This function returns an error if the app version set in header
-    /// is not currently supported.
-    pub fn app_version(&self) -> Result<AppVersion> {
+    /// This method can panic if an app version is not supported. Make sure to call
+    /// [`ExtendedHeader::validate`] before (this is already done for headers deserialized via
+    /// serde).
+    pub fn app_version(&self) -> AppVersion {
         let app_version = self.header.version.app;
-        AppVersion::from_u64(app_version).ok_or(Error::UnsupportedAppVersion(app_version))
+        AppVersion::from_u64(app_version).expect("header should be validated before calling")
     }
 
     /// Get the block chain id.
@@ -127,8 +128,8 @@ impl ExtendedHeader {
     }
 
     /// Get the block height.
-    pub fn height(&self) -> Height {
-        self.header.height
+    pub fn height(&self) -> u64 {
+        self.header.height.value()
     }
 
     /// Get the block time.
@@ -147,6 +148,11 @@ impl ExtendedHeader {
             .last_block_id
             .map(|block_id| block_id.hash)
             .unwrap_or_default()
+    }
+
+    /// Get the block's extended data square width.
+    pub fn square_width(&self) -> u16 {
+        self.dah.square_width()
     }
 
     /// Validate header.
@@ -197,7 +203,7 @@ impl ExtendedHeader {
         }
 
         // Make sure the header is consistent with the commit.
-        if self.commit.height != self.height() {
+        if self.commit.height.value() != self.height() {
             bail_validation!(
                 "commit height ({}) != header height ({})",
                 self.commit.height,
@@ -215,11 +221,14 @@ impl ExtendedHeader {
 
         self.validator_set.verify_commit_light(
             &self.header.chain_id,
-            &self.height(),
+            &self.header.height,
             &self.commit,
         )?;
 
-        let app_version = self.app_version()?;
+        let app_version = self.header.version.app;
+        let app_version =
+            AppVersion::from_u64(app_version).ok_or(Error::UnsupportedAppVersion(app_version))?;
+
         self.dah.validate_basic(app_version)?;
 
         Ok(())
@@ -288,7 +297,7 @@ impl ExtendedHeader {
         // Optimization: If we are verifying an adjacent header we can avoid
         // `verify_commit_light_trusting` because we can just check the hash
         // of next validators and last header.
-        if self.height().increment() == untrusted.height() {
+        if self.height() + 1 == untrusted.height() {
             if untrusted.header.validators_hash != self.header.next_validators_hash {
                 bail_verification!(
                     "expected old header next validators ({}) to match those from new header ({})",
@@ -333,7 +342,7 @@ impl ExtendedHeader {
     /// If verification fails, this function will return an error with a reason of failure.
     pub fn verify_adjacent(&self, untrusted: &ExtendedHeader) -> Result<()> {
         // Check is first untrusted is adjacent to `self`.
-        if self.height().increment() != untrusted.height() {
+        if self.height() + 1 != untrusted.height() {
             bail_verification!(
                 "untrusted header height ({}) not adjacent to the current trusted ({})",
                 untrusted.height(),
@@ -380,7 +389,7 @@ impl ExtendedHeader {
             // All headers in `untrusted` must be adjacent to their previous
             // one. However we do not check if the first untrusted is adjacent
             // to `self`. This check is done in `verify_adjacent_range`.
-            if i != 0 && trusted.height().increment() != untrusted.height() {
+            if i != 0 && trusted.height() + 1 != untrusted.height() {
                 bail_verification!(
                     "untrusted header height ({}) not adjacent to the current trusted ({})",
                     untrusted.height(),
@@ -436,7 +445,7 @@ impl ExtendedHeader {
         }
 
         // Check is first untrusted is adjacent to `self`.
-        if self.height().increment() != untrusted[0].height() {
+        if self.height() + 1 != untrusted[0].height() {
             bail_verification!(
                 "untrusted header height ({}) not adjacent to the current trusted ({})",
                 untrusted[0].height(),
@@ -460,7 +469,7 @@ impl ExtendedHeader {
     /// Get the block height.
     #[wasm_bindgen(js_name = height)]
     pub fn js_height(&self) -> u64 {
-        self.height().value()
+        self.height()
     }
 
     /// Get the block time.
@@ -588,12 +597,16 @@ impl TryFrom<RawExtendedHeader> for ExtendedHeader {
             .ok_or(Error::MissingDataAvailabilityHeader)?
             .try_into()?;
 
-        Ok(ExtendedHeader {
+        let eh = ExtendedHeader {
             header,
             commit,
             validator_set,
             dah,
-        })
+        };
+
+        eh.validate()?;
+
+        Ok(eh)
     }
 }
 

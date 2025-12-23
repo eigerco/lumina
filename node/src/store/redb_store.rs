@@ -293,7 +293,7 @@ impl RedbStore {
             let mut sampled_ranges = get_ranges(&ranges_table, SAMPLED_RANGES_KEY)?;
             let mut pruned_ranges = get_ranges(&ranges_table, PRUNED_RANGES_KEY)?;
 
-            let headers_range = head.height().value()..=tail.height().value();
+            let headers_range = head.height()..=tail.height();
 
             let (prev_exists, next_exists) = header_ranges
                 .check_insertion_constraints(&headers_range)
@@ -306,7 +306,7 @@ impl RedbStore {
             )?;
 
             for header in headers {
-                let height = header.height().value();
+                let height = header.height();
                 let hash = header.hash();
                 let serialized_header = header.encode_vec();
 
@@ -629,7 +629,7 @@ where
     R: ReadableTable<u64, &'static [u8]>,
 {
     if let Some(lowest_header) = lowest_header {
-        let prev = get_header(headers_table, lowest_header.height().value() - 1).map_err(|e| {
+        let prev = get_header(headers_table, lowest_header.height() - 1).map_err(|e| {
             if let StoreError::NotFound = e {
                 StoreError::StoredDataError("inconsistency between headers and ranges table".into())
             } else {
@@ -642,7 +642,7 @@ where
     }
 
     if let Some(highest_header) = highest_header {
-        let next = get_header(headers_table, highest_header.height().value() + 1).map_err(|e| {
+        let next = get_header(headers_table, highest_header.height() + 1).map_err(|e| {
             if let StoreError::NotFound = e {
                 StoreError::StoredDataError("inconsistency between headers and ranges table".into())
             } else {
@@ -876,12 +876,12 @@ pub mod tests {
         let reopened_store = create_store(Some(&db)).await;
 
         assert_eq!(
-            original_headers.last().unwrap().height().value(),
+            original_headers.last().unwrap().height(),
             reopened_store.head_height().await.unwrap()
         );
         for original_header in &original_headers {
             let stored_header = reopened_store
-                .get_by_height(original_header.height().value())
+                .get_by_height(original_header.height())
                 .await
                 .unwrap();
             assert_eq!(original_header, &stored_header);
@@ -898,12 +898,12 @@ pub mod tests {
 
         let reopened_store = create_store(Some(&db)).await;
         assert_eq!(
-            original_headers.last().unwrap().height().value(),
+            original_headers.last().unwrap().height(),
             reopened_store.head_height().await.unwrap()
         );
         for original_header in &original_headers {
             let stored_header = reopened_store
-                .get_by_height(original_header.height().value())
+                .get_by_height(original_header.height())
                 .await
                 .unwrap();
             assert_eq!(original_header, &stored_header);
