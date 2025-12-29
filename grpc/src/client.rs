@@ -548,7 +548,7 @@ impl GrpcClient {
         // because that will make node interpret that as a network head. It would also fail,
         // on proof verification, but it would be harder to debug as the message would just
         // say that computed root is different than expected.
-        let height = 1.max(header.height().value().saturating_sub(1));
+        let height = 1.max(header.height().saturating_sub(1));
 
         let response = self
             .abci_query(&prefixed_account_key, "store/bank/key", height, true)
@@ -910,7 +910,7 @@ impl GrpcClient {
                     if tx_status.execution_code == ErrorCode::Success {
                         return Ok(TxInfo {
                             hash,
-                            height: tx_status.height,
+                            height: tx_status.height.value(),
                         });
                     } else {
                         return Err(Error::TxExecutionFailed(
@@ -1124,7 +1124,7 @@ mod tests {
         // trustless balance queries represent state at header.height - 1, so
         // we need to wait for a new head to compare it with the expected balance
         let head = jrpc_client
-            .header_wait_for_height(head.height().value() + 1)
+            .header_wait_for_height(head.height() + 1)
             .await
             .unwrap();
 
@@ -1194,7 +1194,7 @@ mod tests {
         let new_balance = tx_client.get_balance(&addr, "utia").await.unwrap();
         let old_balance = tx_client
             .get_balance(&addr, "utia")
-            .block_height(tx.height.value() - 1)
+            .block_height(tx.height - 1)
             .await
             .unwrap();
 

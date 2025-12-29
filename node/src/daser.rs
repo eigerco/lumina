@@ -465,8 +465,8 @@ where
             }
         };
 
-        let height = header.height().value();
-        let square_width = header.dah.square_width();
+        let height = header.height();
+        let square_width = header.square_width();
 
         // Make sure that the block is still in the sampling window.
         if !self.in_sampling_window(header.time()) {
@@ -1177,7 +1177,7 @@ mod tests {
         let eds = generate_dummy_eds(square_width, AppVersion::V2);
         let dah = DataAvailabilityHeader::from_eds(&eds);
         let header = generator.next_with_dah(dah);
-        let height = header.height().value();
+        let height = header.height();
 
         store.insert(header).await.unwrap();
 
