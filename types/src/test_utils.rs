@@ -119,7 +119,7 @@ impl ExtendedHeaderGenerator {
         let time = self.get_and_increment_time(1);
         let header = match self.current_header {
             Some(ref header) => generate_next(1, header, time, &self.key, maybe_dah),
-            None => generate_new(GENESIS_HEIGHT, &self.chain_id, time, &self.key, None),
+            None => generate_new(GENESIS_HEIGHT, &self.chain_id, time, &self.key, maybe_dah),
         };
 
         self.current_header = Some(header.clone());
