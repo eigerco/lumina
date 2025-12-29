@@ -18,7 +18,7 @@ use crate::grpc::{
     BroadcastMode, ConfigResponse, GasEstimate, GasInfo, GetTxResponse, TxPriority,
     TxStatusResponse,
 };
-use crate::tx::TxInfo;
+use crate::tx::{BroadcastedTx, TxInfo};
 use crate::{IntoProtobufAny, SignDoc, TxConfig};
 
 /// Alias for a `Result` with the error type [`GrpcClientError`]
@@ -268,6 +268,45 @@ impl GrpcClient {
     ) -> Result<TxInfo> {
         let config = config.unwrap_or_default();
         Ok(self.client.submit_message(message, config).await?)
+    }
+
+    /// Broadcast message to the celestia network, and return without confirming.
+    #[uniffi::method(name = "broadcastMessage")]
+    pub async fn broadcast_message(
+        &self,
+        message: AnyMsg,
+        config: Option<TxConfig>,
+    ) -> Result<BroadcastedTx> {
+        let config = config.unwrap_or_default();
+        let submitted_tx = self.client.broadcast_message(message, config).await?;
+        Ok(submitted_tx.into())
+    }
+
+    /// Broadcast blobs to the celestia network, and return without confirming.
+    #[uniffi::method(name = "broadcastBlobs")]
+    pub async fn broadcast_blobs(
+        &self,
+        blobs: Vec<Arc<Blob>>,
+        config: Option<TxConfig>,
+    ) -> Result<BroadcastedTx> {
+        let blobs = Vec::from_iter(blobs.into_iter().map(Arc::<Blob>::unwrap_or_clone));
+        let config = config.unwrap_or_default();
+        let submitted_tx = self.client.broadcast_blobs(&blobs, config).await?;
+        Ok(submitted_tx.into())
+    }
+
+    /// Confirm transaction broadcasted with broadcast_blobs or broadcast_message.
+    #[uniffi::method(name = "confirmTx")]
+    pub async fn confirm_tx(
+        &self,
+        broadcasted_tx: BroadcastedTx,
+        config: Option<TxConfig>,
+    ) -> Result<TxInfo> {
+        let config = config.unwrap_or_default();
+        Ok(self
+            .client
+            .confirm_broadcasted_tx(broadcasted_tx, config)
+            .await?)
     }
 }
 
