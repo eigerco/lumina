@@ -93,6 +93,11 @@ impl ExtendedHeaderGenerator {
         header
     }
 
+    pub fn nonempty_next(&mut self) -> ExtendedHeader {
+        let dah = DataAvailabilityHeader::from_eds(&generate_eds(8, AppVersion::V6));
+        self.next_with_dah(dah)
+    }
+
     /// Generates the next header with the given [`DataAvailabilityHeader`]
     ///
     /// ```no_run
@@ -124,6 +129,14 @@ impl ExtendedHeaderGenerator {
             headers.push(self.next());
         }
 
+        headers
+    }
+
+    pub fn nonempty_next_many(&mut self, amount: u64) -> Vec<ExtendedHeader> {
+        let mut headers = Vec::with_capacity(amount as usize);
+        for _ in 0..amount {
+            headers.push(self.nonempty_next());
+        }
         headers
     }
 

@@ -351,7 +351,6 @@ mod tests {
     use celestia_types::test_utils::ExtendedHeaderGenerator;
     use futures::future::poll_fn;
     use lumina_utils::test_utils::async_test;
-    use std::fmt::Debug;
 
     fn vec_to_set<T: std::hash::Hash + Eq>(v: Vec<T>) -> HashSet<T> {
         v.into_iter().collect()
@@ -360,7 +359,7 @@ mod tests {
     #[async_test]
     async fn notification_first() {
         let (mut tracker, store, mut g) = setup_tracker(10).await;
-        let header = g.next();
+        let header = g.nonempty_next();
         let peer0 = PeerId::random();
         let hash0 = header.header.data_hash.unwrap();
 
@@ -380,7 +379,7 @@ mod tests {
     #[async_test]
     async fn unknown_hash() {
         let (mut tracker, store, mut g) = setup_tracker(10).await;
-        let header = g.next();
+        let header = g.nonempty_next();
         let peer0 = PeerId::random();
         let hash0 = header.header.data_hash.unwrap();
         let other_hash = Hash::Sha256([1u8; 32]);
@@ -401,7 +400,7 @@ mod tests {
     #[async_test]
     async fn hash_selection() {
         let (mut tracker, store, mut g) = setup_tracker(10).await;
-        let header = g.next();
+        let header = g.nonempty_next();
 
         let peer0 = PeerId::random();
         let peer1_0 = PeerId::random();
@@ -428,7 +427,7 @@ mod tests {
     #[async_test]
     async fn add_to_validated_pool() {
         let (mut tracker, store, mut g) = setup_tracker(10).await;
-        let header = g.next();
+        let header = g.nonempty_next();
 
         let peer0 = PeerId::random();
         let peer1 = PeerId::random();
@@ -472,7 +471,7 @@ mod tests {
     #[async_test]
     async fn duplicate_votes() {
         let (mut tracker, store, mut g) = setup_tracker(10).await;
-        let header = g.next();
+        let header = g.nonempty_next();
 
         let valid_hash = header.header.data_hash.unwrap();
         let peer0 = PeerId::random();
@@ -497,8 +496,8 @@ mod tests {
     #[async_test]
     async fn ignore_old_heights() {
         let (mut tracker, store, mut g) = setup_tracker(1).await;
-        let old_header = g.next();
-        let headers = g.next_many(10);
+        let old_header = g.nonempty_next();
+        let headers = g.nonempty_next_many(10);
 
         let valid_stale_hash = old_header.header.data_hash.unwrap();
         let old_peer = PeerId::random();
@@ -513,12 +512,11 @@ mod tests {
         assert!(tracker.get_pool(&valid_stale_hash).is_none());
     }
 
-    // TODO: data_root needs to be different
     #[async_test]
     async fn eviction() {
         let (mut tracker, store, mut g) = setup_tracker(3).await;
-        let old_header = g.next();
-        let headers = g.next_many(10);
+        let old_header = g.nonempty_next();
+        let headers = g.nonempty_next_many(10);
         let new_head = headers.last().unwrap().clone();
 
         let stale_hash = old_header.header.data_hash.unwrap();
@@ -563,7 +561,7 @@ mod tests {
     #[async_test]
     async fn peer_selection() {
         let (mut tracker, store, mut g) = setup_tracker(10).await;
-        let headers = g.next_many(2);
+        let headers = g.nonempty_next_many(2);
 
         let peer0 = PeerId::random();
         let peer1 = PeerId::random();
@@ -591,7 +589,7 @@ mod tests {
     #[async_test]
     async fn remove_peer() {
         let (mut tracker, store, mut g) = setup_tracker(10).await;
-        let headers = g.next_many(2);
+        let headers = g.nonempty_next_many(2);
         let peer0 = PeerId::random();
         let peer1 = PeerId::random();
         let hash0 = headers[0].header.data_hash.unwrap();
@@ -619,18 +617,6 @@ mod tests {
 
         let hash_peers: Vec<_> = tracker.get_pool(&hash1).unwrap().collect();
         assert_eq!(hash_peers, vec![&peer1]);
-    }
-
-    async fn poll_pending_once<F, T>(mut f: F)
-    where
-        F: FnMut(&mut Context<'_>) -> Poll<T>,
-        T: Debug,
-    {
-        poll_fn(|ctx| {
-            assert!(f(ctx).is_pending());
-            Poll::Ready(())
-        })
-        .await;
     }
 
     async fn setup_tracker(
