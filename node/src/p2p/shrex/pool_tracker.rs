@@ -151,10 +151,8 @@ where
             .map(stale_height_threshold)
             .is_none_or(|stale_height| height <= stale_height)
         {
-            println!("HH: {height}, STAAAAAAAAAAALE");
             return None;
         }
-        println!("HH: {height}, not stale");
 
         let pool = match self.hash_pools.get_mut(&height) {
             Some(pool) => pool,
@@ -207,9 +205,7 @@ where
     /// but no peers for notification, empty peer list is returned, this can happen
     /// for empty EDS.
     pub fn get_pool(&self, data_hash: &Hash) -> Option<impl Iterator<Item = &PeerId>> {
-        println!("v= {data_hash:#?}");
-        println!("SELF: {:#?}", self.validated_pools);
-        dbg!(self.validated_pools.get(data_hash).map(|p| p.iter()))
+        self.validated_pools.get(data_hash).map(|p| p.iter())
     }
 
     /// Remove peer from all pools
@@ -276,8 +272,6 @@ where
 
             self.try_update_subjective_head(height);
 
-            println!("validating pool at {height}");
-
             return Poll::Ready(self.validate_pool(data_hash, height));
         }
     }
@@ -287,7 +281,6 @@ where
     /// Validates the pool with a valid header, promoting all peers for the matching hash to
     /// discovered peers.
     fn validate_pool(&mut self, data_hash: Hash, height: u64) -> Option<Event> {
-        println!("Validate {data_hash} for {height}");
         if let Some(pool) = self.hash_pools.get_mut(&height) {
             match pool {
                 PeerPool::Candidates((_, candidates)) => {
@@ -298,7 +291,7 @@ where
                         .flat_map(|pool| pool.iter().cloned())
                         .collect();
 
-                    println!(
+                    trace!(
                         "Promoted valid pool pool for {height} with {} peers, {} peers blacklisted",
                         validated_peers.len(),
                         wrong_peers.len()
@@ -335,17 +328,14 @@ where
         let to_evict_end = stale_height_threshold(height);
         self.subjective_head = Some(height);
 
-        println!("clearing {:?}", to_evict_start..=to_evict_end);
         for h in to_evict_start..=to_evict_end {
             match self.hash_pools.remove(&h) {
                 Some(PeerPool::Validated(hash)) => {
-                    println!("Removing {hash:#?}");
-                    dbg!(self.validated_pools.remove(&hash));
+                    self.validated_pools.remove(&hash);
                 }
                 Some(PeerPool::Candidates(..)) | None => (),
             }
         }
-        println!("updated SELF: {:#?}", self.validated_pools);
     }
 }
 
@@ -531,9 +521,6 @@ mod tests {
         let headers = g.next_many(10);
         let new_head = headers.last().unwrap().clone();
 
-        println!("{old_header:?}");
-        println!("{headers:?}");
-        todo!("oo");
         let stale_hash = old_header.header.data_hash.unwrap();
         let old_peer = PeerId::random();
 
@@ -564,9 +551,12 @@ mod tests {
 
         // we no longer track this pool, shouldn't trigger event
         let slow_notification_peer = PeerId::random();
-        assert!(dbg!(tracker.add_peer_for_hash(slow_notification_peer, stale_hash, 4)).is_none());
+        assert!(
+            tracker
+                .add_peer_for_hash(slow_notification_peer, stale_hash, 4)
+                .is_none()
+        );
 
-        let _: Vec<_> = dbg!(tracker.get_pool(&stale_hash).unwrap().collect());
         assert!(tracker.get_pool(&stale_hash).is_none());
     }
 
