@@ -16,7 +16,7 @@ use futures::{FutureExt, StreamExt, future::BoxFuture, stream::FuturesUnordered}
 use libp2p::PeerId;
 use lumina_utils::time::{Elapsed, timeout};
 use prost::Message;
-use tracing::{debug, error, trace, warn};
+use tracing::{debug, trace, warn};
 
 use crate::p2p::shrex::Event;
 use crate::store::{Store, StoreError};
@@ -204,11 +204,13 @@ where
     /// If hash is not known to PoolTracker, `None` is returned. For known hashes,
     /// but no peers for notification, empty peer list is returned, this can happen
     /// for empty EDS.
+    #[allow(dead_code)] // TODO: remove once integrated
     pub fn get_pool(&self, data_hash: &Hash) -> Option<impl Iterator<Item = &PeerId>> {
         self.validated_pools.get(data_hash).map(|p| p.iter())
     }
 
     /// Remove peer from all pools
+    #[allow(dead_code)] // TODO: remove once integrated
     pub fn remove_peer(&mut self, peer_id: &PeerId) {
         for pool in self.hash_pools.values_mut() {
             match pool {
