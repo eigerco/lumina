@@ -4,12 +4,13 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::time::Duration;
 
+use celestia_proto::share::p2p::shrex::{Response as ProtoResponse, Status as ProtoStatus};
 use celestia_types::eds::{EdsId, ExtendedDataSquare};
 use celestia_types::namespace_data::{NamespaceData, NamespaceDataId};
 use celestia_types::nmt::Namespace;
 use celestia_types::row::{Row, RowId};
 use celestia_types::sample::{Sample, SampleId};
-use celestia_types::{AxisType, ExtendedHeader};
+use celestia_types::{AppVersion, AxisType, DataAvailabilityHeader, ExtendedHeader};
 use futures::future::BoxFuture;
 use futures::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 use futures::stream::{FuturesUnordered, StreamExt};
@@ -21,9 +22,6 @@ use rand::seq::SliceRandom;
 use tokio::sync::oneshot;
 use tokio_util::sync::CancellationToken;
 use tracing::warn;
-
-// TODO: fix path in celestia-node repo
-use celestia_proto::{Response as ProtoResponse, Status as ProtoStatus};
 
 use crate::p2p::P2pError;
 use crate::p2p::shrex::codec::{CodecError, RequestCodec, ResponseCodec};
@@ -66,8 +64,8 @@ where
 
 struct Request {
     ctx: RequestContext,
-    // TODO: actually only DataAvailabilityHeader is needed
-    header: ExtendedHeader,
+    dah: DataAvailabilityHeader,
+    app_version: AppVersion,
     tries_left: usize,
     cancellation_token: CancellationToken,
 }
@@ -188,7 +186,8 @@ where
                 req: row_id,
                 respond_to,
             }),
-            header,
+            app_version: header.app_version().expect("header validated"),
+            dah: header.dah,
             tries_left: MAX_TRIES,
             cancellation_token: self.cancellation_token.child_token(),
         });
@@ -232,7 +231,8 @@ where
                 req: sample_id,
                 respond_to,
             }),
-            header,
+            app_version: header.app_version().expect("header validated"),
+            dah: header.dah,
             tries_left: MAX_TRIES,
             cancellation_token: self.cancellation_token.child_token(),
         });
@@ -269,7 +269,8 @@ where
                 req: nd_id,
                 respond_to,
             }),
-            header,
+            app_version: header.app_version().expect("header validated"),
+            dah: header.dah,
             tries_left: MAX_TRIES,
             cancellation_token: self.cancellation_token.child_token(),
         });
@@ -299,7 +300,8 @@ where
                 req: eds_id,
                 respond_to,
             }),
-            header,
+            app_version: header.app_version().expect("header validated"),
+            dah: header.dah,
             tries_left: MAX_TRIES,
             cancellation_token: self.cancellation_token.child_token(),
         });
@@ -457,9 +459,10 @@ where
     fn decode_verify_respond(
         &mut self,
         raw_data: &[u8],
-        header: &ExtendedHeader,
+        dah: &DataAvailabilityHeader,
+        app_version: AppVersion,
     ) -> Result<(), CodecError> {
-        let resp = TResp::decode_and_verify(raw_data, &self.req, header)?;
+        let resp = TResp::decode_and_verify(raw_data, &self.req, dah, app_version)?;
         self.respond_to.maybe_send_ok(resp);
         Ok(())
     }
@@ -494,12 +497,18 @@ impl Request {
 
     fn decode_verify_respond(&mut self, raw_data: &[u8]) -> Result<(), CodecError> {
         match &mut self.ctx {
-            RequestContext::Row(state) => state.decode_verify_respond(raw_data, &self.header),
-            RequestContext::Sample(state) => state.decode_verify_respond(raw_data, &self.header),
-            RequestContext::NamespaceData(state) => {
-                state.decode_verify_respond(raw_data, &self.header)
+            RequestContext::Row(state) => {
+                state.decode_verify_respond(raw_data, &self.dah, self.app_version)
             }
-            RequestContext::Eds(state) => state.decode_verify_respond(raw_data, &self.header),
+            RequestContext::Sample(state) => {
+                state.decode_verify_respond(raw_data, &self.dah, self.app_version)
+            }
+            RequestContext::NamespaceData(state) => {
+                state.decode_verify_respond(raw_data, &self.dah, self.app_version)
+            }
+            RequestContext::Eds(state) => {
+                state.decode_verify_respond(raw_data, &self.dah, self.app_version)
+            }
         }
     }
 
@@ -543,7 +552,6 @@ async fn get_header(store: &impl Store, height: u64) -> Result<ExtendedHeader, P
         Err(StoreError::NotFound) => {
             let pruned_ranges = store.get_pruned_ranges().await?;
 
-            // TODO: Should these be part of `StoreError`? instead of manually handle it
             if pruned_ranges.contains(height) {
                 Err(P2pError::HeaderPruned(height))
             } else {
@@ -588,7 +596,8 @@ async fn request_response_task(
         let mut data = Vec::new();
 
         if status == ProtoStatus::Ok as i32 {
-            // TODO: Limit the receiving size
+            // NOTE: We could limit the receiving size but we don't,
+            // as celestia's blocks keep growing, so big responses are expected
             stream.read_to_end(&mut data).await?;
         }
 

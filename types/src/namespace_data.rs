@@ -1,4 +1,3 @@
-use blockstore::block::CidError;
 use bytes::{BufMut, BytesMut};
 use celestia_proto::shwap::RowNamespaceData as RawRowNamespaceData;
 use serde::{Deserialize, Serialize};
@@ -118,15 +117,14 @@ impl NamespaceDataId {
         bytes.put(self.namespace.as_bytes());
     }
 
-    pub fn decode(buffer: &[u8]) -> Result<Self, CidError> {
+    pub fn decode(buffer: &[u8]) -> Result<Self> {
         if buffer.len() != NAMESPACE_DATA_ID_SIZE {
-            return Err(CidError::InvalidMultihashLength(buffer.len()));
+            return Err(Error::InvalidLength(buffer.len(), NAMESPACE_DATA_ID_SIZE));
         }
 
         let (eds_bytes, ns_bytes) = buffer.split_at(EDS_ID_SIZE);
         let eds_id = EdsId::decode(eds_bytes)?;
-        let namespace =
-            Namespace::from_raw(ns_bytes).map_err(|e| CidError::InvalidCid(e.to_string()))?;
+        let namespace = Namespace::from_raw(ns_bytes)?;
 
         Ok(Self { eds_id, namespace })
     }

@@ -184,9 +184,9 @@ impl RowId {
         bytes.put_u16(self.index);
     }
 
-    pub fn decode(buffer: &[u8]) -> Result<Self, CidError> {
+    pub fn decode(buffer: &[u8]) -> Result<Self> {
         if buffer.len() != ROW_ID_SIZE {
-            return Err(CidError::InvalidMultihashLength(buffer.len()));
+            return Err(Error::InvalidLength(buffer.len(), ROW_ID_SIZE));
         }
 
         let (eds_bytes, mut row_bytes) = buffer.split_at(EDS_ID_SIZE);
@@ -218,7 +218,7 @@ impl<const S: usize> TryFrom<CidGeneric<S>> for RowId {
             return Err(CidError::InvalidMultihashCode(code, ROW_ID_MULTIHASH_CODE));
         }
 
-        RowId::decode(hash.digest())
+        RowId::decode(hash.digest()).map_err(|e| CidError::InvalidCid(e.to_string()))
     }
 }
 
@@ -317,7 +317,7 @@ mod tests {
         let row_err = RowId::try_from(cid).unwrap_err();
         assert_eq!(
             row_err,
-            CidError::InvalidCid("Zero block height".to_string())
+            CidError::InvalidCid("Invalid zero block height".to_string())
         );
     }
 

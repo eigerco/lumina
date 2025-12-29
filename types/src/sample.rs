@@ -268,9 +268,9 @@ impl SampleId {
         bytes.put_u16(self.column_index);
     }
 
-    pub fn decode(buffer: &[u8]) -> Result<Self, CidError> {
+    pub fn decode(buffer: &[u8]) -> Result<Self> {
         if buffer.len() != SAMPLE_ID_SIZE {
-            return Err(CidError::InvalidMultihashLength(buffer.len()));
+            return Err(Error::InvalidLength(buffer.len(), SAMPLE_ID_SIZE));
         }
 
         let (row_bytes, mut col_bytes) = buffer.split_at(ROW_ID_SIZE);
@@ -308,7 +308,7 @@ impl<const S: usize> TryFrom<&CidGeneric<S>> for SampleId {
             ));
         }
 
-        SampleId::decode(hash.digest())
+        SampleId::decode(hash.digest()).map_err(|e| CidError::InvalidCid(e.to_string()))
     }
 }
 

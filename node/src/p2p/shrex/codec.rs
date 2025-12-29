@@ -7,7 +7,7 @@ use celestia_types::eds::{EdsId, ExtendedDataSquare};
 use celestia_types::namespace_data::{NamespaceData, NamespaceDataId};
 use celestia_types::row::{Row, RowId};
 use celestia_types::sample::{Sample, SampleId};
-use celestia_types::{DataAvailabilityHeader, ExtendedHeader};
+use celestia_types::{AppVersion, DataAvailabilityHeader};
 use integer_encoding::VarInt;
 use prost::Message;
 use std::fmt::Display;
@@ -55,7 +55,8 @@ pub(crate) trait ResponseCodec: Send + Sized {
     fn decode_and_verify(
         raw_data: &[u8],
         req: &Self::Request,
-        header: &ExtendedHeader,
+        dah: &DataAvailabilityHeader,
+        app_version: AppVersion,
     ) -> Result<Self>;
 }
 
@@ -79,13 +80,18 @@ impl ResponseCodec for Row {
         raw.encode_length_delimited_to_vec()
     }
 
-    fn decode_and_verify(raw_data: &[u8], req: &RowId, header: &ExtendedHeader) -> Result<Row> {
+    fn decode_and_verify(
+        raw_data: &[u8],
+        req: &RowId,
+        dah: &DataAvailabilityHeader,
+        _app_version: AppVersion,
+    ) -> Result<Row> {
         let raw_row =
             RawRow::decode_length_delimited(raw_data).map_err(CodecError::response_decode)?;
 
         let row = Row::from_raw(req.to_owned(), raw_row).map_err(CodecError::response_decode)?;
 
-        row.verify(req.to_owned(), &header.dah)
+        row.verify(req.to_owned(), dah)
             .map_err(CodecError::response_verification)?;
 
         Ok(row)
@@ -115,7 +121,8 @@ impl ResponseCodec for Sample {
     fn decode_and_verify(
         raw_data: &[u8],
         req: &SampleId,
-        header: &ExtendedHeader,
+        dah: &DataAvailabilityHeader,
+        _app_version: AppVersion,
     ) -> Result<Sample> {
         let raw_sample =
             RawSample::decode_length_delimited(raw_data).map_err(CodecError::response_decode)?;
@@ -124,7 +131,7 @@ impl ResponseCodec for Sample {
             Sample::from_raw(req.to_owned(), raw_sample).map_err(CodecError::response_decode)?;
 
         sample
-            .verify(req.to_owned(), &header.dah)
+            .verify(req.to_owned(), dah)
             .map_err(CodecError::response_verification)?;
 
         Ok(sample)
@@ -165,7 +172,8 @@ impl ResponseCodec for ExtendedDataSquare {
     fn decode_and_verify(
         raw_data: &[u8],
         _req: &EdsId,
-        header: &ExtendedHeader,
+        dah: &DataAvailabilityHeader,
+        app_version: AppVersion,
     ) -> Result<ExtendedDataSquare> {
         if raw_data.is_empty() {
             return Err(CodecError::response_decode("Empty raw data"));
@@ -183,14 +191,12 @@ impl ResponseCodec for ExtendedDataSquare {
             ods_shares.push(raw_share.to_vec());
         }
 
-        let app_version = header.app_version().map_err(CodecError::response_decode)?;
-
         let eds = ExtendedDataSquare::from_ods(ods_shares, app_version)
             .map_err(CodecError::response_decode)?;
 
-        let dah = DataAvailabilityHeader::from_eds(&eds);
+        let computed_dah = DataAvailabilityHeader::from_eds(&eds);
 
-        if dah != header.dah {
+        if &computed_dah != dah {
             return Err(CodecError::response_decode(
                 "EDS verification failed: DAH missmatch",
             ));
@@ -236,7 +242,8 @@ impl ResponseCodec for NamespaceData {
     fn decode_and_verify(
         mut raw_data: &[u8],
         req: &NamespaceDataId,
-        header: &ExtendedHeader,
+        dah: &DataAvailabilityHeader,
+        _app_version: AppVersion,
     ) -> Result<NamespaceData> {
         let mut raw_rows = Vec::new();
 
@@ -251,7 +258,7 @@ impl ResponseCodec for NamespaceData {
             NamespaceData::from_raw(*req, raw_rows).map_err(CodecError::response_decode)?;
 
         ns_data
-            .verify(*req, &header.dah)
+            .verify(*req, dah)
             .map_err(CodecError::response_verification)?;
 
         Ok(ns_data)

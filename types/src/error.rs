@@ -32,17 +32,13 @@ pub enum Error {
     #[error(transparent)]
     Tendermint(#[from] tendermint::Error),
 
+    /// Data length different than expected.
+    #[error("Length ({0}) different than expected ({1})")]
+    InvalidLength(usize, usize),
+
     /// Error propagated from the [`tendermint_proto`].
     #[error(transparent)]
     Protobuf(#[from] tendermint_proto::Error),
-
-    /// Error propagated from the [`cid::multihash`].
-    #[error(transparent)]
-    Multihash(#[from] cid::multihash::Error),
-
-    /// Error returned when trying to compute new or parse existing CID. See [`blockstore::block`]
-    #[error(transparent)]
-    CidError(#[from] blockstore::block::CidError),
 
     /// Error propagated from the [`leopard_codec`].
     #[error(transparent)]
@@ -488,13 +484,9 @@ pub enum UniffiError {
     #[error("tendermint_proto error: {0}")]
     Protobuf(String),
 
-    /// Error propagated from the [`cid::multihash`].
-    #[error("Multihash error: {0}")]
-    Multihash(String),
-
-    /// Error returned when trying to compute new or parse existing CID. See [`blockstore::block`]
-    #[error("Error creating or parsing CID: {0}")]
-    CidError(String),
+    /// Data length different than expected.
+    #[error("Length ({0}) different than expected ({1})")]
+    InvalidLength(u64, u64),
 
     /// Error propagated from the [`leopard_codec`].
     #[error("Leopard codec error: {0}")]
@@ -764,8 +756,9 @@ impl From<Error> for UniffiError {
             Error::InvalidNamespaceSize => UniffiError::InvalidNamespaceSize,
             Error::Tendermint(e) => UniffiError::Tendermint(e.to_string()),
             Error::Protobuf(e) => UniffiError::Protobuf(e.to_string()),
-            Error::Multihash(e) => UniffiError::Multihash(e.to_string()),
-            Error::CidError(e) => UniffiError::CidError(e.to_string()),
+            Error::InvalidLength(recv, expected) => {
+                UniffiError::InvalidLength(recv as u64, expected as u64)
+            }
             Error::LeopardCodec(e) => UniffiError::LeopardCodec(e.to_string()),
             Error::MissingHeader => UniffiError::MissingHeader,
             Error::MissingCommit => UniffiError::MissingCommit,

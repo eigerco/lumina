@@ -218,15 +218,17 @@ impl RowNamespaceDataId {
         bytes.put(self.namespace.as_bytes());
     }
 
-    pub fn decode(buffer: &[u8]) -> Result<Self, CidError> {
+    pub fn decode(buffer: &[u8]) -> Result<Self> {
         if buffer.len() != ROW_NAMESPACE_DATA_ID_SIZE {
-            return Err(CidError::InvalidMultihashLength(buffer.len()));
+            return Err(Error::InvalidLength(
+                buffer.len(),
+                ROW_NAMESPACE_DATA_ID_SIZE,
+            ));
         }
 
         let (row_bytes, ns_bytes) = buffer.split_at(ROW_ID_SIZE);
         let row_id = RowId::decode(row_bytes)?;
-        let namespace =
-            Namespace::from_raw(ns_bytes).map_err(|e| CidError::InvalidCid(e.to_string()))?;
+        let namespace = Namespace::from_raw(ns_bytes)?;
 
         Ok(Self { row_id, namespace })
     }
@@ -256,7 +258,7 @@ impl<const S: usize> TryFrom<CidGeneric<S>> for RowNamespaceDataId {
             ));
         }
 
-        RowNamespaceDataId::decode(hash.digest())
+        RowNamespaceDataId::decode(hash.digest()).map_err(|e| CidError::InvalidCid(e.to_string()))
     }
 }
 

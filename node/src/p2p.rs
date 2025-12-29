@@ -20,6 +20,7 @@ use std::task::Poll;
 use std::time::Duration;
 
 use blockstore::Blockstore;
+use blockstore::block::CidError;
 use celestia_proto::p2p::pb::{HeaderRequest, header_request};
 use celestia_types::fraud_proof::BadEncodingFraudProof;
 use celestia_types::hash::Hash;
@@ -123,7 +124,7 @@ pub enum P2pError {
 
     /// An error propagated from [`celestia_types`] that is related to [`Cid`].
     #[error("CID error: {0}")]
-    Cid(celestia_types::Error),
+    Cid(CidError),
 
     /// Request timed out.
     #[error("Request timed out")]
@@ -191,9 +192,7 @@ impl From<prost::DecodeError> for P2pError {
 
 impl From<cid::Error> for P2pError {
     fn from(value: cid::Error) -> Self {
-        P2pError::Cid(celestia_types::Error::CidError(
-            blockstore::block::CidError::InvalidCid(value.to_string()),
-        ))
+        P2pError::Cid(CidError::InvalidCid(value.to_string()))
     }
 }
 
@@ -557,7 +556,7 @@ impl P2p {
         block_height: u64,
         timeout: Option<Duration>,
     ) -> Result<Row> {
-        let id = RowId::new(row_index, block_height).map_err(P2pError::Cid)?;
+        let id = RowId::new(row_index, block_height)?;
         let cid = convert_cid(&id.into())?;
 
         let data = self.get_shwap_cid(cid, timeout).await?;
@@ -573,7 +572,7 @@ impl P2p {
         block_height: u64,
         timeout: Option<Duration>,
     ) -> Result<Sample> {
-        let id = SampleId::new(row_index, column_index, block_height).map_err(P2pError::Cid)?;
+        let id = SampleId::new(row_index, column_index, block_height)?;
         let cid = convert_cid(&id.into())?;
 
         let data = self.get_shwap_cid(cid, timeout).await?;
@@ -610,8 +609,7 @@ impl P2p {
         block_height: u64,
         timeout: Option<Duration>,
     ) -> Result<RowNamespaceData> {
-        let id =
-            RowNamespaceDataId::new(namespace, row_index, block_height).map_err(P2pError::Cid)?;
+        let id = RowNamespaceDataId::new(namespace, row_index, block_height)?;
         let cid = convert_cid(&id.into())?;
 
         let data = self.get_shwap_cid(cid, timeout).await?;

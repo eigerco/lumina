@@ -3,7 +3,6 @@
 use std::cmp::Ordering;
 use std::fmt::Display;
 
-use blockstore::block::CidError;
 use bytes::{Buf, BufMut, BytesMut};
 use serde::{Deserialize, Serialize};
 
@@ -479,16 +478,15 @@ impl EdsId {
         bytes.put_u64(self.height);
     }
 
-    pub fn decode(mut buffer: &[u8]) -> Result<Self, CidError> {
+    pub fn decode(mut buffer: &[u8]) -> Result<Self> {
         if buffer.len() != EDS_ID_SIZE {
-            // TODO: change error
-            return Err(CidError::InvalidMultihashLength(buffer.len()));
+            return Err(Error::InvalidLength(buffer.len(), EDS_ID_SIZE));
         }
 
         let height = buffer.get_u64();
 
         if height == 0 {
-            return Err(CidError::InvalidCid("Zero block height".to_string()));
+            return Err(Error::ZeroBlockHeight);
         }
 
         // TODO: use new after changing error type
