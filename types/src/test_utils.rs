@@ -73,7 +73,7 @@ impl ExtendedHeaderGenerator {
         generator
     }
 
-    /// Generates the next header.
+    /// Generates the next header for a random non-empty data square.
     ///
     /// ```
     /// use celestia_types::test_utils::ExtendedHeaderGenerator;
@@ -83,19 +83,20 @@ impl ExtendedHeaderGenerator {
     /// ```
     #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> ExtendedHeader {
-        let time = self.get_and_increment_time(1);
-        let header = match self.current_header {
-            Some(ref header) => generate_next(1, header, time, &self.key, None),
-            None => generate_new(GENESIS_HEIGHT, &self.chain_id, time, &self.key, None),
-        };
-
-        self.current_header = Some(header.clone());
-        header
+        let dah = DataAvailabilityHeader::from_eds(&generate_eds(8, AppVersion::V6));
+        self.next_impl(Some(dah))
     }
 
-    pub fn nonempty_next(&mut self) -> ExtendedHeader {
-        let dah = DataAvailabilityHeader::from_eds(&generate_eds(8, AppVersion::V6));
-        self.next_with_dah(dah)
+    /// Generates the next header for an empty data square.
+    ///
+    /// ```
+    /// use celestia_types::test_utils::ExtendedHeaderGenerator;
+    ///
+    /// let mut generator = ExtendedHeaderGenerator::new();
+    /// let header1 = generator.next_empty();
+    /// ```
+    pub fn next_empty(&mut self) -> ExtendedHeader {
+        self.next_impl(None)
     }
 
     /// Generates the next header with the given [`DataAvailabilityHeader`]
@@ -111,17 +112,21 @@ impl ExtendedHeaderGenerator {
     /// ```
     #[allow(clippy::should_implement_trait)]
     pub fn next_with_dah(&mut self, dah: DataAvailabilityHeader) -> ExtendedHeader {
+        self.next_impl(Some(dah))
+    }
+
+    fn next_impl(&mut self, maybe_dah: Option<DataAvailabilityHeader>) -> ExtendedHeader {
         let time = self.get_and_increment_time(1);
         let header = match self.current_header {
-            Some(ref header) => generate_next(1, header, time, &self.key, Some(dah)),
-            None => generate_new(GENESIS_HEIGHT, &self.chain_id, time, &self.key, Some(dah)),
+            Some(ref header) => generate_next(1, header, time, &self.key, maybe_dah),
+            None => generate_new(GENESIS_HEIGHT, &self.chain_id, time, &self.key, None),
         };
 
         self.current_header = Some(header.clone());
         header
     }
 
-    /// Generate the next amount of headers.
+    /// Generate the `amount` of subsequent non-empty headers.
     pub fn next_many(&mut self, amount: u64) -> Vec<ExtendedHeader> {
         let mut headers = Vec::with_capacity(amount as usize);
 
@@ -132,10 +137,11 @@ impl ExtendedHeaderGenerator {
         headers
     }
 
-    pub fn nonempty_next_many(&mut self, amount: u64) -> Vec<ExtendedHeader> {
+    /// Generate the `amount` of subsequent empty headers.
+    pub fn next_many_empty(&mut self, amount: u64) -> Vec<ExtendedHeader> {
         let mut headers = Vec::with_capacity(amount as usize);
         for _ in 0..amount {
-            headers.push(self.nonempty_next());
+            headers.push(self.next_empty());
         }
         headers
     }

@@ -359,7 +359,7 @@ mod tests {
     #[async_test]
     async fn notification_first() {
         let (mut tracker, store, mut g) = setup_tracker(10).await;
-        let header = g.nonempty_next();
+        let header = g.next();
         let peer0 = PeerId::random();
         let hash0 = header.header.data_hash.unwrap();
 
@@ -379,7 +379,7 @@ mod tests {
     #[async_test]
     async fn unknown_hash() {
         let (mut tracker, store, mut g) = setup_tracker(10).await;
-        let header = g.nonempty_next();
+        let header = g.next();
         let peer0 = PeerId::random();
         let hash0 = header.header.data_hash.unwrap();
         let other_hash = Hash::Sha256([1u8; 32]);
@@ -400,7 +400,7 @@ mod tests {
     #[async_test]
     async fn hash_selection() {
         let (mut tracker, store, mut g) = setup_tracker(10).await;
-        let header = g.nonempty_next();
+        let header = g.next();
 
         let peer0 = PeerId::random();
         let peer1_0 = PeerId::random();
@@ -427,7 +427,7 @@ mod tests {
     #[async_test]
     async fn add_to_validated_pool() {
         let (mut tracker, store, mut g) = setup_tracker(10).await;
-        let header = g.nonempty_next();
+        let header = g.next();
 
         let peer0 = PeerId::random();
         let peer1 = PeerId::random();
@@ -471,7 +471,7 @@ mod tests {
     #[async_test]
     async fn duplicate_votes() {
         let (mut tracker, store, mut g) = setup_tracker(10).await;
-        let header = g.nonempty_next();
+        let header = g.next();
 
         let valid_hash = header.header.data_hash.unwrap();
         let peer0 = PeerId::random();
@@ -496,8 +496,8 @@ mod tests {
     #[async_test]
     async fn ignore_old_heights() {
         let (mut tracker, store, mut g) = setup_tracker(1).await;
-        let old_header = g.nonempty_next();
-        let headers = g.nonempty_next_many(10);
+        let old_header = g.next();
+        let headers = g.next_many(10);
 
         let valid_stale_hash = old_header.header.data_hash.unwrap();
         let old_peer = PeerId::random();
@@ -515,8 +515,8 @@ mod tests {
     #[async_test]
     async fn eviction() {
         let (mut tracker, store, mut g) = setup_tracker(3).await;
-        let old_header = g.nonempty_next();
-        let headers = g.nonempty_next_many(10);
+        let old_header = g.next();
+        let headers = g.next_many(10);
         let new_head = headers.last().unwrap().clone();
 
         let stale_hash = old_header.header.data_hash.unwrap();
@@ -561,7 +561,7 @@ mod tests {
     #[async_test]
     async fn peer_selection() {
         let (mut tracker, store, mut g) = setup_tracker(10).await;
-        let headers = g.nonempty_next_many(2);
+        let headers = g.next_many(2);
 
         let peer0 = PeerId::random();
         let peer1 = PeerId::random();
@@ -589,7 +589,7 @@ mod tests {
     #[async_test]
     async fn remove_peer() {
         let (mut tracker, store, mut g) = setup_tracker(10).await;
-        let headers = g.nonempty_next_many(2);
+        let headers = g.next_many(2);
         let peer0 = PeerId::random();
         let peer1 = PeerId::random();
         let hash0 = headers[0].header.data_hash.unwrap();
