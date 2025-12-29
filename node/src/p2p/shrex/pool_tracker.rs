@@ -39,6 +39,7 @@ pub struct PoolTracker<S> {
         FuturesUnordered<BoxFuture<'static, Result<ExtendedHeader, HeaderTaskError>>>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
 enum PeerPool {
     /// Candidates: height hasn't been validated yet, stores potential matches by hash
     Candidates((HashSet<PeerId>, HashMap<Hash, Vec<PeerId>>)),
@@ -148,10 +149,12 @@ where
         if self
             .subjective_head
             .map(stale_height_threshold)
-            .is_none_or(|stale_height| height < stale_height)
+            .is_none_or(|stale_height| height <= stale_height)
         {
+            println!("HH: {height}, STAAAAAAAAAAALE");
             return None;
         }
+        println!("HH: {height}, not stale");
 
         let pool = match self.hash_pools.get_mut(&height) {
             Some(pool) => pool,
@@ -175,6 +178,7 @@ where
                     .entry(data_hash)
                     .or_insert_with(Vec::new)
                     .push(peer_id);
+                None
             }
             PeerPool::Validated(validated_hash) => {
                 if *validated_hash == data_hash {
@@ -182,19 +186,18 @@ where
                         .entry(data_hash)
                         .or_default()
                         .push(peer_id);
-                    return Some(Event::PoolUpdate {
+                    Some(Event::PoolUpdate {
                         blacklist_peers: vec![],
                         add_peers: vec![peer_id],
-                    });
+                    })
                 } else {
-                    return Some(Event::PoolUpdate {
+                    Some(Event::PoolUpdate {
                         blacklist_peers: vec![peer_id],
                         add_peers: vec![],
-                    });
+                    })
                 }
             }
         }
-        None
     }
 
     /// Return peer pool for the provided hash.
@@ -205,45 +208,9 @@ where
     /// for empty EDS.
     pub fn get_pool(&self, data_hash: &Hash) -> Option<impl Iterator<Item = &PeerId>> {
         println!("v= {data_hash:#?}");
-        self.validated_pools.get(data_hash).map(|p| p.iter())
+        println!("SELF: {:#?}", self.validated_pools);
+        dbg!(self.validated_pools.get(data_hash).map(|p| p.iter()))
     }
-
-    /*
-    /// Return peers suitable to be queried about hash
-    ///
-    /// Returns a list of peers that can be queried about the provided hash. It prioritizes peers
-    /// that notified us about this specific hash, falling back to generic discovered peer pool.
-    // TODO: what API?
-    pub fn get_peers_for_hash(&self, data_hash: &Hash, height: u64, count: usize) -> Vec<PeerId> {
-        let mut peers = Vec::with_capacity(count);
-
-        if let Some(pool) = self.hash_pools.get(&height) {
-            match pool {
-                // Spec says we should use _validated_ pools for peer selection
-                PeerPool::Candidates(_) => (),
-                PeerPool::Validated(validated_hash, validated_peers) => {
-                    if validated_hash == data_hash {
-                        peers.extend(validated_peers.iter().take(count).copied());
-                    }
-                }
-            }
-        }
-
-        // fill out the remaining slots with other discovered peers
-        let mut remaining_needed = count.saturating_sub(peers.len());
-        let mut discovered_peers_iter = self.discovered_peers.iter();
-        while remaining_needed > 0
-            && let Some(peer) = discovered_peers_iter.next()
-        {
-            if !peers.contains(peer) {
-                peers.push(*peer);
-                remaining_needed -= 1;
-            }
-        }
-
-        peers
-    }
-    */
 
     /// Remove peer from all pools
     pub fn remove_peer(&mut self, peer_id: &PeerId) {
@@ -320,6 +287,7 @@ where
     /// Validates the pool with a valid header, promoting all peers for the matching hash to
     /// discovered peers.
     fn validate_pool(&mut self, data_hash: Hash, height: u64) -> Option<Event> {
+        println!("Validate {data_hash} for {height}");
         if let Some(pool) = self.hash_pools.get_mut(&height) {
             match pool {
                 PeerPool::Candidates((_, candidates)) => {
@@ -338,7 +306,6 @@ where
 
                     self.validated_pools
                         .insert(data_hash, validated_peers.clone());
-                    println!("v= {data_hash:#?}");
                     *pool = PeerPool::Validated(data_hash);
 
                     return Some(Event::PoolUpdate {
@@ -359,9 +326,11 @@ where
             self.subjective_head = Some(height);
             return;
         };
+
         if height <= old_subjective_head {
             return;
         }
+
         let to_evict_start = stale_height_threshold(old_subjective_head);
         let to_evict_end = stale_height_threshold(height);
         self.subjective_head = Some(height);
@@ -371,11 +340,12 @@ where
             match self.hash_pools.remove(&h) {
                 Some(PeerPool::Validated(hash)) => {
                     println!("Removing {hash:#?}");
-                    self.validated_pools.remove(&hash);
+                    dbg!(self.validated_pools.remove(&hash));
                 }
                 Some(PeerPool::Candidates(..)) | None => (),
             }
         }
+        println!("updated SELF: {:#?}", self.validated_pools);
     }
 }
 
@@ -553,13 +523,17 @@ mod tests {
         assert!(tracker.get_pool(&valid_stale_hash).is_none());
     }
 
+    // TODO: data_root needs to be different
     #[async_test]
     async fn eviction() {
         let (mut tracker, store, mut g) = setup_tracker(3).await;
         let old_header = g.next();
         let headers = g.next_many(10);
-        let new_header_data_hash = headers.last().unwrap().header.data_hash.unwrap();
+        let new_head = headers.last().unwrap().clone();
 
+        println!("{old_header:?}");
+        println!("{headers:?}");
+        todo!("oo");
         let stale_hash = old_header.header.data_hash.unwrap();
         let old_peer = PeerId::random();
 
@@ -581,7 +555,7 @@ mod tests {
         // only part that's affected is clean up, and we're not getting new data). This means that,
         // during tests we need to trigger cleanup, by explicitly sending a shrex
         // notification for a new height.
-        tracker.add_peer_for_hash(peer, new_header_data_hash, 14);
+        tracker.add_peer_for_hash(peer, new_head.header.data_hash.unwrap(), 14);
         assert_peer_update(
             &poll_fn(|ctx| tracker.poll(ctx)).await.unwrap(),
             [&peer],
@@ -590,12 +564,9 @@ mod tests {
 
         // we no longer track this pool, shouldn't trigger event
         let slow_notification_peer = PeerId::random();
-        assert!(
-            tracker
-                .add_peer_for_hash(slow_notification_peer, stale_hash, 4)
-                .is_none()
-        );
+        assert!(dbg!(tracker.add_peer_for_hash(slow_notification_peer, stale_hash, 4)).is_none());
 
+        let _: Vec<_> = dbg!(tracker.get_pool(&stale_hash).unwrap().collect());
         assert!(tracker.get_pool(&stale_hash).is_none());
     }
 
