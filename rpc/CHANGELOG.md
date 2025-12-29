@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.0](https://github.com/eigerco/lumina/compare/celestia-rpc-v0.15.0...celestia-rpc-v0.16.0) - 2025-12-29
+
+### Added
+
+- *(types,grpc)* [**breaking**] switch from Height to u64, infallible app_version() ([#846](https://github.com/eigerco/lumina/pull/846))
+
+### Other
+
+- *(ci)* use compose healthchecks to ensure docker setup is ready ([#818](https://github.com/eigerco/lumina/pull/818))
+
 ## [0.15.0](https://github.com/eigerco/lumina/compare/celestia-rpc-v0.14.0...celestia-rpc-v0.15.0) - 2025-11-19
 
 ### Added

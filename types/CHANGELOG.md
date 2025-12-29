@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.18.0](https://github.com/eigerco/lumina/compare/celestia-types-v0.17.0...celestia-types-v0.18.0) - 2025-12-29
+
+### Added
+
+- *(types,grpc)* [**breaking**] switch from Height to u64, infallible app_version() ([#846](https://github.com/eigerco/lumina/pull/846))
+- *(node,node-wasm,node-uniffi)* Add header, blob, and namespace subscriptions ([#772](https://github.com/eigerco/lumina/pull/772))
+
 ## [0.17.0](https://github.com/eigerco/lumina/compare/celestia-types-v0.16.0...celestia-types-v0.17.0) - 2025-11-19
 
 ### Added
