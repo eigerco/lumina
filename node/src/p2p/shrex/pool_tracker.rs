@@ -294,7 +294,7 @@ where
                         .collect();
 
                     trace!(
-                        "Promoted valid pool pool for {height} with {} peers, {} peers blacklisted",
+                        "Promoted valid pool for {height} with {} peers, {} peers blacklisted",
                         validated_peers.len(),
                         wrong_peers.len()
                     );
