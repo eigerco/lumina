@@ -1,4 +1,4 @@
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet};
 use std::io;
 use std::sync::Arc;
 use std::task::{Context, Poll};
@@ -25,7 +25,7 @@ use tracing::warn;
 
 use crate::p2p::P2pError;
 use crate::p2p::shrex::codec::{CodecError, RequestCodec, ResponseCodec};
-use crate::p2p::shrex::pool_tracker::PoolTracker;
+use crate::p2p::shrex::pool_tracker::{GetPoolError, PoolTracker};
 use crate::p2p::shrex::{
     Config, EDS_PROTOCOL_ID, EMPTY_EDS, EMPTY_EDS_DAH, Event, NAMESPACE_DATA_PROTOCOL_ID,
     ROW_PROTOCOL_ID, Result, SAMPLE_PROTOCOL_ID, ShrExError,
@@ -56,7 +56,7 @@ where
     store: Arc<S>,
     next_req_id: u64,
     cancellation_token: CancellationToken,
-    pending_reqs: VecDeque<Request>,
+    pending_reqs: HashMap<u64, Request>,
     ongoing_reqs: HashMap<u64, Request>,
     ongoing_reqs_tasks: FuturesUnordered<BoxFuture<'static, Option<OngoingReqTaskResult>>>,
     schedule_pending_interval: Option<Interval>,
@@ -125,7 +125,7 @@ where
             store: config.header_store.clone(),
             next_req_id: 0,
             cancellation_token: CancellationToken::new(),
-            pending_reqs: VecDeque::new(),
+            pending_reqs: HashMap::new(),
             ongoing_reqs: HashMap::new(),
             ongoing_reqs_tasks: FuturesUnordered::new(),
             schedule_pending_interval: None,
@@ -155,6 +155,19 @@ where
         Some((respond_to, header))
     }
 
+    fn new_pending_request(&mut self, ctx: RequestContext, header: ExtendedHeader) {
+        self.pending_reqs.insert(
+            get_next_req_id(&mut self.next_req_id),
+            Request {
+                ctx,
+                app_version: header.app_version(),
+                dah: header.dah,
+                tries_left: MAX_TRIES,
+                cancellation_token: self.cancellation_token.child_token(),
+            },
+        );
+    }
+
     pub(super) async fn get_row(
         &mut self,
         height: u64,
@@ -181,16 +194,13 @@ where
             Err(e) => return respond_to.maybe_send_err(ShrExError::invalid_request(e)),
         };
 
-        self.pending_reqs.push_back(Request {
-            ctx: RequestContext::Row(GenericRequestContext {
+        self.new_pending_request(
+            RequestContext::Row(GenericRequestContext {
                 req: row_id,
                 respond_to,
             }),
-            app_version: header.app_version(),
-            dah: header.dah,
-            tries_left: MAX_TRIES,
-            cancellation_token: self.cancellation_token.child_token(),
-        });
+            header,
+        );
     }
 
     pub(super) async fn get_sample(
@@ -226,16 +236,13 @@ where
             Err(e) => return respond_to.maybe_send_err(ShrExError::invalid_request(e)),
         };
 
-        self.pending_reqs.push_back(Request {
-            ctx: RequestContext::Sample(GenericRequestContext {
+        self.new_pending_request(
+            RequestContext::Sample(GenericRequestContext {
                 req: sample_id,
                 respond_to,
             }),
-            app_version: header.app_version(),
-            dah: header.dah,
-            tries_left: MAX_TRIES,
-            cancellation_token: self.cancellation_token.child_token(),
-        });
+            header,
+        );
     }
 
     pub(super) async fn get_namespace_data(
@@ -264,16 +271,13 @@ where
             Err(e) => return respond_to.maybe_send_err(ShrExError::invalid_request(e)),
         };
 
-        self.pending_reqs.push_back(Request {
-            ctx: RequestContext::NamespaceData(GenericRequestContext {
+        self.new_pending_request(
+            RequestContext::NamespaceData(GenericRequestContext {
                 req: nd_id,
                 respond_to,
             }),
-            app_version: header.app_version(),
-            dah: header.dah,
-            tries_left: MAX_TRIES,
-            cancellation_token: self.cancellation_token.child_token(),
-        });
+            header,
+        );
     }
 
     pub(super) async fn get_eds(
@@ -295,16 +299,13 @@ where
             Err(e) => return respond_to.maybe_send_err(ShrExError::invalid_request(e)),
         };
 
-        self.pending_reqs.push_back(Request {
-            ctx: RequestContext::Eds(GenericRequestContext {
+        self.new_pending_request(
+            RequestContext::Eds(GenericRequestContext {
                 req: eds_id,
                 respond_to,
             }),
-            app_version: header.app_version(),
-            dah: header.dah,
-            tries_left: MAX_TRIES,
-            cancellation_token: self.cancellation_token.child_token(),
-        });
+            header,
+        );
     }
 
     fn has_pending_requests(&self) -> bool {
@@ -320,50 +321,66 @@ where
             return;
         }
 
-        // TODO: incorporate pool_tracker
-        //
-        // The following scenarios need be handled:
-        //
-        // 1. User requests a shrex ID and we have validated pool for it
-        // 2. User requests a shrex ID and we have validated pool but it is empty
-        // 3. User requests a shrex ID for a block from the future.
-        //    In this case:
-        //      * Pool tracker may have pool in Caditates. We need to skip this request
-        //        and retry later when the pool is validated.
-        //      * The block maybe is too far to the future an pool tracker doesn't even
-        //        have it as candidate. What should we do in this case? Wait for the
-        //        height or return an error? One option is to wait forever and user needs
-        //        to use the `timeout` parameter in `p2p.rs`. (NOTE: `timeout` in `p2p.rs`
-        //        is not related to shrex recv timeout, the `timeout` in `p2p.rs` is the timeout
-        //        for the whole action and shrex nows nothing about it).
-        // 4. User requests a shrex ID from the past. In this case we can we need to
-        //    send the request to any connected full node.
-        //
-
-        let mut peers = peer_tracker
+        let all_peers = peer_tracker
             .peers()
-            // TODO
-            .filter(|peer| peer.is_full() && peer.is_connected() && peer.is_trusted())
-            .collect::<Vec<_>>();
+            .filter(|peer| peer.is_full() && peer.is_connected())
+            .map(|peer| *peer.id())
+            .collect::<HashSet<_>>();
 
-        if !peers.is_empty() {
+        // if we don't have any connected full node, we need to wait for discovery.
+        // we never time out here, but the request can time out on higher level, if
+        // user set it
+        if !all_peers.is_empty() {
+            // drain all the requests that can be immediately scheduled and
+            // populate the map of heights to dedicated peers that announced
+            // availability of data for those blocks
+            let mut pooled_peers = HashMap::new();
+            let requests_to_schedule: Vec<_> = self
+                .pending_reqs
+                .extract_if(|_, req| {
+                    let height = req.block_height();
+                    match pool_tracker.get_pool(height) {
+                        Ok(pool) => {
+                            // insert connected peers from the existing pool to the map
+                            pooled_peers.entry(height).or_insert_with(|| {
+                                pool.filter(|id| all_peers.contains(id)).cycle()
+                            });
+                            true
+                        }
+                        Err(GetPoolError::HeightTooOld) => true,
+                        Err(GetPoolError::HeightNotTracked) => {
+                            // no one notified us about availability, yet we have a header in the store,
+                            // and the block is not empty, as we would respond immediately rather than
+                            // scheduling request here. we might have had a network hiccup, but maybe
+                            // we should consider penalizing our peers for that behaviour
+                            true
+                        }
+                        // we already have the header here, so pool should be validated in a
+                        // moment, leave this request to be rescheduled on next tick
+                        Err(GetPoolError::CandidatesNotValidated) => false,
+                    }
+                })
+                .filter(|(_, req)| !req.is_respond_channel_closed())
+                .collect();
+
+            // A pool of generic connected full nodes, if there is no dedicated pool for given
+            // height.
             // TODO: We can add a parameter for what kind of sorting we want for the peers.
             // For example we can sort by peer scoring or by ping latency etc.
-            peers.shuffle(&mut rand::thread_rng());
-            peers.truncate(MAX_PEERS);
+            let mut generic_peers: Vec<_> = all_peers.iter().copied().collect();
+            generic_peers.shuffle(&mut rand::thread_rng());
+            generic_peers.truncate(MAX_PEERS);
+            let mut generic_peers = generic_peers.iter().copied().cycle();
 
-            for (i, mut req) in self
-                .pending_reqs
-                .drain(..)
-                // We filter before enumerate, just for keeping `i` correct
-                .filter(|req| !req.is_respond_channel_closed())
-                .enumerate()
-            {
+            for (id, mut req) in requests_to_schedule {
                 // Choose different peer for each request
-                let peer = peers[i % peers.len()];
-                let peer_id = *peer.id();
+                let peer_id = pooled_peers
+                    // prioritize peers from pool tracker
+                    .get_mut(&req.block_height())
+                    .and_then(|peers| peers.next().copied())
+                    // and fallback to the generic peers
+                    .unwrap_or_else(|| generic_peers.next().expect("must be at least one"));
 
-                let req_id = get_next_req_id(&mut self.next_req_id);
                 let stream_ctrl = self.stream_ctrl.clone();
                 let raw_req = req.encode();
                 let protocol_id = req.protocol_id(&self.network_id);
@@ -374,12 +391,12 @@ where
                         let res =
                             request_response_task(stream_ctrl, peer_id, raw_req, protocol_id).await;
 
-                        (req_id, res)
+                        (id, res)
                     }),
                 ));
 
                 req.decrease_tries();
-                self.ongoing_reqs.insert(req_id, req);
+                self.ongoing_reqs.insert(id, req);
             }
         }
     }
@@ -398,20 +415,20 @@ where
 
         let raw_data = match res {
             Ok(raw_data) => raw_data,
-            Err(e) => return self.on_error(req, e.into()),
+            Err(e) => return self.on_error(req_id, req, e.into()),
         };
 
         if let Err(e) = req.decode_verify_respond(&raw_data) {
-            self.on_error(req, e.into());
+            self.on_error(req_id, req, e.into());
         }
     }
 
-    fn on_error(&mut self, mut req: Request, error: ClientError) {
+    fn on_error(&mut self, req_id: u64, mut req: Request, error: ClientError) {
         warn!("shrex error: {error}");
 
         if req.can_retry() {
             // move failed request to pending
-            self.pending_reqs.push_back(req);
+            self.pending_reqs.insert(req_id, req);
         } else {
             req.respond_with_error(ShrExError::MaxTriesReached);
         }
@@ -421,7 +438,7 @@ where
         // Any tasks associeted with the request will be canceled because of
         // `cancellation_token.cacel()` in `Request::drop`.
         self.pending_reqs
-            .retain_mut(|req| !req.poll_respond_channel_closed(cx).is_ready());
+            .retain(|_, req| !req.poll_respond_channel_closed(cx).is_ready());
         self.ongoing_reqs
             .retain(|_, req| !req.poll_respond_channel_closed(cx).is_ready());
 
@@ -469,6 +486,15 @@ where
 }
 
 impl Request {
+    fn block_height(&self) -> u64 {
+        match &self.ctx {
+            RequestContext::Row(ctx) => ctx.req.block_height(),
+            RequestContext::Sample(ctx) => ctx.req.block_height(),
+            RequestContext::NamespaceData(ctx) => ctx.req.block_height(),
+            RequestContext::Eds(ctx) => ctx.req.block_height(),
+        }
+    }
+
     fn protocol_id(&self, network_id: &str) -> StreamProtocol {
         match &self.ctx {
             RequestContext::Row(_) => protocol_id(network_id, ROW_PROTOCOL_ID),
