@@ -1121,6 +1121,7 @@ where
 
             shrex::Event::PoolUpdate {
                 add_peers,
+                #[allow(unused)]
                 blacklist_peers,
             } => {
                 for peer_id in add_peers {
