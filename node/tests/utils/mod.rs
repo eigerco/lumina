@@ -63,7 +63,7 @@ where
             .get_network_head_header()
             .await
             .unwrap()
-            .is_some_and(|head| head.height().value() >= 3)
+            .is_some_and(|head| head.height() >= 3)
         {
             break;
         }
@@ -111,7 +111,11 @@ pub fn spawn_continuous_blob_submitter(
 
         loop {
             // Create a blob with incrementing counter data
-            let data = format!("test-blob-{}-{}", counter, "x".repeat(blob_size.saturating_sub(20)));
+            let data = format!(
+                "test-blob-{}-{}",
+                counter,
+                "x".repeat(blob_size.saturating_sub(20))
+            );
             let blob = Blob::new(
                 namespace,
                 data.into_bytes(),

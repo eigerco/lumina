@@ -28,7 +28,7 @@ use crate::{Error, ExtendedHeader, Result};
 #[derive(Debug, Clone, PartialEq)]
 pub struct BadEncodingFraudProof {
     header_hash: Hash,
-    block_height: Height,
+    block_height: u64,
     // ShareWithProof contains all shares from row or col.
     // Shares that did not pass verification in rsmt2d will be nil (None).
     // For non-nil shares MerkleProofs are computed.
@@ -46,7 +46,7 @@ impl FraudProof for BadEncodingFraudProof {
         self.header_hash
     }
 
-    fn height(&self) -> Height {
+    fn height(&self) -> u64 {
         self.block_height
     }
 
@@ -266,9 +266,11 @@ impl TryFrom<RawBadEncodingFraudProof> for BadEncodingFraudProof {
             })
             .collect::<Result<_, _>>()?;
 
+        Height::try_from(value.height)?;
+
         Ok(Self {
             header_hash: value.header_hash.try_into()?,
-            block_height: value.height.try_into()?,
+            block_height: value.height,
             shares,
             index,
             axis,
@@ -285,7 +287,7 @@ impl From<BadEncodingFraudProof> for RawBadEncodingFraudProof {
             .collect();
         RawBadEncodingFraudProof {
             header_hash: value.header_hash.into(),
-            height: value.block_height.into(),
+            height: value.block_height,
             shares,
             index: value.index as u32,
             axis: value.axis as i32,

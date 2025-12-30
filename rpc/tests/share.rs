@@ -15,11 +15,20 @@ use crate::utils::{random_bytes, random_ns, random_ns_range};
 async fn get_share() {
     let client = new_test_client(AuthLevel::Skip).await.unwrap();
     let header = client.header_network_head().await.unwrap();
-    let square_width = header.dah.square_width() as u64;
+    let square_width = header.square_width();
 
     for row in 0..square_width {
         for col in 0..square_width {
-            let share = client.share_get_share(&header, row, col).await.unwrap();
+            let share = client
+                .share_get_share(
+                    header.height(),
+                    header.app_version(),
+                    square_width,
+                    row,
+                    col,
+                )
+                .await
+                .unwrap();
             let is_parity = row >= square_width / 2 || col >= square_width / 2;
 
             assert_eq!(share.is_parity(), is_parity);
@@ -43,7 +52,7 @@ async fn get_shares_by_namespace() {
     let header = client.header_get_by_height(submitted_height).await.unwrap();
 
     let ns_shares = client
-        .share_get_namespace_data(&header, namespace)
+        .share_get_namespace_data(header.height(), header.app_version(), namespace)
         .await
         .unwrap();
 
@@ -64,7 +73,7 @@ async fn get_shares_by_namespace_forbidden() {
     // those namespaces are forbidden in celestia-node's implementation
     for ns in [Namespace::TAIL_PADDING, Namespace::PARITY_SHARE] {
         client
-            .share_get_namespace_data(&header, ns)
+            .share_get_namespace_data(header.height(), header.app_version(), ns)
             .await
             .unwrap_err();
     }
@@ -89,7 +98,12 @@ async fn get_shares_range() {
     let shares = blob_on_chain.to_shares().unwrap();
 
     let shares_range = client
-        .share_get_range(&header, index, index + shares.len() as u64)
+        .share_get_range(
+            header.height(),
+            header.app_version(),
+            index,
+            index + shares.len() as u64,
+        )
         .await
         .unwrap();
 
@@ -113,7 +127,8 @@ async fn get_shares_range_not_existing() {
 
     client
         .share_get_range(
-            &header,
+            header.height(),
+            header.app_version(),
             shares_in_block as u64 - 2,
             shares_in_block as u64 + 2,
         )
@@ -131,17 +146,37 @@ async fn get_shares_range_ignores_parity() {
     let submitted_height = blob_submit(&client, &[blob]).await.unwrap();
 
     let header = client.header_get_by_height(submitted_height).await.unwrap();
-    let square_width = header.dah.square_width() as u64;
+    let square_width = header.dah.square_width();
 
     let first_parity_share_in_first_row = client
-        .share_get_share(&header, 0, square_width / 2)
+        .share_get_share(
+            header.height(),
+            header.app_version(),
+            header.square_width(),
+            0,
+            square_width / 2,
+        )
         .await
         .unwrap();
-    let first_ods_share_in_second_row = client.share_get_share(&header, 1, 0).await.unwrap();
+    let first_ods_share_in_second_row = client
+        .share_get_share(
+            header.height(),
+            header.app_version(),
+            header.square_width(),
+            1,
+            0,
+        )
+        .await
+        .unwrap();
 
     // Try to get the first parity share in first row
     let fetched_range = client
-        .share_get_range(&header, square_width / 2, square_width / 2 + 1)
+        .share_get_range(
+            header.height(),
+            header.app_version(),
+            (square_width / 2) as u64,
+            (square_width / 2 + 1) as u64,
+        )
         .await
         .unwrap()
         .shares;
@@ -180,7 +215,7 @@ async fn get_shares_by_namespace_wrong_ns() {
     // check the case where we receive absence proof
     let random_ns = random_ns_range(min_ns, max_ns);
     let ns_shares = client
-        .share_get_namespace_data(&header, random_ns)
+        .share_get_namespace_data(header.height(), header.app_version(), random_ns)
         .await
         .unwrap();
     assert_eq!(ns_shares.rows().len(), 1);
@@ -214,7 +249,7 @@ async fn get_shares_by_namespace_wrong_ns_out_of_range() {
     let zero = Namespace::const_v0([0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
     let random_ns = random_ns_range(zero, min_ns);
     let ns_shares = client
-        .share_get_namespace_data(&header, random_ns)
+        .share_get_namespace_data(header.height(), header.app_version(), random_ns)
         .await
         .unwrap();
 
@@ -234,7 +269,7 @@ async fn get_shares_by_namespace_wrong_roots() {
     let genesis = client.header_get_by_height(1).await.unwrap();
 
     let ns_shares = client
-        .share_get_namespace_data(&genesis, namespace)
+        .share_get_namespace_data(genesis.height(), genesis.app_version(), namespace)
         .await
         .unwrap();
 
@@ -251,7 +286,10 @@ async fn get_eds() {
     let submitted_height = blob_submit(&client, &[blob]).await.unwrap();
 
     let header = client.header_get_by_height(submitted_height).await.unwrap();
-    let eds = client.share_get_eds(&header).await.unwrap();
+    let eds = client
+        .share_get_eds(header.height(), header.app_version())
+        .await
+        .unwrap();
 
     for i in 0..header.dah.square_width() {
         let row_root = eds.row_nmt(i).unwrap().root();
@@ -278,12 +316,16 @@ async fn get_samples() {
     let parity_shares =
         (parity_idx..2 * parity_idx).flat_map(|x| iter::repeat(x).zip(parity_idx..2 * parity_idx));
 
-    for sample in client.share_get_samples(&header, ods_shares).await.unwrap() {
+    for sample in client
+        .share_get_samples(header.height(), header.app_version(), ods_shares)
+        .await
+        .unwrap()
+    {
         assert!(!sample.share.is_parity());
     }
 
     for sample in client
-        .share_get_samples(&header, parity_shares)
+        .share_get_samples(header.height(), header.app_version(), parity_shares)
         .await
         .unwrap()
     {
@@ -310,7 +352,7 @@ async fn get_samples_wrong_coords() {
         (square_width * 2, square_width * 2),
     ] {
         client
-            .share_get_samples(&header, [coords])
+            .share_get_samples(header.height(), header.app_version(), [coords])
             .await
             .unwrap_err();
     }
@@ -342,7 +384,12 @@ async fn get_shares_by_row() {
     let mut rows = Vec::with_capacity(n_rows_to_fetch);
     for i in 0..n_rows_to_fetch {
         let row = client
-            .share_get_row(&header, (row_index + i) as u64)
+            .share_get_row(
+                header.height(),
+                header.app_version(),
+                header.square_width(),
+                (row_index + i) as u16,
+            )
             .await
             .unwrap();
         rows.push(row);

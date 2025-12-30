@@ -15,7 +15,7 @@ use crate::grpc::{
     ConfigResponse, GasInfo, GetTxResponse, JsBroadcastMode, TxPriority, TxStatusResponse,
 };
 use crate::js_client::GrpcClientBuilder;
-use crate::tx::{JsTxConfig, JsTxInfo};
+use crate::tx::{BroadcastedTx, JsBroadcastedTx, JsTxConfig, JsTxInfo};
 
 /// Celestia gRPC client, for builder see [`GrpcClientBuilder`]
 #[wasm_bindgen]
@@ -29,6 +29,15 @@ impl GrpcClient {
     #[wasm_bindgen(js_name = withUrl)]
     pub fn with_url(url: String) -> GrpcClientBuilder {
         crate::GrpcClientBuilder::new().url(url).into()
+    }
+
+    /// Create a builder for [`GrpcClient`] with multiple URL endpoints for fallback support.
+    ///
+    /// When multiple endpoints are configured, the client will automatically
+    /// fall back to the next endpoint if a network-related error occurs.
+    #[wasm_bindgen(js_name = withUrls)]
+    pub fn with_urls(urls: Vec<String>) -> GrpcClientBuilder {
+        crate::GrpcClientBuilder::new().urls(urls).into()
     }
 
     /// Get auth params
@@ -272,6 +281,105 @@ impl GrpcClient {
             .submit_message(SendJsAny::from(message), tx_config)
             .await?;
         Ok(tx.into())
+    }
+
+    /// Broadcast message to the celestia network, and return without confirming.
+    ///
+    /// # Example
+    /// ```js
+    /// import { Registry } from "@cosmjs/proto-signing";
+    ///
+    /// const registry = new Registry();
+    /// const sendMsg = {
+    ///   typeUrl: "/cosmos.bank.v1beta1.MsgSend",
+    ///   value: {
+    ///     fromAddress: "celestia169s50psyj2f4la9a2235329xz7rk6c53zhw9mm",
+    ///     toAddress: "celestia1t52q7uqgnjfzdh3wx5m5phvma3umrq8k6tq2p9",
+    ///     amount: [{ denom: "utia", amount: "10000" }],
+    ///   },
+    /// };
+    /// const sendMsgAny = registry.encodeAsAny(sendMsg);
+    ///
+    /// const broadcastedTx = await txClient.broadcastMessage(sendMsgAny);
+    /// console.log("Tx hash:", broadcastedTx.hash);
+    /// const txInfo = await txClient.confirmTx(broadcastedTx);
+    /// ```
+    #[wasm_bindgen(js_name = broadcastMessage)]
+    pub async fn broadcast_message(
+        &self,
+        message: JsAny,
+        tx_config: Option<JsTxConfig>,
+    ) -> Result<JsBroadcastedTx> {
+        let tx_config = tx_config.map(Into::into).unwrap_or_default();
+        let submitted_tx = self
+            .client
+            .broadcast_message(SendJsAny::from(message), tx_config)
+            .await?;
+        let broadcasted_tx: BroadcastedTx = submitted_tx.into();
+        Ok(broadcasted_tx.into())
+    }
+
+    /// Broadcast blobs to the celestia network, and return without confirming.
+    ///
+    /// # Example
+    /// ```js
+    /// const ns = Namespace.newV0(new Uint8Array([97, 98, 99]));
+    /// const data = new Uint8Array([100, 97, 116, 97]);
+    /// const blob = new Blob(ns, data, AppVersion.latest());
+    ///
+    /// const broadcastedTx = await txClient.broadcastBlobs([blob]);
+    /// console.log("Tx hash:", broadcastedTx.hash);
+    /// const txInfo = await txClient.confirmTx(broadcastedTx);
+    /// ```
+    ///
+    /// # Note
+    ///
+    /// Provided blobs will be consumed by this method, meaning
+    /// they will no longer be accessible. If this behavior is not desired,
+    /// consider using `Blob.clone()`.
+    ///
+    /// ```js
+    /// const blobs = [blob1, blob2, blob3];
+    /// await txClient.broadcastBlobs(blobs.map(b => b.clone()));
+    /// ```
+    #[wasm_bindgen(js_name = broadcastBlobs)]
+    pub async fn broadcast_blobs(
+        &self,
+        blobs: Vec<Blob>,
+        tx_config: Option<JsTxConfig>,
+    ) -> Result<JsBroadcastedTx> {
+        let tx_config = tx_config.map(Into::into).unwrap_or_default();
+        let submitted_tx = self.client.broadcast_blobs(&blobs, tx_config).await?;
+        let broadcasted_tx: crate::tx::BroadcastedTx = submitted_tx.into();
+        Ok(broadcasted_tx.into())
+    }
+
+    /// Confirm transaction broadcasted with [`broadcast_blobs`] or [`broadcast_message`].
+    ///
+    /// # Example
+    /// ```js
+    /// const ns = Namespace.newV0(new Uint8Array([97, 98, 99]));
+    /// const data = new Uint8Array([100, 97, 116, 97]);
+    /// const blob = new Blob(ns, data, AppVersion.latest());
+    ///
+    /// const broadcastedTx = await txClient.broadcastBlobs([blob]);
+    /// console.log("Tx hash:", broadcastedTx.hash);
+    /// const txInfo = await txClient.confirmTx(broadcastedTx);
+    /// console.log("Confirmed at height:", txInfo.height);
+    /// ```
+    #[wasm_bindgen(js_name = confirmTx)]
+    pub async fn confirm_tx(
+        &self,
+        broadcasted_tx: JsBroadcastedTx,
+        tx_config: Option<JsTxConfig>,
+    ) -> Result<JsTxInfo> {
+        let tx_config = tx_config.map(Into::into).unwrap_or_default();
+
+        let tx_info = self
+            .client
+            .confirm_broadcasted_tx(broadcasted_tx.try_into()?, tx_config)
+            .await?;
+        Ok(tx_info.into())
     }
 }
 

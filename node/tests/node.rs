@@ -64,7 +64,7 @@ async fn header_store_access() {
                 res.unwrap()
                     .into_iter()
                     .zip(start..start + amount)
-                    .all(|(header, height)| header.height().value() == height)
+                    .all(|(header, height)| header.height() == height)
             );
         }
     }

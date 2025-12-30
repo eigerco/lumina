@@ -45,9 +45,9 @@ fn reconstruct_blobs(
         .rows()
         .iter()
         .flat_map(|row| row.shares.iter());
-    let blobs = Blob::reconstruct_all(shares, header.app_version()?)?;
+    let blobs = Blob::reconstruct_all(shares, header.app_version())?;
     Ok(BlobsAtHeight {
-        height: header.height().into(),
+        height: header.height(),
         blobs,
     })
 }
@@ -85,7 +85,7 @@ where
         if self.last_sent_height.is_none() {
             // First initialisation means Syncer has acquired a network head for the first time,
             // start from there
-            self.last_sent_height = Some(head.height().value());
+            self.last_sent_height = Some(head.height());
             let _ = self.sender.send(head);
         } else {
             // Subsequent initialisations happen when syncer re-connects to the network
@@ -107,13 +107,13 @@ where
             .last_sent_height
             .expect("syncer should have initialised the height by now");
 
-        let Some(lowest_range_height) = range.first().map(|h| h.height().value()) else {
+        let Some(lowest_range_height) = range.first().map(|h| h.height()) else {
             // Ignore empty range
             return Ok(());
         };
 
         debug_assert!(
-            range.last().map(|h| h.height().value()).unwrap() < last_sent_height
+            range.last().map(|h| h.height()).unwrap() < last_sent_height
                 || lowest_range_height > last_sent_height
         );
         if lowest_range_height < last_sent_height {
@@ -138,8 +138,7 @@ where
             let first_pending_height = self.pending[i]
                 .first()
                 .expect("header range shouldn't be empty")
-                .height()
-                .value();
+                .height();
 
             if last_sent_height + 1 == first_pending_height {
                 let range = self.pending.swap_remove(i);
@@ -158,8 +157,7 @@ where
             headers
                 .last()
                 .expect("range shouldn't be empty here")
-                .height()
-                .value(),
+                .height(),
         );
         for header in headers {
             if self.sender.send(header).is_err() {
@@ -201,15 +199,11 @@ pub(crate) async fn forward_new_blobs(
         };
 
         let blobs_or_error = p2p
-            .get_namespace_data(
-                namespace,
-                header.height().value(),
-                Some(SHWAP_FETCH_TIMEOUT),
-            )
+            .get_namespace_data(namespace, header.height(), Some(SHWAP_FETCH_TIMEOUT))
             .await
             .and_then(|namespace_data| reconstruct_blobs(namespace_data, &header))
             .map_err(|e| SubscriptionError::Node {
-                height: header.height().into(),
+                height: header.height(),
                 source: e.into(),
             });
 
@@ -238,15 +232,11 @@ pub(crate) async fn forward_new_shares(
         };
 
         let shares_or_error = match p2p
-            .get_namespace_data(
-                namespace,
-                header.height().value(),
-                Some(SHWAP_FETCH_TIMEOUT),
-            )
+            .get_namespace_data(namespace, header.height(), Some(SHWAP_FETCH_TIMEOUT))
             .await
         {
             Ok(namespace_data) => Ok(SharesAtHeight {
-                height: header.height().into(),
+                height: header.height(),
                 shares: namespace_data
                     .into_inner()
                     .into_iter()
@@ -254,7 +244,7 @@ pub(crate) async fn forward_new_shares(
                     .collect(),
             }),
             Err(e) => Err(SubscriptionError::Node {
-                height: header.height().into(),
+                height: header.height(),
                 source: e.into(),
             }),
         };

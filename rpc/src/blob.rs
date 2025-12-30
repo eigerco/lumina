@@ -189,7 +189,7 @@ pub trait BlobClient: ClientT {
                         .next()
                         .await
                         .ok_or_else(|| custom_client_error("unexpected end of stream"))??;
-                    let height = header.height().value();
+                    let height = header.height();
                     let blobs = rpc::BlobClient::blob_get_all(self, height, &[namespace]).await?;
 
                     BlobsAtHeight {

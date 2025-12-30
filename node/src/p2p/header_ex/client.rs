@@ -546,7 +546,7 @@ async fn decode_and_verify_responses(
         // there are no gaps in the chain
         (Some(Data::Origin(start)), amount) if *start > 0 && amount > 0 => {
             for (header, height) in headers.iter().zip(*start..*start + amount as u64) {
-                if header.height().value() != height {
+                if header.height() != height {
                     return Err(HeaderExError::InvalidResponse);
                 }
             }

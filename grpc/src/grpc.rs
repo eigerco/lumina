@@ -43,7 +43,7 @@ pub use crate::grpc::cosmos_tx::JsBroadcastMode;
 uniffi::use_remote_type!(celestia_types::Hash);
 
 type RequestFuture<Response, Error> = BoxFuture<'static, Result<Response, Error>>;
-type CallFn<Response, Error> = Box<dyn FnOnce(Context) -> RequestFuture<Response, Error>>;
+type CallFn<Response, Error> = Box<dyn FnOnce(Context) -> RequestFuture<Response, Error> + Send>;
 
 /// Context passed to each grpc request
 ///
@@ -156,7 +156,7 @@ impl<Response, Error> AsyncGrpcCall<Response, Error> {
     #[doc(hidden)]
     pub fn new<F, Fut>(call_fn: F) -> Self
     where
-        F: FnOnce(Context) -> Fut + 'static,
+        F: FnOnce(Context) -> Fut + Send + 'static,
         Fut: Future<Output = Result<Response, Error>> + Send + 'static,
     {
         Self {

@@ -53,30 +53,61 @@ impl GrpcMethod {
 
         let method = quote! {
             pub #signature {
-                let transport = self.inner.transport.clone();
+                let transports = self.inner.transports.clone();
                 let param = crate::grpc::IntoGrpcParam::into_parameter(( #( #params ),* ));
 
                 crate::grpc::AsyncGrpcCall::new(move |context: crate::grpc::Context| async move {
-                    // 256 mb, future proof as celesita blocks grow
+                    // 256 mb, future proof as celestia blocks grow
                     const MAX_MSG_SIZE: usize = 256 * 1024 * 1024;
 
-                    let mut client = #grpc_client_struct :: new(transport)
-                        .max_decoding_message_size(MAX_MSG_SIZE)
-                        .max_encoding_message_size(MAX_MSG_SIZE);
+                    let mut last_error: Option<crate::Error> = None;
+                    let transport_snapshot = transports.load();
 
-                    let request = ::tonic::Request::from_parts(
-                        context.metadata,
-                        ::tonic::Extensions::new(),
-                        param,
-                    );
+                    for idx in 0..transport_snapshot.len() {
+                        let transport_url = transport_snapshot[idx].metadata.url.as_deref();
+                        let transport = transport_snapshot[idx].clone();
+                        let mut client = #grpc_client_struct::new(transport)
+                            .max_decoding_message_size(MAX_MSG_SIZE)
+                            .max_encoding_message_size(MAX_MSG_SIZE);
 
-                    let fut = client. #grpc_method_name (request);
+                        let mut request = ::tonic::Request::from_parts(
+                            context.metadata.clone(),
+                            ::tonic::Extensions::new(),
+                            ::std::clone::Clone::clone(&param),
+                        );
+                        request.set_timeout(::std::time::Duration::from_secs(30));
 
-                    #[cfg(target_arch = "wasm32")]
-                    let fut = ::send_wrapper::SendWrapper::new(fut);
+                        let fut = client.#grpc_method_name(request);
 
-                    let resp = fut.await?.into_inner();
-                    crate::grpc::FromGrpcResponse::try_from_response(resp)
+                        #[cfg(target_arch = "wasm32")]
+                        let fut = ::send_wrapper::SendWrapper::new(fut);
+
+                        match fut.await {
+                            Ok(resp) => {
+                                if idx > 0 {
+                                    let mut new_transports = transport_snapshot.as_ref().clone();
+                                    new_transports.swap(0, idx);
+                                    transports.store(::std::sync::Arc::new(new_transports));
+                                }
+                                return crate::grpc::FromGrpcResponse::try_from_response(resp.into_inner());
+                            }
+                            Err(e) => {
+                                let error: crate::Error = e.into();
+                                if error.is_network_error() {
+                                    ::tracing::warn!(
+                                        "Transport {} failed with network error: {}",
+                                        transport_url.unwrap_or("unknown"),
+                                        error,
+                                    );
+                                    last_error = Some(error);
+                                    continue;
+                                }
+                                return Err(error);
+                            }
+                        }
+                    }
+
+                    Err(last_error.expect("at least one transport should be tried"))
                 })
                 .context(&self.inner.context)
             }

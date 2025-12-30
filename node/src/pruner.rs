@@ -169,7 +169,7 @@ impl Cache {
             hash_map::Entry::Vacant(entry) => {
                 let header = store.get_by_height(height).await?;
                 let info = BlockInfo {
-                    height: header.height().value(),
+                    height: header.height(),
                     time: header.time(),
                 };
                 entry.insert(info.clone());
@@ -1296,28 +1296,28 @@ mod test {
 
         // 1 - 120
         store
-            .insert(generator.next_many_verified(120))
+            .insert(generator.next_many_empty_verified(120))
             .await
             .unwrap();
         // 121 - 145
         generator.skip(25);
         // 146 - 155
         store
-            .insert(generator.next_many_verified(10))
+            .insert(generator.next_many_empty_verified(10))
             .await
             .unwrap();
         // 156 - 165
         generator.skip(10);
         // 166 - 175
         store
-            .insert(generator.next_many_verified(10))
+            .insert(generator.next_many_empty_verified(10))
             .await
             .unwrap();
         // 176 - 185
         generator.skip(10);
         // 186 - 199
         store
-            .insert(generator.next_many_verified(14))
+            .insert(generator.next_many_empty_verified(14))
             .await
             .unwrap();
         // 200 - 201, We skip these because they are the edge of pruning window.
@@ -1325,7 +1325,7 @@ mod test {
         generator.skip(2);
         // 202 - 260
         store
-            .insert(generator.next_many_verified(59))
+            .insert(generator.next_many_empty_verified(59))
             .await
             .unwrap();
 

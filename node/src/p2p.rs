@@ -483,7 +483,7 @@ impl P2p {
         // User can give us a bad header, so validate it.
         from.validate().map_err(|_| HeaderExError::InvalidRequest)?;
 
-        let height = from.height().value() + 1;
+        let height = from.height() + 1;
 
         let range = height..=height + amount - 1;
 
@@ -656,7 +656,7 @@ impl P2p {
         // TODO: Figure out app_version based on network id and height instead
         // of retrieving the header.
         let app_version = match store.get_by_height(block_height).await {
-            Ok(header) => header.app_version()?,
+            Ok(header) => header.app_version(),
             Err(StoreError::NotFound) => {
                 let pruned_ranges = store.get_pruned_ranges().await?;
 
@@ -1186,12 +1186,12 @@ where
             return gossipsub::MessageAcceptance::Reject;
         };
 
-        let height = befp.height().value();
+        let height = befp.height();
 
         let current_height = if let Some(ref header_sub_state) = self.header_sub_state {
-            header_sub_state.known_head.height().value()
+            header_sub_state.known_head.height()
         } else if let Ok(local_head) = self.store.get_head().await {
-            local_head.height().value()
+            local_head.height()
         } else {
             // we aren't tracking the network and have uninitialized store
             return gossipsub::MessageAcceptance::Ignore;
