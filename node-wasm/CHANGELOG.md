@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.1](https://github.com/eigerco/lumina/compare/lumina-node-wasm-v0.12.0...lumina-node-wasm-v0.12.1) - 2025-12-30
+
+### Added
+
+- *(grpc)* AsyncGrpcCall: Send ([#844](https://github.com/eigerco/lumina/pull/844))
+- *(node,node-wasm,node-uniffi)* Add header, blob, and namespace subscriptions ([#772](https://github.com/eigerco/lumina/pull/772))
+
+### Other
+
+- *(node-wasm)* add proper tsconfig.json ([#839](https://github.com/eigerco/lumina/pull/839))
+- *(node-wasm)* fix flaky request_network_head_header ([#837](https://github.com/eigerco/lumina/pull/837))
+- fix tsc not finding iterators on release ([#838](https://github.com/eigerco/lumina/pull/838))
+
 ## [0.12.0](https://github.com/eigerco/lumina/compare/lumina-node-wasm-v0.11.0...lumina-node-wasm-v0.12.0) - 2025-11-19
 
 ### Added
