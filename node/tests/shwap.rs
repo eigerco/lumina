@@ -135,7 +135,16 @@ async fn shwap_request_sample() {
     let square_width = header.square_width();
 
     // check existing sample
-    let expected = client.share_get_share(&header, 0, 0).await.unwrap();
+    let expected = client
+        .share_get_share(
+            header.height(),
+            header.app_version(),
+            header.square_width(),
+            0,
+            0,
+        )
+        .await
+        .unwrap();
     let sample = node
         .request_sample(0, 0, height, Some(Duration::from_millis(500)))
         .await
@@ -166,7 +175,10 @@ async fn shwap_request_row() {
 
     let height = blob_submit(&client, &[blob]).await;
     let header = node.get_header_by_height(height).await.unwrap();
-    let eds = client.share_get_eds(&header).await.unwrap();
+    let eds = client
+        .share_get_eds(header.height(), header.app_version())
+        .await
+        .unwrap();
     let square_width = header.square_width();
 
     // check existing row
@@ -195,7 +207,10 @@ async fn shwap_request_row_namespace_data() {
 
     let height = blob_submit(&client, &[blob]).await;
     let header = node.get_header_by_height(height).await.unwrap();
-    let eds = client.share_get_eds(&header).await.unwrap();
+    let eds = client
+        .share_get_eds(header.height(), header.app_version())
+        .await
+        .unwrap();
     let square_width = header.square_width();
 
     // check existing row namespace data
