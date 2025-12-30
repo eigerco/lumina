@@ -16,7 +16,7 @@ use crate::consts::appconsts::{
 };
 use crate::consts::version;
 use crate::hash::{Hash, HashExt};
-use crate::nmt::{NS_SIZE, Namespace};
+use crate::nmt::{NS_SIZE, Namespace, NamespacedHash, NamespacedHashExt};
 use crate::{
     Blob, DataAvailabilityHeader, ExtendedDataSquare, ExtendedHeader, Share, ValidatorSet,
 };
@@ -83,8 +83,7 @@ impl ExtendedHeaderGenerator {
     /// ```
     #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> ExtendedHeader {
-        let dah = DataAvailabilityHeader::from_eds(&generate_eds(8, AppVersion::V6));
-        self.next_impl(Some(dah))
+        self.next_impl(Some(generate_dah(8)))
     }
 
     /// Generates the next header for an empty data square.
@@ -380,6 +379,111 @@ pub fn unverify(header: &mut ExtendedHeader) {
     } else {
         header.validate().expect("invalid header generated");
     }
+}
+
+/// Generate a dummy DAH, with semi-real namespace structure
+fn generate_dah(square_width: usize) -> DataAvailabilityHeader {
+    // allow minimum ODS to be 2x2, to not handle case with single
+    // share in ODS
+    assert!(square_width >= 4);
+    // and a power of 2
+    assert!(square_width.count_ones() == 1);
+
+    let ods_width = square_width / 2;
+
+    // assume each share is a different blob, except for 3 shares reserved to mimic "real" eds
+    let blobs_count = ods_width * ods_width - 3;
+    let blob_namespaces: Vec<_> = (0..blobs_count)
+        .map(|n| {
+            let mut ns = random_bytes(10);
+            // ensure ordering
+            ns[0..4].copy_from_slice(&(n as u32).to_be_bytes());
+            Namespace::new_v0(&ns).unwrap()
+        })
+        .collect();
+
+    let row_roots: Vec<_> = (0..square_width)
+        .map(|n| {
+            if n < ods_width {
+                // within ODS, create hashes with proper min and max namespaces
+                // based on blobs namespaces we created earlier
+                let min_ns = match n {
+                    0 => Namespace::PAY_FOR_BLOB,
+                    _ => {
+                        // substract 2 initial shares, PFB and primary padding
+                        let first_blob_in_row = ods_width * n - 2;
+                        blob_namespaces[first_blob_in_row]
+                    }
+                };
+                let max_ns = if n == ods_width - 1 {
+                    Namespace::TAIL_PADDING
+                } else {
+                    // (n + 1) gives us first blob idx in the *next* row
+                    // substract 2 initial shares, PFB and primary padding
+                    // and additional 1, to take last blob of the previous row instead
+                    let last_blob_in_row = ods_width * (n + 1) - 3;
+                    blob_namespaces[last_blob_in_row]
+                };
+                let hash = [
+                    min_ns.as_bytes(),
+                    max_ns.as_bytes(),
+                    random_bytes(32).as_slice(),
+                ]
+                .concat();
+                NamespacedHash::from_raw(&hash).unwrap()
+            } else {
+                // outside of ODS, everything is parity
+                let hash = [
+                    Namespace::PARITY_SHARE.as_bytes(),
+                    Namespace::PARITY_SHARE.as_bytes(),
+                    random_bytes(32).as_slice(),
+                ]
+                .concat();
+                NamespacedHash::from_raw(&hash).unwrap()
+            }
+        })
+        .collect();
+
+    let col_roots: Vec<_> = (0..square_width)
+        .map(|n| {
+            if n < ods_width {
+                // within ODS, create hashes with proper min and max namespaces
+                // based on blobs namespaces we created earlier
+                let min_ns = match n {
+                    0 => Namespace::PAY_FOR_BLOB,
+                    1 => Namespace::PRIMARY_RESERVED_PADDING,
+                    // substract 2 reserved initial shares from first row
+                    _ => blob_namespaces[n - 2],
+                };
+                let max_ns = if n == ods_width - 1 {
+                    Namespace::TAIL_PADDING
+                } else {
+                    // grab blob namespaces from last row in order
+                    // 2 is substracted as blobs starts after 2 initial shares from first row
+                    let last_blob_in_col = ods_width * (ods_width - 1) - 2 + n;
+                    blob_namespaces[last_blob_in_col]
+                };
+                let hash = [
+                    min_ns.as_bytes(),
+                    max_ns.as_bytes(),
+                    random_bytes(32).as_slice(),
+                ]
+                .concat();
+                NamespacedHash::from_raw(&hash).unwrap()
+            } else {
+                // outside of ODS, everything is parity
+                let hash = [
+                    Namespace::PARITY_SHARE.as_bytes(),
+                    Namespace::PARITY_SHARE.as_bytes(),
+                    random_bytes(32).as_slice(),
+                ]
+                .concat();
+                NamespacedHash::from_raw(&hash).unwrap()
+            }
+        })
+        .collect();
+
+    DataAvailabilityHeader::new_unchecked(row_roots, col_roots)
 }
 
 /// Generate a properly encoded [`ExtendedDataSquare`] with random data.
