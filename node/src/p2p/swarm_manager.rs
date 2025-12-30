@@ -514,12 +514,13 @@ where
         None
     }
 
-    pub(crate) fn peer_maybe_discovered(&mut self, peer_id: &PeerId) {
+    pub(crate) fn peer_maybe_discovered(&mut self, peer_id: &PeerId) -> bool {
         if !self.peer_tracker.add_peer_id(peer_id) {
-            return;
+            return false;
         }
 
         debug!("Peer discovered: {peer_id}");
+        true
     }
 
     fn on_peer_connected(&mut self, peer_id: &PeerId, connection_id: ConnectionId) {
