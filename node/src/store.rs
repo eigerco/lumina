@@ -1279,7 +1279,7 @@ mod tests {
             expected_ranges
         );
         for header in headers {
-            let height = header.height().value();
+            let height = header.height();
             if expected_ranges.contains(height) {
                 assert_eq!(&store.get_by_height(height).await.unwrap(), header);
                 assert_eq!(&store.get_by_hash(&header.hash()).await.unwrap(), header);

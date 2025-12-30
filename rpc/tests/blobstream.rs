@@ -12,7 +12,7 @@ async fn get_data_root_tuple_root_and_proof() {
 
     let network_head = client.header_network_head().await.unwrap();
 
-    let network_height = network_head.height().value();
+    let network_height = network_head.height();
 
     let start_height = network_height - 2;
     let target_height = network_height - 1;

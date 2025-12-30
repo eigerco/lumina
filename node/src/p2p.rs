@@ -452,7 +452,7 @@ impl P2p {
         // User can give us a bad header, so validate it.
         from.validate().map_err(|_| HeaderExError::InvalidRequest)?;
 
-        let height = from.height().value() + 1;
+        let height = from.height() + 1;
 
         let range = height..=height + amount - 1;
 
@@ -577,7 +577,7 @@ impl P2p {
     where
         S: Store,
     {
-        let block_height: u64 = header.height().into();
+        let block_height: u64 = header.height();
         let rows_to_fetch: Vec<_> = header
             .dah
             .row_roots()
@@ -634,7 +634,7 @@ impl P2p {
 
         let shares = namespace_data.rows.iter().flat_map(|row| row.shares.iter());
 
-        Ok(Blob::reconstruct_all(shares, header.app_version()?)?)
+        Ok(Blob::reconstruct_all(shares, header.app_version())?)
     }
 
     /// Get the addresses where [`P2p`] listens on for incoming connections.
@@ -1084,12 +1084,12 @@ where
             return gossipsub::MessageAcceptance::Reject;
         };
 
-        let height = befp.height().value();
+        let height = befp.height();
 
         let current_height = if let Some(ref header_sub_state) = self.header_sub_state {
-            header_sub_state.known_head.height().value()
+            header_sub_state.known_head.height()
         } else if let Ok(local_head) = self.store.get_head().await {
-            local_head.height().value()
+            local_head.height()
         } else {
             // we aren't tracking the network and have uninitialized store
             return gossipsub::MessageAcceptance::Ignore;
