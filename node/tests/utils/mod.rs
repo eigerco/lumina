@@ -111,7 +111,11 @@ pub fn spawn_continuous_blob_submitter(
 
         loop {
             // Create a blob with incrementing counter data
-            let data = format!("test-blob-{}-{}", counter, "x".repeat(blob_size.saturating_sub(20)));
+            let data = format!(
+                "test-blob-{}-{}",
+                counter,
+                "x".repeat(blob_size.saturating_sub(20))
+            );
             let blob = Blob::new(
                 namespace,
                 data.into_bytes(),

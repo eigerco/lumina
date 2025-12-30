@@ -67,11 +67,16 @@ pub fn listening_test_node_builder() -> NodeBuilder<InMemoryBlockstore, InMemory
 pub trait ExtendedHeaderGeneratorExt {
     /// Generate next amount verified headers
     fn next_many_verified(&mut self, amount: u64) -> VerifiedExtendedHeaders;
+    /// Generate next amount empty verified headers
+    fn next_many_empty_verified(&mut self, amount: u64) -> VerifiedExtendedHeaders;
 }
 
 impl ExtendedHeaderGeneratorExt for ExtendedHeaderGenerator {
     fn next_many_verified(&mut self, amount: u64) -> VerifiedExtendedHeaders {
         unsafe { VerifiedExtendedHeaders::new_unchecked(self.next_many(amount)) }
+    }
+    fn next_many_empty_verified(&mut self, amount: u64) -> VerifiedExtendedHeaders {
+        unsafe { VerifiedExtendedHeaders::new_unchecked(self.next_many_empty(amount)) }
     }
 }
 

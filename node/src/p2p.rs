@@ -1006,6 +1006,7 @@ where
                 for peer_id in add_peers {
                     self.swarm.peer_maybe_discovered(&peer_id);
                 }
+                warn!("Unhandled: {blacklist_peers:?}");
             }
         }
     }

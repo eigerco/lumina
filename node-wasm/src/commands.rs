@@ -4,7 +4,6 @@ use enum_as_inner::EnumAsInner;
 use libp2p::{Multiaddr, PeerId};
 use serde::{Deserialize, Serialize};
 use tokio::sync::oneshot;
-use tracing::error;
 
 use celestia_types::hash::Hash;
 use celestia_types::nmt::Namespace;
