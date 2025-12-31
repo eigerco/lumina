@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1](https://github.com/eigerco/lumina/compare/lumina-utils-v0.5.0...lumina-utils-v0.5.1) - 2025-12-31
+
+### Other
+
+- *(utils)* relax interval assertions slightly ([#821](https://github.com/eigerco/lumina/pull/821))
+
 ## [0.5.0](https://github.com/eigerco/lumina/compare/lumina-utils-v0.4.0...lumina-utils-v0.5.0) - 2025-11-19
 
 ### Added
