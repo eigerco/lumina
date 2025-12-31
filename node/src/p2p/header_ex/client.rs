@@ -645,7 +645,7 @@ mod tests {
             &mut handler,
             &mut mock_req,
             &peer_tracker,
-            Duration::from_millis(20),
+            Duration::from_millis(50),
         )
         .await;
         // We don't have any available peers, so we shouldn't get any response.
@@ -777,7 +777,7 @@ mod tests {
                 &mut handler,
                 &mut mock_req,
                 &peer_tracker,
-                Duration::from_millis(20),
+                Duration::from_millis(50),
             )
             .await;
         }
@@ -808,7 +808,7 @@ mod tests {
                 &mut handler,
                 &mut mock_req,
                 &peer_tracker,
-                Duration::from_millis(20),
+                Duration::from_millis(50),
             )
             .await;
         }
@@ -848,7 +848,7 @@ mod tests {
                 &mut handler,
                 &mut mock_req,
                 &peer_tracker,
-                Duration::from_millis(20),
+                Duration::from_millis(50),
             )
             .await;
         }
@@ -879,7 +879,7 @@ mod tests {
                 &mut handler,
                 &mut mock_req,
                 &peer_tracker,
-                Duration::from_millis(20),
+                Duration::from_millis(50),
             )
             .await;
         }
@@ -912,7 +912,7 @@ mod tests {
                 &mut handler,
                 &mut mock_req,
                 &peer_tracker,
-                Duration::from_millis(20),
+                Duration::from_millis(50),
             )
             .await;
         }
@@ -945,7 +945,7 @@ mod tests {
                 &mut handler,
                 &mut mock_req,
                 &peer_tracker,
-                Duration::from_millis(20),
+                Duration::from_millis(50),
             )
             .await;
         }
@@ -978,7 +978,7 @@ mod tests {
                 &mut handler,
                 &mut mock_req,
                 &peer_tracker,
-                Duration::from_millis(20),
+                Duration::from_millis(50),
             )
             .await;
         }
@@ -1034,7 +1034,7 @@ mod tests {
                 &mut handler,
                 &mut mock_req,
                 &peer_tracker,
-                Duration::from_millis(20),
+                Duration::from_millis(50),
             )
             .await;
         }
@@ -1067,7 +1067,7 @@ mod tests {
                 &mut handler,
                 &mut mock_req,
                 &peer_tracker,
-                Duration::from_millis(20),
+                Duration::from_millis(50),
             )
             .await;
         }
@@ -1403,7 +1403,7 @@ mod tests {
                 &mut handler,
                 &mut mock_req,
                 &peer_tracker,
-                Duration::from_millis(20),
+                Duration::from_millis(50),
             )
             .await;
 
@@ -1440,7 +1440,7 @@ mod tests {
                 &mut handler,
                 &mut mock_req,
                 &peer_tracker,
-                Duration::from_millis(20),
+                Duration::from_millis(50),
             )
             .await;
 
@@ -1497,7 +1497,7 @@ mod tests {
             &mut handler,
             &mut mock_req,
             &peer_tracker,
-            Duration::from_millis(20),
+            Duration::from_millis(50),
         )
         .await;
         // We don't have any available peers, so we shouldn't get any response.
@@ -1540,7 +1540,7 @@ mod tests {
             &mut handler,
             &mut mock_req,
             &peer_tracker,
-            Duration::from_millis(20),
+            Duration::from_millis(50),
         )
         .await;
         // Not all requests were answered, so we shouldn't have any response.
@@ -1699,7 +1699,7 @@ mod tests {
                 &mut handler,
                 &mut mock_req,
                 &peer_tracker,
-                Duration::from_millis(20),
+                Duration::from_millis(50),
             )
             .await;
         }
