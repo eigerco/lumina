@@ -211,12 +211,16 @@ where
         }
     }
 
-    /// Return peer pool for the provided hash.
+    /// Return peer pool for the provided block height.
     ///
-    /// Returns a list of peers that can be queried about the provided hash.
-    /// If hash is not known to PoolTracker, `None` is returned. For known hashes,
-    /// but no peers for notification, empty peer list is returned, this can happen
-    /// for empty EDS.
+    /// Returns a list of peers that can be queried for data at a given block.
+    /// If the pool doesn't exist, it might already be pruned, not yet exist, or
+    /// tracker hasn't received any notifications about availability, e.g. if the
+    /// block was empty.
+    ///
+    /// In case the pool exists but has no peers, we only received invalid notifications,
+    /// i.e. all the peers advertised data root that didn't match the one from the synced
+    /// header.
     pub fn get_pool(&self, height: u64) -> Result<Iter<'_, PeerId>, GetPoolError> {
         match self.hash_pools.get(&height) {
             Some(PeerPool::Validated(data_hash)) => Ok(self
