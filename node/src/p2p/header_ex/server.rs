@@ -418,7 +418,7 @@ mod tests {
         )
     }
 
-    // helper which waits for result over the test channel, while continously polling the handler.
+    // helper which waits for result over the test channel, while continuously polling the handler.
     async fn poll_handler_for_result<S>(
         handler: &mut HeaderExServerHandler<S, TestResponseSender>,
         response_sender: &mut TestResponseSender,

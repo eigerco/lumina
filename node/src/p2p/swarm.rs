@@ -42,7 +42,7 @@ mod imp {
         //
         // Similarly, if node is started when there's no Internet connection,
         // it won't use the DNS servers offered when Internet connectivity
-        // is restored. Instead we per-define globally-accessible public DNS servers.
+        // is restored. Instead, we per-define globally-accessible public DNS servers.
         let dns_config = dns::ResolverConfig::cloudflare();
 
         let noise_config =
@@ -122,7 +122,7 @@ mod imp {
     async fn read_tls_key(path: impl AsRef<Path>) -> Result<PrivateKeyDer<'static>, P2pError> {
         let path = path.as_ref();
 
-        // TODO: read key in a preallocated memory and zero it after use
+        // TODO: read key in a pre-allocated memory and zero it after use
         let data = fs::read(&path)
             .await
             .map_err(|e| P2pError::TlsInit(format!("{}: {e}", path.display())))?;

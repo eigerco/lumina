@@ -96,7 +96,7 @@ impl Pruner {
 
     /// Stop the worker.
     pub(crate) fn stop(&self) {
-        // Singal the Worker to stop.
+        // Signal the Worker to stop.
         self.cancellation_token.cancel();
     }
 
@@ -141,7 +141,7 @@ struct Cache {
 
     /// Cached `BlockInfo`.
     block_info: HashMap<u64, BlockInfo>,
-    /// Blocks that we need need to keep their `BlockInfo`.
+    /// Blocks that we need to keep their `BlockInfo`.
     keep_block_info: HashSet<u64>,
 }
 
