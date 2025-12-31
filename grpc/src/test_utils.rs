@@ -68,9 +68,7 @@ mod imp {
     }
 
     pub async fn new_rpc_client() -> Client {
-        Client::builder()
-            .url(CELESTIA_RPC_URL)
-            .build()
+        Client::new(CELESTIA_RPC_URL, None, None, None)
             .await
             .unwrap()
     }
@@ -123,9 +121,7 @@ mod imp {
     }
 
     pub async fn new_rpc_client() -> RpcClient {
-        RpcClient::builder()
-            .url(CELESTIA_RPC_URL)
-            .build()
+        RpcClient::new(CELESTIA_RPC_URL, None, None, None)
             .await
             .unwrap()
     }

@@ -5,10 +5,10 @@
 //! one using [`jsonrpsee`] crate directly.
 
 #[cfg(not(target_arch = "wasm32"))]
-pub use self::native::{Client, ClientBuilder};
+pub use self::native::Client;
 
 #[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
-pub use self::wasm::{Client, ClientBuilder};
+pub use self::wasm::Client;
 
 #[cfg(not(target_arch = "wasm32"))]
 mod native {
@@ -16,7 +16,6 @@ mod native {
     use std::result::Result;
     use std::time::Duration;
 
-    use bon::bon;
     use http::{HeaderValue, header};
     use jsonrpsee::core::ClientError;
     use jsonrpsee::core::client::{BatchResponse, ClientT, Subscription, SubscriptionClientT};
@@ -39,7 +38,6 @@ mod native {
         Ws(WsClient),
     }
 
-    #[bon]
     impl Client {
         /// Create a new Json RPC client.
         ///
@@ -49,15 +47,10 @@ mod native {
         ///
         /// Please note that currently the celestia-node supports only 'http' and 'ws'.
         /// For a secure connection you have to hide it behind a proxy.
-        #[builder]
         pub async fn new(
-            /// Url used to connect to the RPC server
             url: &str,
-            /// Auth token
             auth_token: Option<&str>,
-            /// Timeout for establishing the connection, supported with WebSockets only
             connect_timeout: Option<Duration>,
-            /// Timeout when sending a request
             request_timeout: Option<Duration>,
         ) -> Result<Self, Error> {
             let mut headers = HeaderMap::new();
@@ -191,7 +184,6 @@ mod wasm {
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::time::Duration;
 
-    use bon::bon;
     use gloo_net::http::{Request as JsRequest, Response as JsResponse};
     use gloo_timers::callback::Timeout;
     use jsonrpsee::core::client::{BatchResponse, ClientT, Subscription, SubscriptionClientT};
@@ -220,7 +212,6 @@ mod wasm {
         timeout_ms: Option<u32>,
     }
 
-    #[bon]
     impl Client {
         /// Create a new Json RPC client.
         ///
@@ -228,15 +219,10 @@ mod wasm {
         /// doesn't allow setting headers with websocket. If you want to
         /// use the websocket client anyway, you can use the one from the
         /// `jsonrpsee` directly, but you need a node with `--rpc.skip-auth`.
-        #[builder]
         pub async fn new(
-            /// Url used to connect to the RPC server
             url: &str,
-            /// Auth token
             auth_token: Option<&str>,
-            /// Timeout for establishing the connection, unsupported on wasm
             connect_timeout: Option<Duration>,
-            /// Timeout when sending a request
             request_timeout: Option<Duration>,
         ) -> Result<Self, Error> {
             let protocol = url.split_once(':').map(|(proto, _)| proto);
@@ -263,15 +249,15 @@ mod wasm {
         async fn send<T: Serialize>(&self, request: T) -> Result<JsResponse, ClientError> {
             let fut = {
                 let mut req = JsRequest::post(&self.url);
+                let mut timeout_callback = None;
 
                 if let Some(timeout) = self.timeout_ms {
                     let abort_controller =
                         AbortController::new().expect("AbortController should be available");
                     let abort_signal = abort_controller.signal();
-                    Timeout::new(timeout, move || {
+                    let _ = timeout_callback.insert(Timeout::new(timeout, move || {
                         abort_controller.abort();
-                    })
-                    .forget();
+                    }));
                     req = req.abort_signal(Some(&abort_signal));
                 }
 

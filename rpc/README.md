@@ -11,10 +11,7 @@ use celestia_types::{AppVersion, Blob, nmt::Namespace};
 async fn submit_blob() {
     // create a client to the celestia node
     let token = std::env::var("CELESTIA_NODE_AUTH_TOKEN").expect("Token not provided");
-    let client = Client::builder()
-        .url("ws://localhost:36658")
-        .auth_token(&token) // optional auth token
-        .build()
+    let client = Client::new("ws://localhost:36658", Some(&token), None, None)
         .await
         .expect("Failed creating rpc client");
 

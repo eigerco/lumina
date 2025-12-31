@@ -31,7 +31,6 @@ serde = { workspace = true, features = ["derive"] }
 serde_repr.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
-bon = "3"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 http.workspace = true
