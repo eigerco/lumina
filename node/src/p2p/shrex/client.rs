@@ -590,7 +590,7 @@ async fn get_header(store: &impl Store, height: u64) -> Result<ExtendedHeader, P
 
 fn get_next_req_id(next_req_id: &mut u64) -> u64 {
     let req_id = *next_req_id;
-    *next_req_id = next_req_id.saturating_sub(1);
+    *next_req_id = next_req_id.wrapping_add(1);
     req_id
 }
 
