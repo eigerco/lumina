@@ -1,31 +1,49 @@
 use std::fmt::Debug;
 
-use celestia_types::Blob;
-use celestia_types::nmt::Namespace;
 use enum_as_inner::EnumAsInner;
-use libp2p::Multiaddr;
-use libp2p::PeerId;
+use libp2p::{Multiaddr, PeerId};
 use serde::{Deserialize, Serialize};
-use tracing::error;
-use wasm_bindgen::JsError;
+use tokio::sync::oneshot;
 
-use celestia_types::{ExtendedHeader, hash::Hash};
+use celestia_types::hash::Hash;
+use celestia_types::nmt::Namespace;
+use celestia_types::{Blob, ExtendedHeader};
 use lumina_node::node::{PeerTrackerInfo, SyncingInfo};
 use lumina_node::store::SamplingMetadata;
 
 use crate::client::WasmNodeConfig;
-use crate::error::Error;
-use crate::error::Result;
+use crate::error::{Error, Result};
+use crate::ports::MessagePortLike;
 use crate::wrapper::libp2p::NetworkInfoSnapshot;
 
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Serialize, Deserialize)]
-pub(crate) enum NodeCommand {
+pub(crate) enum Command {
+    Node(NodeCommand),
+    Management(WorkerCommand),
+    Subscribe(SubscriptionCommand),
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub(crate) enum WorkerCommand {
     InternalPing,
+    GetEventsChannelName,
+    ConnectPort(#[serde(skip)] Option<MessagePortLike>),
     IsRunning,
     StartNode(WasmNodeConfig),
     StopNode,
-    GetEventsChannelName,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub(crate) enum SubscriptionCommand {
+    Headers,
+    Blobs(Namespace),
+    Shares(Namespace),
+}
+
+#[allow(clippy::large_enum_variant)]
+#[derive(Debug, Serialize, Deserialize)]
+pub(crate) enum NodeCommand {
     GetLocalPeerId,
     GetSyncerInfo,
     GetPeerTrackerInfo,
@@ -67,46 +85,80 @@ pub(crate) enum SingleHeaderQuery {
     ByHeight(u64),
 }
 
+pub(crate) type WorkerResult = Result<WorkerResponse, WorkerError>;
+
 #[derive(Serialize, Deserialize, Debug, EnumAsInner)]
 pub(crate) enum WorkerResponse {
+    Ok,
     InternalPong,
-    NodeNotRunning,
+    Subscribed(#[serde(skip)] Option<MessagePortLike>),
+    PortConnected(bool),
     IsRunning(bool),
-    NodeStarted(Result<()>),
-    NodeStopped(()),
     EventsChannelName(String),
     LocalPeerId(String),
-    SyncerInfo(Result<SyncingInfo>),
+    SyncerInfo(SyncingInfo),
     PeerTrackerInfo(PeerTrackerInfo),
-    NetworkInfo(Result<NetworkInfoSnapshot>),
-    ConnectedPeers(Result<Vec<String>>),
-    SetPeerTrust(Result<()>),
-    Connected(Result<()>),
-    Listeners(Result<Vec<Multiaddr>>),
-    Header(Result<ExtendedHeader, Error>),
-    Headers(Result<Vec<ExtendedHeader>, Error>),
-    LastSeenNetworkHead(Result<Option<ExtendedHeader>, Error>),
-    SamplingMetadata(Result<Option<SamplingMetadata>>),
-    Blobs(Result<Vec<Blob>>),
+    NetworkInfo(NetworkInfoSnapshot),
+    ConnectedPeers(Vec<String>),
+    Listeners(Vec<Multiaddr>),
+    Header(ExtendedHeader),
+    Headers(Vec<ExtendedHeader>),
+    LastSeenNetworkHead(Option<ExtendedHeader>),
+    SamplingMetadata(Option<SamplingMetadata>),
+    Blobs(Vec<Blob>),
 }
 
-pub(crate) trait CheckableResponseExt {
-    type Output;
-
-    fn check_variant(self) -> Result<Self::Output, JsError>;
+#[derive(thiserror::Error, Debug, Serialize, Deserialize)]
+pub(crate) enum WorkerError {
+    /// Node is already running
+    #[error("Node already running")]
+    NodeAlreadyRunning,
+    /// Node is not running
+    #[error("Node not running")]
+    NodeNotRunning,
+    /// Empty response received, dropped responder?
+    #[error("Empty response")]
+    EmptyResponse,
+    /// Worker received unrecognised command
+    #[error("invalid command received")]
+    InvalidCommandReceived,
+    /// Received invalid response type
+    #[error("invalid response type")]
+    InvalidResponseType,
+    /// Error forwarded from Node
+    #[error("Node error: {0}")]
+    Node(String),
 }
 
-impl<T: 'static> CheckableResponseExt for Result<T, WorkerResponse> {
-    type Output = T;
+impl From<Error> for WorkerError {
+    fn from(error: Error) -> Self {
+        WorkerError::Node(error.to_string())
+    }
+}
 
-    fn check_variant(self) -> Result<Self::Output, JsError> {
-        self.map_err(|response| match response {
-            // `NodeNotRunning` is not an invalid response, it is just another type of error.
-            WorkerResponse::NodeNotRunning => JsError::new("Node is not running"),
-            response => {
-                error!("invalid response, received: {response:?}");
-                JsError::new("invalid response received for the command sent")
-            }
-        })
+pub(crate) struct CommandWithResponder {
+    pub command: Command,
+    pub responder: oneshot::Sender<WorkerResult>,
+}
+
+pub(crate) trait HasMessagePort {
+    fn take_port(&mut self) -> Option<MessagePortLike>;
+}
+
+impl HasMessagePort for Command {
+    fn take_port(&mut self) -> Option<MessagePortLike> {
+        if let Command::Management(WorkerCommand::ConnectPort(maybe_port)) = self {
+            return maybe_port.take();
+        }
+        None
+    }
+}
+
+impl HasMessagePort for WorkerResult {
+    fn take_port(&mut self) -> Option<MessagePortLike> {
+        if let Ok(WorkerResponse::Subscribed(maybe_port)) = self {
+            return maybe_port.take();
+        }
+        None
     }
 }

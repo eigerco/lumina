@@ -1,5 +1,4 @@
 use std::sync::OnceLock;
-use std::time::Duration;
 
 use anyhow::Result;
 use celestia_rpc::prelude::*;
@@ -95,10 +94,6 @@ pub async fn new_test_client_with_url(
         .maybe_auth_token(token.as_deref())
         .build()
         .await?;
-
-    while client.header_network_head().await?.height().value() < 2 {
-        lumina_utils::time::sleep(Duration::from_secs(1)).await;
-    }
 
     Ok(client)
 }

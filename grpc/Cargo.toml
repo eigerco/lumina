@@ -1,6 +1,6 @@
 [package]
 name = "celestia-grpc"
-version = "0.8.0"
+version = "0.9.0"
 edition.workspace = true
 license = "Apache-2.0"
 description = "A client for interacting with Celestia validator nodes gRPC"
@@ -28,6 +28,7 @@ celestia-proto = { workspace = true, features = ["tonic"] }
 celestia-types.workspace = true
 lumina-utils = { workspace = true, features = ["time"] }
 
+arc-swap = "1"
 async-trait = { workspace = true, optional = true }
 bytes.workspace = true
 dyn-clone = "1"

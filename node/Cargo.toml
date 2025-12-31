@@ -1,6 +1,6 @@
 [package]
 name = "lumina-node"
-version = "0.16.0"
+version = "0.17.0"
 edition.workspace = true
 license = "Apache-2.0"
 description = "Celestia data availability node implementation in Rust"
@@ -8,7 +8,7 @@ authors = ["Eiger <hello@eiger.co>"]
 homepage = "https://www.eiger.co"
 repository = "https://github.com/eigerco/lumina"
 readme = "README.md"
-rust-version = "1.87"
+rust-version = "1.88"
 # crates.io is limited to 5 keywords and 5 categories
 keywords = ["blockchain", "celestia", "lumina", "node"]
 # Must be one of <https://crates.io/category_slugs>
@@ -56,6 +56,7 @@ smallvec = { version = "1.13.2", features = [
 thiserror.workspace = true
 tokio = { workspace = true, features = ["macros", "sync"] }
 tokio-util.workspace = true
+tokio-stream = { workspace = true, features = ["sync"] }
 tracing.workspace = true
 void = "1"
 uniffi = { workspace = true, optional = true }
@@ -111,6 +112,7 @@ web-sys = { workspace = true, features = [
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 wasm-bindgen-test.workspace = true
+celestia-rpc = { workspace = true, features = ["wasm-bindgen"] }
 
 [dev-dependencies]
 celestia-rpc = { workspace = true, features = ["p2p"] }

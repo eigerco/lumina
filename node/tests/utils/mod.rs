@@ -58,11 +58,14 @@ where
 
     // Wait until node reaches height 3
     loop {
-        if let Some(head) = node.get_network_head_header().await.unwrap() {
-            if head.height().value() >= 3 {
-                break;
-            }
-        };
+        if node
+            .get_network_head_header()
+            .await
+            .unwrap()
+            .is_some_and(|head| head.height() >= 3)
+        {
+            break;
+        }
 
         sleep(Duration::from_secs(1)).await;
     }

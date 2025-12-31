@@ -664,13 +664,13 @@ mod tests {
         let mut generator = ExtendedHeaderGenerator::new();
 
         let genesis = generator.next();
-        assert_eq!(genesis.height().value(), 1);
+        assert_eq!(genesis.height(), 1);
 
         let height2 = generator.next();
-        assert_eq!(height2.height().value(), 2);
+        assert_eq!(height2.height(), 2);
 
         let another_height2 = generator.next_of(&genesis);
-        assert_eq!(another_height2.height().value(), 2);
+        assert_eq!(another_height2.height(), 2);
 
         genesis.verify(&height2).unwrap();
         genesis.verify(&another_height2).unwrap();
@@ -683,10 +683,10 @@ mod tests {
         let mut generator = ExtendedHeaderGenerator::new();
 
         let genesis = generator.next();
-        assert_eq!(genesis.height().value(), 1);
+        assert_eq!(genesis.height(), 1);
 
         let headers = generator.next_many(256);
-        assert_eq!(headers.last().unwrap().height().value(), 257);
+        assert_eq!(headers.last().unwrap().height(), 257);
 
         genesis.verify_adjacent_range(&headers).unwrap();
         genesis.verify_range(&headers[10..]).unwrap();
@@ -706,8 +706,8 @@ mod tests {
         generator.skip(3);
         let header5 = generator.next();
 
-        assert_eq!(genesis.height().value(), 1);
-        assert_eq!(header5.height().value(), 5);
+        assert_eq!(genesis.height(), 1);
+        assert_eq!(header5.height(), 5);
         genesis.verify(&header5).unwrap();
     }
 
@@ -719,8 +719,8 @@ mod tests {
         let header4 = generator.next();
         let header5 = generator.next();
 
-        assert_eq!(header4.height().value(), 4);
-        assert_eq!(header5.height().value(), 5);
+        assert_eq!(header4.height(), 4);
+        assert_eq!(header5.height(), 5);
         header4.verify(&header5).unwrap();
 
         let mut generator = ExtendedHeaderGenerator::new();
@@ -729,8 +729,8 @@ mod tests {
         let header2 = generator.next();
         let header3 = generator.next();
 
-        assert_eq!(header2.height().value(), 2);
-        assert_eq!(header3.height().value(), 3);
+        assert_eq!(header2.height(), 2);
+        assert_eq!(header3.height(), 3);
         header2.verify(&header3).unwrap();
 
         let mut generator = ExtendedHeaderGenerator::new();
@@ -739,8 +739,8 @@ mod tests {
         let genesis = generator.next();
         let header2 = generator.next();
 
-        assert_eq!(genesis.height().value(), 1);
-        assert_eq!(header2.height().value(), 2);
+        assert_eq!(genesis.height(), 1);
+        assert_eq!(header2.height(), 2);
         genesis.verify(&header2).unwrap();
     }
 
@@ -748,15 +748,15 @@ mod tests {
     fn new_from_height() {
         let mut generator = ExtendedHeaderGenerator::new_from_height(5);
         let header5 = generator.next();
-        assert_eq!(header5.height().value(), 5);
+        assert_eq!(header5.height(), 5);
 
         let mut generator = ExtendedHeaderGenerator::new_from_height(1);
         let header1 = generator.next();
-        assert_eq!(header1.height().value(), 1);
+        assert_eq!(header1.height(), 1);
 
         let mut generator = ExtendedHeaderGenerator::new_from_height(0);
         let header1 = generator.next();
-        assert_eq!(header1.height().value(), 1);
+        assert_eq!(header1.height(), 1);
     }
 
     #[test]
@@ -771,8 +771,8 @@ mod tests {
         header5.verify(&header6).unwrap();
         header5.verify(&another_header6).unwrap();
 
-        assert_eq!(header6.height().value(), 6);
-        assert_eq!(another_header6.height().value(), 6);
+        assert_eq!(header6.height(), 6);
+        assert_eq!(another_header6.height(), 6);
         assert_ne!(header6.hash(), another_header6.hash());
     }
 
@@ -791,8 +791,8 @@ mod tests {
             .unwrap();
 
         assert_eq!(another_header_6_to_10.len(), 5);
-        assert_eq!(header6.height().value(), 6);
-        assert_eq!(another_header_6_to_10[0].height().value(), 6);
+        assert_eq!(header6.height(), 6);
+        assert_eq!(another_header_6_to_10[0].height(), 6);
         assert_ne!(header6.hash(), another_header_6_to_10[0].hash());
     }
 
@@ -812,8 +812,8 @@ mod tests {
             .unwrap();
 
         assert_eq!(another_header_6_to_10.len(), 5);
-        assert_eq!(header6.height().value(), 6);
-        assert_eq!(another_header_6_to_10[0].height().value(), 6);
+        assert_eq!(header6.height(), 6);
+        assert_eq!(another_header_6_to_10[0].height(), 6);
         assert_ne!(header6.hash(), another_header_6_to_10[0].hash());
     }
 

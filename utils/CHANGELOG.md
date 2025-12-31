@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0](https://github.com/eigerco/lumina/compare/lumina-utils-v0.4.0...lumina-utils-v0.5.0) - 2025-11-19
+
+### Added
+
+- *(utils)* [**breaking**] Make `Interval::new` sync constructor ([#799](https://github.com/eigerco/lumina/pull/799))
+- *(client,grpc)* [**breaking**] expose more tls config options, error if tls is not supported ([#796](https://github.com/eigerco/lumina/pull/796))
+
+### Other
+
+- [**breaking**] Migrate to Rust 2024 ([#773](https://github.com/eigerco/lumina/pull/773))
+
 ## [0.4.0](https://github.com/eigerco/lumina/compare/lumina-utils-v0.3.0...lumina-utils-v0.4.0) - 2025-09-25
 
 ### Added

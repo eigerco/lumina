@@ -20,6 +20,13 @@ CREDENTIALS_DIR="/credentials"
 GENESIS_DIR="/genesis"
 GENESIS_HASH_FILE="$GENESIS_DIR/genesis-hash-$P2P_NETWORK"
 
+# only let one of validators to create keys, to avoid races
+if [ "$P2P_NETWORK" = "private" ]; then
+  CAN_CREATE_KEYS="true"
+else
+  CAN_CREATE_KEYS="false"
+fi
+
 # Get the address of the node of given name
 node_address() {
   local node_name="$1"
@@ -58,8 +65,13 @@ create_or_import_key() {
   local acc_addr_file="$CREDENTIALS_DIR/$node_name.addr"
   local val_addr_file="$CREDENTIALS_DIR/$node_name.valaddr"
 
-  if [ ! -e "$key_file" ]; then
-    # if key don't exist yet, then create and export it
+  if [ "$CAN_CREATE_KEYS" = false ]; then
+    # wait for key to be created
+    while [ ! -e "$key_file" ]; do
+      sleep 0.1
+    done
+  elif [ ! -e "$key_file" ]; then
+    # if key doesn't exist yet, then create and export it
     echo "Creating a new key for the $node_name"
     celestia-appd keys add "$node_name" --keyring-backend "test"
     # export it
@@ -76,11 +88,13 @@ create_or_import_key() {
     if [[ "$node_name" == validator-* ]]; then
       node_address "$node_name" "val" > "$val_addr_file"
     fi
-  else
-    # otherwise, just import it
-    echo "password" | celestia-appd keys import "$node_name" "$key_file" \
-      --keyring-backend "test"
+
+    return 0
   fi
+
+  # otherwise, just import it
+  echo "password" | celestia-appd keys import "$node_name" "$key_file" \
+    --keyring-backend "test"
 }
 
 # Saves the hash of the genesis node and the keys funded with the coins
@@ -88,42 +102,32 @@ create_or_import_key() {
 provision_da_nodes() {
   local genesis_hash
   local last_node_idx=$((NODE_COUNT - 1))
-
-  # Import or create the keys for DA nodes
-  for node_idx in $(seq 0 "$last_node_idx"); do
-    create_or_import_key "node-$node_idx"
-  done
-
-  # Transfer the coins to DA nodes addresses
-  # Coins transfer need to be after validator registers EVM address, which happens in block 2.
-  # see `setup_private_validator`
-  local start_block=3
-
-  for node_idx in $(seq 0 "$last_node_idx"); do
-    # TODO: create an issue in celestia-app and link it here
-    # we need to transfer the coins for each node in separate
-    # block, or the signing of all but the first one will fail
-    wait_for_block $((start_block + node_idx))
-
-    local node_name="node-$node_idx"
-    local peer_addr
-
-    peer_addr=$(node_address "$node_name")
-
-    echo "Transfering $NODE_COINS coins to the $node_name"
-    echo "y" | celestia-appd tx bank send \
-      "$NODE_NAME" \
-      "$peer_addr" \
-      "$NODE_COINS" \
-      --fees 21000utia \
-      --keyring-backend "test" \
-      --chain-id "$P2P_NETWORK"
-  done
+  local addresses=()
 
   # Save the genesis hash for the DA node
   genesis_hash=$(wait_for_block 1)
   echo "Saving a genesis hash to $GENESIS_HASH_FILE"
   echo "$genesis_hash" > "$GENESIS_HASH_FILE"
+
+  # Import or create the keys for DA nodes and collect their addresses
+  for node_idx in $(seq 0 "$last_node_idx"); do
+    create_or_import_key "node-$node_idx"
+    addresses+=("$(node_address "node-$node_idx")")
+  done
+
+  # Transfer the coins to DA nodes addresses
+  # Coins transfer need to be after validator registers EVM address, which happens in block 2.
+  # see `setup_private_validator`
+  wait_for_block 3
+
+  echo "Transfering $NODE_COINS coins to DA nodes"
+  echo "y" | celestia-appd tx bank multi-send \
+    "$NODE_NAME" \
+    "${addresses[@]}" \
+    "$NODE_COINS" \
+    --fees 21000utia \
+    --keyring-backend "test" \
+    --chain-id "$P2P_NETWORK"
 
   echo "Provisioning finished."
 }
@@ -165,6 +169,10 @@ setup_private_validator() {
   if [ -n "${BLOCK_SIZE:-""}" ]; then
     dasel put -f "$CONFIG_DIR/config/genesis.json" -t string -v "${BLOCK_SIZE}" consensus.params.block.max_bytes
   fi
+  # Optionally, configure the square size
+  if [ -n "${SQUARE_SIZE:-""}" ]; then
+    dasel put -f "$CONFIG_DIR/config/genesis.json" -t string -v "${SQUARE_SIZE}" app_state.blob.params.gov_max_square_size
+  fi
   # Optionally, configure the transactions ttl in mempool
   if [ -n "${MEMPOOL_TX_TTL:-""}" ]; then
     dasel put -f "$CONFIG_DIR/config/config.toml" -t int -v "${MEMPOOL_TX_TTL}" mempool.ttl-num-blocks
@@ -185,12 +193,22 @@ main() {
   # Spawn a job to provision a bridge node later
   provision_da_nodes &
 
-  # Start the celestia-app
+  # celestia-appd overrides quite a few settings if they
+  # are not within a sane range for regular deployment.
+  # we need to bypass that if we want e.g. crazy low ttl
+  local extra_flags=()
+  if [ -n "${MEMPOOL_TX_TTL:-""}" ]; then
+    extra_flags+=(--bypass-config-overrides)
+  fi
+
+  # Start the celestia-app, with 500ms block time
   echo "Configuration finished. Running a validator node..."
   celestia-appd start \
     --api.enable \
     --grpc.enable \
-    --force-no-bbr
+    --force-no-bbr \
+    --delayed-precommit-timeout 500ms \
+    "${extra_flags[@]}"
 }
 
 main

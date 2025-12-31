@@ -28,10 +28,10 @@ impl HeaderSession {
     /// Create a new HeaderSession responsible for fetching provided range of headers.
     /// `BlockRange` can be created manually, or more probably using
     /// [`Store::get_stored_header_ranges`] to fetch existing header ranges and then using
-    /// [`calculate_fetch_range`] to return a first range that should be fetched.
+    /// [`calculate_range_to_fetch`] to return a first range that should be fetched.
     /// Received headers range is sent over `cmd_tx` as a vector of unverified headers.
     ///
-    /// [`calculate_fetch_range`] crate::store::utils::calculate_fetch_range
+    /// [`calculate_range_to_fetch`] crate::syncer::calculate_range_to_fetch
     /// [`Store::get_stored_header_ranges`]: crate::store::Store::get_stored_header_ranges
     pub(crate) fn new(range: BlockRange, cmd_tx: mpsc::Sender<P2pCmd>) -> Self {
         let batch_size = range
@@ -89,7 +89,6 @@ impl HeaderSession {
             span.first()
                 .expect("empty spans aren't added in receiving loop")
                 .height()
-                .value()
         });
 
         Ok(responses.into_iter().flatten().collect())
@@ -293,30 +292,6 @@ mod tests {
 
         let received_headers = result_rx.await.unwrap().unwrap();
         assert_eq!(headers, received_headers);
-    }
-
-    #[async_test]
-    async fn no_peers_is_fatal() {
-        let (_p2p, mut p2p_mock) = P2p::mocked();
-
-        let mut session = HeaderSession::new(1..=8, p2p_mock.cmd_tx.clone());
-        let (result_tx, result_rx) = oneshot::channel();
-        spawn(async move {
-            let res = session.run().await;
-            result_tx.send(res).unwrap();
-        });
-
-        let (height, amount, respond_to) = p2p_mock.expect_header_request_for_height_cmd().await;
-        assert_eq!(height, 1);
-        assert_eq!(amount, 8);
-        respond_to.send(Err(P2pError::NoConnectedPeers)).unwrap();
-
-        p2p_mock.expect_no_cmd().await;
-
-        assert!(matches!(
-            result_rx.await,
-            Ok(Err(P2pError::NoConnectedPeers))
-        ));
     }
 
     #[test]

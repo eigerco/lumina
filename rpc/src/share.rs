@@ -7,7 +7,7 @@ use celestia_types::consts::appconsts::AppVersion;
 use celestia_types::nmt::Namespace;
 use celestia_types::row_namespace_data::NamespaceData;
 use celestia_types::sample::{RawSample, Sample, SampleId};
-use celestia_types::{ExtendedDataSquare, ExtendedHeader, RawShare, Share, ShareProof};
+use celestia_types::{ExtendedDataSquare, RawShare, Share, ShareProof};
 use jsonrpsee::core::client::{ClientT, Error};
 use jsonrpsee::proc_macros::rpc;
 use serde::{Deserialize, Serialize};
@@ -101,10 +101,10 @@ mod rpc {
         ) -> Result<Vec<RawSample>, Error>;
 
         #[method(name = "GetRow")]
-        async fn share_get_row(&self, height: u64, row: u64) -> Result<RawGetRowResponse, Error>;
+        async fn share_get_row(&self, height: u64, row: u16) -> Result<RawGetRowResponse, Error>;
 
         #[method(name = "GetShare")]
-        async fn share_get_share(&self, height: u64, row: u64, col: u64)
+        async fn share_get_share(&self, height: u64, row: u16, col: u16)
         -> Result<RawShare, Error>;
 
         #[method(name = "GetNamespaceData")]
@@ -120,31 +120,21 @@ mod rpc {
 }
 
 /// Client implementation for the `Share` RPC API.
-///
-/// Please note that celestia-node requires just the block height for most of those API's.
-/// This trait instead requires [`ExtendedHeader`] to perform validation of the returned types.
-// NOTE: we use EH wherever Share is returned because it's gonna be required in future
-// to check if shares are allowed to have version 1 in corresponding app version
 pub trait ShareClient: ClientT {
-    /// GetEDS gets the full EDS identified by the given root.
-    fn share_get_eds<'a, 'b, 'fut>(
+    /// GetEDS gets the full EDS identified at the specified height.
+    ///
+    /// [`AppVersion`] is required for proper verification.
+    fn share_get_eds<'a, 'fut>(
         &'a self,
-        root: &'b ExtendedHeader,
+        height: u64,
+        app_version: AppVersion,
     ) -> impl Future<Output = Result<ExtendedDataSquare, Error>> + Send + 'fut
     where
         'a: 'fut,
-        'b: 'fut,
         Self: Sized + Sync + 'fut,
     {
         async move {
-            let app_version = root.header.version.app;
-            let app_version = AppVersion::from_u64(app_version).ok_or_else(|| {
-                let e = format!("Invalid or unsupported AppVersion: {app_version}");
-                Error::Custom(e)
-            })?;
-
-            let raw_eds = rpc::ShareClient::share_get_eds(self, root.height().value()).await?;
-
+            let raw_eds = rpc::ShareClient::share_get_eds(self, height).await?;
             // Correct `Share` construction and validation is done inside `ExtendedDataSquare::from_raw`
             ExtendedDataSquare::from_raw(raw_eds, app_version).map_err(custom_client_error)
         }
@@ -153,42 +143,41 @@ pub trait ShareClient: ClientT {
     /// Retrieves a list of shares and their corresponding proof.
     ///
     /// The start and end index ignores parity shares and corresponds to ODS.
-    fn share_get_range<'a, 'b, 'fut>(
+    ///
+    /// [`AppVersion`] is required for the shares verification.
+    fn share_get_range<'a, 'fut>(
         &'a self,
-        root: &'b ExtendedHeader,
+        height: u64,
+        app_version: AppVersion,
         start: u64,
         end: u64,
     ) -> impl Future<Output = Result<GetRangeResponse, Error>> + Send + 'fut
     where
         'a: 'fut,
-        'b: 'fut,
         Self: Sized + Sync + 'fut,
     {
         async move {
-            let resp =
-                rpc::ShareClient::share_get_range(self, root.height().value(), start, end).await?;
+            let resp = rpc::ShareClient::share_get_range(self, height, start, end).await?;
 
-            let app = root.app_version().map_err(custom_client_error)?;
             for share in &resp.shares {
-                share.validate(app).map_err(custom_client_error)?;
+                share.validate(app_version).map_err(custom_client_error)?;
             }
 
             Ok(resp)
         }
     }
-
-    /// Retrieves multiple shares from the [`ExtendedDataSquare`] specified by the header
+    /// Retrieves multiple shares from the [`ExtendedDataSquare`] at the given height
     /// at the given sample coordinates.
     ///
     /// `coordinates` is a list of `(row, column)`.
-    fn share_get_samples<'a, 'b, 'fut, I, C>(
+    fn share_get_samples<'a, 'fut, I, C>(
         &'a self,
-        root: &'b ExtendedHeader,
+        height: u64,
+        app_version: AppVersion,
         coordinates: I,
     ) -> impl Future<Output = Result<Vec<Sample>, Error>> + Send + 'fut
     where
         'a: 'fut,
-        'b: 'fut,
         Self: Sized + Sync + 'fut,
         I: IntoIterator<Item = C>,
         C: Into<SampleCoordinates>,
@@ -199,9 +188,6 @@ pub trait ShareClient: ClientT {
             .collect::<Vec<_>>();
 
         async move {
-            let app = root.app_version().map_err(custom_client_error)?;
-            let height = root.height().value();
-
             let raw_samples =
                 rpc::ShareClient::share_get_samples(self, height, &coordinates).await?;
             let mut samples = Vec::with_capacity(raw_samples.len());
@@ -213,7 +199,10 @@ pub trait ShareClient: ClientT {
                 // Correct `Share` construction is done inside `Sample::from_raw`
                 let sample =
                     Sample::from_raw(sample_id, raw_sample).map_err(custom_client_error)?;
-                sample.share.validate(app).map_err(custom_client_error)?;
+                sample
+                    .share
+                    .validate(app_version)
+                    .map_err(custom_client_error)?;
 
                 samples.push(sample);
             }
@@ -223,20 +212,19 @@ pub trait ShareClient: ClientT {
     }
 
     /// GetShare gets the list of shares in a single row.
-    fn share_get_row<'a, 'b, 'fut>(
+    fn share_get_row<'a, 'fut>(
         &'a self,
-        root: &'b ExtendedHeader,
-        row: u64,
+        height: u64,
+        app_version: AppVersion,
+        square_width: u16,
+        row: u16,
     ) -> impl Future<Output = Result<GetRowResponse, Error>> + Send + 'fut
     where
         'a: 'fut,
-        'b: 'fut,
         Self: Sized + Sync + 'fut,
     {
         async move {
-            let app = root.app_version().map_err(custom_client_error)?;
-            let square_width = root.dah.square_width();
-            let resp = rpc::ShareClient::share_get_row(self, root.height().value(), row).await?;
+            let resp = rpc::ShareClient::share_get_row(self, height, row).await?;
 
             let expected_len = match resp.side {
                 RowSide::Left | RowSide::Right => square_width / 2,
@@ -264,14 +252,14 @@ pub trait ShareClient: ClientT {
                         RowSide::Right => (square_width / 2) + relative_col,
                     };
 
-                    let share = if is_ods_square(row, col.into(), square_width) {
+                    let share = if is_ods_square(row, col, square_width) {
                         Share::from_raw(&raw_share.data)
                     } else {
                         Share::parity(&raw_share.data)
                     }
                     .map_err(custom_client_error)?;
 
-                    share.validate(app).map_err(custom_client_error)?;
+                    share.validate(app_version).map_err(custom_client_error)?;
 
                     Ok(share)
                 })
@@ -285,29 +273,28 @@ pub trait ShareClient: ClientT {
     }
 
     /// GetShare gets a Share by coordinates in EDS.
-    fn share_get_share<'a, 'b, 'fut>(
+    fn share_get_share<'a, 'fut>(
         &'a self,
-        root: &'b ExtendedHeader,
-        row: u64,
-        col: u64,
+        height: u64,
+        app_version: AppVersion,
+        square_width: u16,
+        row: u16,
+        col: u16,
     ) -> impl Future<Output = Result<Share, Error>> + Send + 'fut
     where
         'a: 'fut,
-        'b: 'fut,
         Self: Sized + Sync + 'fut,
     {
         async move {
-            let share =
-                rpc::ShareClient::share_get_share(self, root.height().value(), row, col).await?;
-            let share = if is_ods_square(row, col, root.dah.square_width()) {
+            let share = rpc::ShareClient::share_get_share(self, height, row, col).await?;
+            let share = if is_ods_square(row, col, square_width) {
                 Share::from_raw(&share.data)
             } else {
                 Share::parity(&share.data)
             }
             .map_err(custom_client_error)?;
 
-            let app = root.app_version().map_err(custom_client_error)?;
-            share.validate(app).map_err(custom_client_error)?;
+            share.validate(app_version).map_err(custom_client_error)?;
 
             Ok(share)
         }
@@ -318,24 +305,22 @@ pub trait ShareClient: ClientT {
     /// Shares are returned in a row-by-row order if the namespace spans multiple rows.
     ///
     /// PARITY and TAIL PADDING namespaces are not allowed.
-    fn share_get_namespace_data<'a, 'b, 'fut>(
+    fn share_get_namespace_data<'a, 'fut>(
         &'a self,
-        root: &'b ExtendedHeader,
+        height: u64,
+        app_version: AppVersion,
         namespace: Namespace,
     ) -> impl Future<Output = Result<NamespaceData, Error>> + Send + 'fut
     where
         'a: 'fut,
-        'b: 'fut,
         Self: Sized + Sync + 'fut,
     {
         async move {
             let ns_data =
-                rpc::ShareClient::share_get_namespace_data(self, root.height().value(), namespace)
-                    .await?;
+                rpc::ShareClient::share_get_namespace_data(self, height, namespace).await?;
 
-            let app = root.app_version().map_err(custom_client_error)?;
             for shr in ns_data.rows.iter().flat_map(|row| &row.shares) {
-                shr.validate(app).map_err(custom_client_error)?;
+                shr.validate(app_version).map_err(custom_client_error)?;
             }
 
             Ok(ns_data)
@@ -357,7 +342,7 @@ pub trait ShareClient: ClientT {
 
 impl<T> ShareClient for T where T: ClientT {}
 
-fn is_ods_square(row: u64, column: u64, square_width: u16) -> bool {
+fn is_ods_square(row: u16, column: u16, square_width: u16) -> bool {
     let ods_width = square_width / 2;
-    row < ods_width as u64 && column < ods_width as u64
+    row < ods_width && column < ods_width
 }

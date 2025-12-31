@@ -136,6 +136,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b0674a1ddeecb70197781e945de4b3b8ffb61fa939a5597bcf48503737663100"
 
 [[package]]
+name = "arc-swap"
+version = "1.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "69f7f8c3906b62b754cd5326047894316021dcfe5a194c8ea52bdd94934a3457"
+
+[[package]]
 name = "arrayref"
 version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -790,7 +796,7 @@ dependencies = [
 
 [[package]]
 name = "celestia-client"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "async-stream",
  "blockstore",
@@ -822,8 +828,9 @@ dependencies = [
 
 [[package]]
 name = "celestia-grpc"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
+ "arc-swap",
  "async-trait",
  "bytes",
  "celestia-grpc-macros",
@@ -864,7 +871,7 @@ dependencies = [
 
 [[package]]
 name = "celestia-grpc-macros"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -873,7 +880,7 @@ dependencies = [
 
 [[package]]
 name = "celestia-proto"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "bytes",
  "prost",
@@ -893,7 +900,7 @@ dependencies = [
 
 [[package]]
 name = "celestia-rpc"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -926,7 +933,7 @@ dependencies = [
 
 [[package]]
 name = "celestia-types"
-version = "0.16.0"
+version = "0.17.0"
 dependencies = [
  "base64 0.22.1",
  "bech32",
@@ -2545,9 +2552,12 @@ dependencies = [
 
 [[package]]
 name = "indoc"
-version = "2.0.6"
+version = "2.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f4c7245a08504955605670dbf141fceab975f15ca21570696aebe9d2e71576bd"
+checksum = "79cf5c93f93228cf8efb3ba362535fb11199ac548a09ce117c9b1adc3030d706"
+dependencies = [
+ "rustversion",
+]
 
 [[package]]
 name = "informalsystems-pbjson"
@@ -3479,7 +3489,7 @@ checksum = "112b39cec0b298b6c1999fee3e31427f74f676e4cb9879ed1a121b43661a4154"
 
 [[package]]
 name = "lumina-cli"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -3504,7 +3514,7 @@ dependencies = [
 
 [[package]]
 name = "lumina-node"
-version = "0.16.0"
+version = "0.17.0"
 dependencies = [
  "async-trait",
  "backoff",
@@ -3544,6 +3554,7 @@ dependencies = [
  "tendermint-proto",
  "thiserror 2.0.16",
  "tokio",
+ "tokio-stream",
  "tokio-util",
  "tracing",
  "uniffi",
@@ -3556,13 +3567,14 @@ dependencies = [
 
 [[package]]
 name = "lumina-node-uniffi"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "async-trait",
  "blockstore",
  "celestia-grpc",
  "celestia-proto",
  "celestia-types",
+ "futures",
  "k256",
  "libp2p",
  "lumina-node",
@@ -3571,13 +3583,14 @@ dependencies = [
  "tendermint",
  "thiserror 2.0.16",
  "tokio",
+ "tokio-stream",
  "tonic",
  "uniffi",
 ]
 
 [[package]]
 name = "lumina-node-wasm"
-version = "0.11.0"
+version = "0.12.0"
 dependencies = [
  "anyhow",
  "blockstore",
@@ -3616,7 +3629,7 @@ dependencies = [
 
 [[package]]
 name = "lumina-utils"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "futures",
  "gloo-timers 0.3.0",

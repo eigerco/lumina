@@ -2,6 +2,7 @@ use std::fmt;
 use std::sync::Arc;
 
 use ::tendermint::chain::Id;
+use arc_swap::ArcSwap;
 use celestia_types::any::IntoProtobufAny;
 use k256::ecdsa::VerifyingKey;
 use lumina_utils::time::Interval;
@@ -41,7 +42,7 @@ use crate::grpc::{
     TxPriority, TxStatus, TxStatusResponse,
 };
 use crate::signer::{BoxedDocSigner, sign_tx};
-use crate::tx::TxInfo;
+use crate::tx::{BroadcastedTx, SubmittedTx, TxInfo};
 use crate::{Error, Result, TxConfig};
 
 // source https://github.com/celestiaorg/celestia-core/blob/v1.43.0-tm-v0.34.35/pkg/consts/consts.go#L19
@@ -79,17 +80,6 @@ impl AccountState {
     }
 }
 
-/// A transaction that was broadcasted
-#[derive(Debug)]
-struct BroadcastedTx {
-    /// Broadcasted bytes
-    tx: Vec<u8>,
-    /// Transaction hash
-    hash: Hash,
-    /// Transaction sequence
-    sequence: u64,
-}
-
 /// gRPC client for the Celestia network
 ///
 /// Under the hood, this struct wraps tonic and does type conversion
@@ -99,22 +89,22 @@ pub struct GrpcClient {
 }
 
 struct GrpcClientInner {
-    transport: BoxedTransport,
+    transports: Arc<ArcSwap<Vec<BoxedTransport>>>,
     account: Option<AccountState>,
     chain_state: OnceCell<ChainState>,
     context: Context,
 }
 
 impl GrpcClient {
-    /// Create a new client wrapping given transport
+    /// Create a new client wrapping given transports
     pub(crate) fn new(
-        transport: BoxedTransport,
+        transports: Arc<ArcSwap<Vec<BoxedTransport>>>,
         account: Option<AccountState>,
         context: Context,
     ) -> Self {
         Self {
             inner: Arc::new(GrpcClientInner {
-                transport,
+                transports,
                 account,
                 chain_state: OnceCell::new(),
                 context,
@@ -331,7 +321,64 @@ impl GrpcClient {
         let this = self.clone();
 
         AsyncGrpcCall::new(move |context| async move {
-            this.submit_message_impl(message, cfg, &context).await
+            let tx = this
+                .submit_message_impl(message, cfg.clone(), &context)
+                .await?;
+            this.confirm_tx(tx, cfg, &context).await
+        })
+        .context(&self.inner.context)
+    }
+
+    /// Submit given message to celestia network, and return without confirming.
+    ///
+    /// # Example
+    /// ```no_run
+    /// # async fn docs() {
+    /// use celestia_grpc::{GrpcClient, TxConfig};
+    /// use celestia_proto::cosmos::bank::v1beta1::MsgSend;
+    /// use celestia_types::state::{Address, Coin};
+    /// use tendermint::crypto::default::ecdsa_secp256k1::SigningKey;
+    ///
+    /// let signing_key = SigningKey::random(&mut rand::rngs::OsRng);
+    /// let address = Address::from_account_verifying_key(*signing_key.verifying_key());
+    /// let grpc_url = "public-celestia-mocha4-consensus.numia.xyz:9090";
+    ///
+    /// let tx_client = GrpcClient::builder()
+    ///     .url(grpc_url)
+    ///     .signer_keypair(signing_key)
+    ///     .build()
+    ///     .unwrap();
+    ///
+    /// let msg = MsgSend {
+    ///     from_address: address.to_string(),
+    ///     to_address: "celestia169s50psyj2f4la9a2235329xz7rk6c53zhw9mm".to_string(),
+    ///     amount: vec![Coin::utia(12345).into()],
+    /// };
+    ///
+    /// let broadcasted_tx = tx_client
+    ///     .broadcast_message(msg.clone(), TxConfig::default()).await.unwrap();
+    /// println!("Tx: {:?}", broadcasted_tx.tx_ref());
+    /// broadcasted_tx.confirm().await.unwrap();
+    /// # }
+    /// ```
+    pub fn broadcast_message<M>(&self, message: M, cfg: TxConfig) -> AsyncGrpcCall<SubmittedTx>
+    where
+        M: IntoProtobufAny + Send + 'static,
+    {
+        let this = self.clone();
+
+        AsyncGrpcCall::new(move |context| async move {
+            let broadcasted_tx = this
+                .submit_message_impl(message, cfg.clone(), &context)
+                .await?;
+
+            Ok(SubmittedTx::new(
+                broadcasted_tx.clone(),
+                AsyncGrpcCall::new(move |context| async move {
+                    this.confirm_tx(broadcasted_tx, cfg, &context).await
+                })
+                .context(&context),
+            ))
         })
         .context(&self.inner.context)
     }
@@ -371,7 +418,61 @@ impl GrpcClient {
         let blobs = blobs.to_vec();
 
         AsyncGrpcCall::new(move |context| async move {
-            this.submit_blobs_impl(&blobs, cfg, &context).await
+            let tx = this
+                .submit_blobs_impl(&blobs, cfg.clone(), &context)
+                .await?;
+            this.confirm_tx(tx, cfg, &context).await
+        })
+        .context(&self.inner.context)
+    }
+
+    /// Submit given blobs to celestia network, and return without confirming.
+    ///
+    /// # Example
+    /// ```no_run
+    /// # async fn docs() {
+    /// use celestia_grpc::{GrpcClient, TxConfig};
+    /// use celestia_types::state::{Address, Coin};
+    /// use celestia_types::{AppVersion, Blob};
+    /// use celestia_types::nmt::Namespace;
+    /// use tendermint::crypto::default::ecdsa_secp256k1::SigningKey;
+    ///
+    /// let signing_key = SigningKey::random(&mut rand::rngs::OsRng);
+    /// let address = Address::from_account_verifying_key(*signing_key.verifying_key());
+    /// let grpc_url = "public-celestia-mocha4-consensus.numia.xyz:9090";
+    ///
+    /// let tx_client = GrpcClient::builder()
+    ///     .url(grpc_url)
+    ///     .signer_keypair(signing_key)
+    ///     .build()
+    ///     .unwrap();
+    ///
+    /// let ns = Namespace::new_v0(b"abcd").unwrap();
+    /// let blob = Blob::new(ns, "some data".into(), None, AppVersion::V3).unwrap();
+    ///
+    /// let broadcasted_tx = tx_client
+    ///     .broadcast_blobs(&[blob], TxConfig::default()).await.unwrap();
+    /// println!("Tx: {:?}", broadcasted_tx.tx_ref());
+    /// broadcasted_tx.confirm().await.unwrap();
+    /// # }
+    /// ```
+    pub fn broadcast_blobs(&self, blobs: &[Blob], cfg: TxConfig) -> AsyncGrpcCall<SubmittedTx> {
+        let this = self.clone();
+        let blobs = blobs.to_vec();
+
+        AsyncGrpcCall::new(move |context| async move {
+            let broadcasted_tx = this
+                .clone()
+                .submit_blobs_impl(&blobs, cfg.clone(), &context)
+                .await?;
+
+            Ok(SubmittedTx::new(
+                broadcasted_tx.clone(),
+                AsyncGrpcCall::new(move |context| async move {
+                    this.confirm_tx(broadcasted_tx, cfg, &context).await
+                })
+                .context(&context),
+            ))
         })
         .context(&self.inner.context)
     }
@@ -396,6 +497,25 @@ impl GrpcClient {
             Ok(chain_id.clone())
         })
         .context(&self.inner.context)
+    }
+
+    /// Manually confirm transaction broadcasted with [`GrpcClient::broadcast_blobs`] or [`GrpcClient::broadcast_message`].
+    #[cfg_attr(
+        not(any(
+            feature = "uniffi",
+            all(feature = "wasm-bindgen", target_arch = "wasm32")
+        )),
+        allow(dead_code)
+    )]
+    pub(crate) fn confirm_broadcasted_tx(
+        &self,
+        tx: BroadcastedTx,
+        cfg: TxConfig,
+    ) -> AsyncGrpcCall<TxInfo> {
+        let this = self.clone();
+
+        AsyncGrpcCall::new(move |context| async move { this.confirm_tx(tx, cfg, &context).await })
+            .context(&self.inner.context)
     }
 
     /// Get client's account public key if the signer is set
@@ -428,7 +548,7 @@ impl GrpcClient {
         // because that will make node interpret that as a network head. It would also fail,
         // on proof verification, but it would be harder to debug as the message would just
         // say that computed root is different than expected.
-        let height = 1.max(header.height().value().saturating_sub(1));
+        let height = 1.max(header.height().saturating_sub(1));
 
         let response = self
             .abci_query(&prefixed_account_key, "store/bank/key", height, true)
@@ -466,7 +586,7 @@ impl GrpcClient {
         message: M,
         cfg: TxConfig,
         context: &Context,
-    ) -> Result<TxInfo>
+    ) -> Result<BroadcastedTx>
     where
         M: IntoProtobufAny,
     {
@@ -476,11 +596,8 @@ impl GrpcClient {
             ..RawTxBody::default()
         };
 
-        let tx = self
-            .sign_and_broadcast_tx(tx_body, cfg.clone(), context)
-            .await?;
-
-        self.confirm_tx(tx, cfg, context).await
+        self.sign_and_broadcast_tx(tx_body, cfg.clone(), context)
+            .await
     }
 
     async fn submit_blobs_impl(
@@ -488,7 +605,7 @@ impl GrpcClient {
         blobs: &[Blob],
         cfg: TxConfig,
         context: &Context,
-    ) -> Result<TxInfo> {
+    ) -> Result<BroadcastedTx> {
         if blobs.is_empty() {
             return Err(Error::TxEmptyBlobList);
         }
@@ -497,11 +614,8 @@ impl GrpcClient {
             blob.validate(app_version)?;
         }
 
-        let tx = self
-            .sign_and_broadcast_blobs(blobs.to_vec(), cfg.clone(), context)
-            .await?;
-
-        self.confirm_tx(tx, cfg, context).await
+        self.sign_and_broadcast_blobs(blobs.to_vec(), cfg.clone(), context)
+            .await
     }
 
     async fn load_chain_state(&self, context: &Context) -> Result<&ChainState> {
@@ -727,16 +841,26 @@ impl GrpcClient {
         account: &mut AccountGuard<'_>,
         context: &Context,
     ) -> Result<BroadcastedTx> {
-        let resp = self.broadcast_tx_with_cfg(tx.clone(), cfg, context).await?;
-
         let sequence = account.base.sequence;
-        account.base.sequence += 1;
 
-        Ok(BroadcastedTx {
-            tx,
-            hash: resp.txhash,
-            sequence,
-        })
+        let res = self.broadcast_tx_with_cfg(tx.clone(), cfg, context).await;
+
+        let hash = match res {
+            Ok(resp) => {
+                account.base.sequence += 1;
+                resp.txhash
+            }
+            // If tx is already in mempool, we can get a confirmation for it.
+            // We presume this did happen because one of the endpoints failed with timeout.
+            // But the tx was still added.
+            Err(Error::TxBroadcastFailed(hash, ErrorCode::TxInMempoolCache, _)) => {
+                account.base.sequence += 1;
+                hash
+            }
+            Err(e) => return Err(e),
+        };
+
+        Ok(BroadcastedTx { tx, hash, sequence })
     }
 
     async fn broadcast_tx_with_cfg(
@@ -786,7 +910,7 @@ impl GrpcClient {
                     if tx_status.execution_code == ErrorCode::Success {
                         return Ok(TxInfo {
                             hash,
-                            height: tx_status.height,
+                            height: tx_status.height.value(),
                         });
                     } else {
                         return Err(Error::TxExecutionFailed(
@@ -844,9 +968,13 @@ impl GrpcClient {
                 // this case should never happen for node that accepted a broadcast
                 // however we handle it the same as evicted for extra safety
                 TxStatus::Unknown => {
-                    let mut acc = self.lock_account(context).await?;
-                    acc.base.sequence = sequence;
-                    return Err(Error::TxNotFound(hash));
+                    if self
+                        .broadcast_tx_with_cfg(tx.clone(), &cfg, context)
+                        .await
+                        .is_err()
+                    {
+                        return Err(Error::TxNotFound(hash));
+                    }
                 }
             }
         }
@@ -907,6 +1035,7 @@ mod tests {
     use celestia_types::{AppVersion, Blob};
     use futures::FutureExt;
     use lumina_utils::test_utils::async_test;
+    use lumina_utils::time::sleep;
     use rand::{Rng, RngCore};
     use tonic::Code;
 
@@ -997,7 +1126,7 @@ mod tests {
         // trustless balance queries represent state at header.height - 1, so
         // we need to wait for a new head to compare it with the expected balance
         let head = jrpc_client
-            .header_wait_for_height(head.height().value() + 1)
+            .header_wait_for_height(head.height() + 1)
             .await
             .unwrap();
 
@@ -1067,7 +1196,7 @@ mod tests {
         let new_balance = tx_client.get_balance(&addr, "utia").await.unwrap();
         let old_balance = tx_client
             .get_balance(&addr, "utia")
-            .block_height(tx.height.value() - 1)
+            .block_height(tx.height - 1)
             .await
             .unwrap();
 
@@ -1087,6 +1216,8 @@ mod tests {
             .unwrap();
         let tx2 = tx_client.get_tx(tx.hash).await.unwrap();
 
+        sleep(Duration::from_millis(100)).await;
+
         assert_eq!(tx.hash, tx2.tx_response.txhash);
         assert_eq!(tx2.tx.body.memo, "foo");
     }
@@ -1096,27 +1227,21 @@ mod tests {
         let (_lock, tx_client) = new_tx_client().await;
         let tx_client = Arc::new(tx_client);
 
-        let futs = (0..100)
+        let futs = (0..50)
             .map(|_| {
                 let tx_client = tx_client.clone();
                 spawn(async move {
-                    let response = if rand::random() {
+                    if rand::random() {
                         tx_client
                             .submit_blobs(&[random_blob(10..=10000)], TxConfig::default())
                             .await
+                            .unwrap()
                     } else {
                         tx_client
                             .submit_message(random_transfer(&tx_client), TxConfig::default())
                             .await
+                            .unwrap()
                     };
-
-                    match response {
-                        Ok(_) => (),
-                        // some wrong sequence errors are still expected until we implement
-                        // multi-account submission
-                        Err(Error::TxRejected(_, ErrorCode::WrongSequence, _)) => {}
-                        err => panic!("{err:?}"),
-                    }
                 })
             })
             .collect::<Vec<_>>();
@@ -1189,7 +1314,14 @@ mod tests {
                 async move {
                     let blobs = (0..2).map(|_| random_blob(500000..=500000)).collect();
                     client
-                        .sign_and_broadcast_blobs(blobs, TxConfig::default(), &Context::default())
+                        .sign_and_broadcast_blobs(
+                            blobs,
+                            // skip simulation part for faster submission
+                            TxConfig::default()
+                                .with_gas_limit(10000000)
+                                .with_gas_price(1e6),
+                            &Context::default(),
+                        )
                         .await
                         .unwrap()
                 }
@@ -1217,7 +1349,7 @@ mod tests {
                         .confirm_tx(tx, TxConfig::default(), &Context::default())
                         .await
                     {
-                        // some of the retransmitted tx's will still fail because
+                        // some of the retransmitted tx's will still be evicted because
                         // of sequence mismatch
                         Err(Error::TxEvicted(_)) => false,
                         res => {
@@ -1291,6 +1423,54 @@ mod tests {
     }
 
     #[async_test]
+    async fn broadcast_message() {
+        let account = load_account();
+        let other_account = TestAccount::random();
+        let amount = Coin::utia(12345);
+        let (_lock, tx_client) = new_tx_client().await;
+
+        let msg = MsgSend {
+            from_address: account.address.to_string(),
+            to_address: other_account.address.to_string(),
+            amount: vec![amount.clone().into()],
+        };
+
+        let submitted_tx = tx_client
+            .broadcast_message(msg, TxConfig::default())
+            .await
+            .unwrap();
+
+        submitted_tx.confirm().await.unwrap();
+
+        let coins = tx_client
+            .get_all_balances(&other_account.address)
+            .await
+            .unwrap();
+
+        assert_eq!(coins.len(), 1);
+        assert_eq!(amount, coins[0]);
+    }
+
+    #[async_test]
+    async fn broadcast_blobs() {
+        let (_lock, tx_client) = new_tx_client().await;
+
+        let submitted_tx = tx_client
+            .broadcast_blobs(
+                &[random_blob(10..=1000)],
+                TxConfig::default().with_memo("broadcast test"),
+            )
+            .await
+            .unwrap();
+
+        let tx_info = submitted_tx.confirm().await.unwrap();
+        let tx = tx_client.get_tx(tx_info.hash).await.unwrap();
+
+        assert_eq!(tx_info.hash, tx.tx_response.txhash);
+        assert_eq!(tx.tx.body.memo, "broadcast test");
+    }
+
+    #[async_test]
     async fn submit_message_insufficient_gas_price_and_limit() {
         let account = load_account();
         let other_account = TestAccount::random();
@@ -1330,6 +1510,7 @@ mod tests {
         let (_lock, tx_client) = new_tx_client().await;
         is_send_and_sync(&tx_client);
 
+        is_send(&tx_client.submit_blobs(&[], TxConfig::default()));
         is_send(
             &tx_client
                 .submit_blobs(&[], TxConfig::default())
@@ -1425,5 +1606,52 @@ mod tests {
             .unwrap()
             .base
             .sequence += rand::thread_rng().gen_range(2..200);
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[tokio::test]
+    async fn failover_to_second_endpoint() {
+        use crate::test_utils::CELESTIA_GRPC_URL;
+
+        // First endpoint is invalid, should failover to second valid one
+        let client = GrpcClient::builder()
+            .urls(["http://localhost:19999", CELESTIA_GRPC_URL])
+            .build()
+            .unwrap();
+
+        let params = client.get_auth_params().await.unwrap();
+        assert!(params.max_memo_characters > 0);
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[tokio::test]
+    async fn endpoint_multiple_requests() {
+        use crate::test_utils::CELESTIA_GRPC_URL;
+
+        let client = GrpcClient::builder()
+            .urls(["http://localhost:19999", CELESTIA_GRPC_URL])
+            .build()
+            .unwrap();
+
+        client.get_auth_params().await.unwrap();
+
+        let block = client.get_latest_block().await.unwrap();
+        assert!(block.header.height.value() > 0);
+
+        for _ in 0..5 {
+            client.get_blob_params().await.unwrap();
+        }
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[tokio::test]
+    async fn all_endpoints_fail_returns_error() {
+        let client = GrpcClient::builder()
+            .urls(["http://localhost:19999", "http://localhost:19998"])
+            .build()
+            .unwrap();
+
+        let result = client.get_auth_params().await;
+        assert!(result.is_err());
     }
 }

@@ -169,7 +169,7 @@ impl Cache {
             hash_map::Entry::Vacant(entry) => {
                 let header = store.get_by_height(height).await?;
                 let info = BlockInfo {
-                    height: header.height().value(),
+                    height: header.height(),
                     time: header.time(),
                 };
                 entry.insert(info.clone());

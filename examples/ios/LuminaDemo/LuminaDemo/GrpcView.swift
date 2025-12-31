@@ -14,16 +14,16 @@ let CI_SK = "393fdb5def075819de55756b45c9e2c8531a8c78dd6eede483d3440e9457d839"
 
 struct GrpcView : View {
     @StateObject private var viewModel = GrpcViewModel()
-    
+
     @State private var url: String = CI_GRPC_URL
     @State private var accountAddress: String = CI_ADDRESS
     @State private var accountSk: String = CI_SK
-    
+
     @State private var namespace: String = "/b/"
     @State private var blobData: String = "Hello, World!"
-    
+
     @State private var submitStatus: String?
-    
+
     var body : some View {
         VStack {
             if (!viewModel.isReady) {
@@ -51,7 +51,7 @@ struct GrpcView : View {
                 Button("Submit Blob") {
                     Task {
                         let status = await viewModel.submitBlob(namespace: namespace, blobData: blobData)
-                        self.submitStatus = "Submitted at height: \(status?.height.value ?? 0)"
+                        self.submitStatus = "Submitted at height: \(status?.height ?? 0)"
                     }
                 }
             }
@@ -75,16 +75,16 @@ struct GrpcView : View {
 @MainActor
 class GrpcViewModel : ObservableObject {
     private var grpcClient: GrpcClient?
-    
+
     @Published var error: Error?
     @Published var isReady: Bool = false
-    
+
     func startTxClient(url: String, accountSk: String) async {
         do {
             let sk = try P256K.Signing.PrivateKey(dataRepresentation: try accountSk.bytes)
             let pk = sk.publicKey.dataRepresentation
             let signer = StaticSigner(sk: sk)
-            
+
             self.grpcClient = try await GrpcClientBuilder
                 .withUrl(url: url)
                 .withPubkeyAndSigner(accountPubkey: pk, signer: signer)
@@ -94,18 +94,18 @@ class GrpcViewModel : ObservableObject {
             self.error = error
         }
     }
-    
+
     func submitBlob(namespace: String, blobData: String) async -> TxInfo? {
         if (self.grpcClient == nil ) {
             self.error = GrpcError.grpcClientNotReady
             return nil
         }
-        
+
         do {
             let data = blobData.data(using: .utf8)!
             let ns = try Namespace(version: 0, id: namespace.data(using: .utf8)!)
             let blob = try Blob.create(namespace: ns, data: data, appVersion: AppVersion.v3)
-            
+
             let submit = try await grpcClient!.submitBlobs(blobs: [blob], config: nil)
             return submit
         } catch {
@@ -115,18 +115,18 @@ class GrpcViewModel : ObservableObject {
     }
 }
 
-enum GrpcError : Error {
+enum GrpcError: Error {
     case grpcClientNotReady
 }
 
 final class StaticSigner : UniffiSigner {
     // PrivateKey isn't Sendable, but we _need_ to send it
     let skBytes : Data
-    
+
     init(sk: P256K.Signing.PrivateKey) {
         self.skBytes = sk.dataRepresentation
     }
-    
+
     func sign(doc: SignDoc) async throws -> UniffiSignature {
         let sk = try P256K.Signing.PrivateKey(dataRepresentation: skBytes)
         let messageData = protoEncodeSignDoc(signDoc: doc);
