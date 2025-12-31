@@ -1547,7 +1547,7 @@ mod tests {
         else {
             panic!("invalid error type, expected TonicError");
         };
-        assert_eq!(timeout.code(), Code::DeadlineExceeded);
+        assert!(timeout.code() == Code::DeadlineExceeded || timeout.code() == Code::Cancelled);
 
         // too short timeout set in builder
         let client = GrpcClient::builder()
@@ -1562,7 +1562,7 @@ mod tests {
         else {
             panic!("invalid error type, expected TonicError");
         };
-        assert_eq!(timeout.code(), Code::DeadlineExceeded);
+        assert!(timeout.code() == Code::DeadlineExceeded || timeout.code() == Code::Cancelled);
 
         // per-request override
         let _balance = client

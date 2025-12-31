@@ -247,7 +247,7 @@ mod wasm {
         }
 
         async fn send<T: Serialize>(&self, request: T) -> Result<JsResponse, ClientError> {
-            let fut = {
+            let (fut, _timeout) = {
                 let mut req = JsRequest::post(&self.url);
                 let mut timeout_callback = None;
 
@@ -265,7 +265,10 @@ mod wasm {
                     req = req.header("Authorization", &format!("Bearer {token}"));
                 }
 
-                req.json(&request).map_err(into_parse_error)?.send()
+                (
+                    req.json(&request).map_err(into_parse_error)?.send(),
+                    SendWrapper::new(timeout_callback),
+                )
             };
 
             SendWrapper::new(fut).await.map_err(|e| match e {
