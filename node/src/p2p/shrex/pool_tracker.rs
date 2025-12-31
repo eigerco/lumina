@@ -267,14 +267,13 @@ where
                 }
             };
 
-            let height = header.height().into();
             let Some(data_hash) = header.header.data_hash else {
                 continue;
             };
 
-            self.try_update_subjective_head(height);
+            self.try_update_subjective_head(header.height());
 
-            return Poll::Ready(self.validate_pool(data_hash, height));
+            return Poll::Ready(self.validate_pool(data_hash, header.height()));
         }
     }
 
