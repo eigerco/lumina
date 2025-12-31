@@ -150,6 +150,7 @@ impl DataAvailabilityHeader {
         self.row_roots.get(row).cloned()
     }
 
+    /// Check if row with given index contains provided namespace.
     pub fn row_contains(&self, row: u16, namespace: Namespace) -> Result<bool> {
         let row_root = self
             .row_root(row)
@@ -163,6 +164,7 @@ impl DataAvailabilityHeader {
         self.column_roots.get(column).cloned()
     }
 
+    /// Check if column with given index contains provided namespace.
     pub fn column_contains(&self, column: u16, namespace: Namespace) -> Result<bool> {
         let column_root = self.column_root(column).ok_or(Error::IndexOutOfRange(
             column as usize,

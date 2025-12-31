@@ -212,12 +212,14 @@ impl RowNamespaceDataId {
         self.namespace
     }
 
+    /// Encode row namespace data id into the byte representation.
     pub fn encode(&self, bytes: &mut BytesMut) {
         bytes.reserve(ROW_NAMESPACE_DATA_ID_SIZE);
         self.row_id.encode(bytes);
         bytes.put(self.namespace.as_bytes());
     }
 
+    /// Decode row namespace data id from the byte representation.
     pub fn decode(buffer: &[u8]) -> Result<Self> {
         if buffer.len() != ROW_NAMESPACE_DATA_ID_SIZE {
             return Err(Error::InvalidLength(

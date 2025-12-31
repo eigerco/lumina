@@ -1,3 +1,11 @@
+//! Types related to namespace data
+//!
+//! Namespace data in Celestia is understood as all the [`Share`]s in a particular
+//! namespace inside the [`ExtendedDataSquare`]. It may span over multiple rows.
+//!
+//! [`Share`]: crate::Share
+//! [`ExtendedDataSquare`]: crate::eds::ExtendedDataSquare
+
 use bytes::{BufMut, BytesMut};
 use celestia_proto::shwap::RowNamespaceData as RawRowNamespaceData;
 use serde::{Deserialize, Serialize};
@@ -30,6 +38,7 @@ pub struct NamespaceData {
 }
 
 impl NamespaceData {
+    /// Create namespace data from one or many rows.
     pub fn new(rows: Vec<RowNamespaceData>) -> Self {
         NamespaceData { rows }
     }
@@ -39,10 +48,12 @@ impl NamespaceData {
         &self.rows[..]
     }
 
+    /// Extract inner rows namespace data
     pub fn into_inner(self) -> Vec<RowNamespaceData> {
         self.rows
     }
 
+    /// Verify the namespace data against roots from DAH
     pub fn verify(&self, id: NamespaceDataId, dah: &DataAvailabilityHeader) -> Result<()> {
         if self.rows.len() > u16::MAX as usize {
             return Err(Error::NamespaceDataTooLarge);
@@ -68,6 +79,7 @@ impl NamespaceData {
         Ok(())
     }
 
+    /// Recover namespace data from it's raw representation.
     pub fn from_raw(id: NamespaceDataId, namespace_data: Vec<RawRowNamespaceData>) -> Result<Self> {
         if namespace_data.len() > u16::MAX as usize {
             return Err(Error::NamespaceDataTooLarge);
@@ -111,12 +123,14 @@ impl NamespaceDataId {
         self.namespace
     }
 
+    /// Encode row namespace data id into the byte representation.
     pub fn encode(&self, bytes: &mut BytesMut) {
         bytes.reserve(NAMESPACE_DATA_ID_SIZE);
         self.eds_id.encode(bytes);
         bytes.put(self.namespace.as_bytes());
     }
 
+    /// Decode namespace data id from the byte representation.
     pub fn decode(buffer: &[u8]) -> Result<Self> {
         if buffer.len() != NAMESPACE_DATA_ID_SIZE {
             return Err(Error::InvalidLength(buffer.len(), NAMESPACE_DATA_ID_SIZE));

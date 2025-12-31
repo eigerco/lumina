@@ -460,6 +460,7 @@ impl ExtendedDataSquare {
 }
 
 impl EdsId {
+    /// Create a new eds id.
     pub fn new(height: u64) -> Result<Self> {
         if height == 0 {
             return Err(Error::ZeroBlockHeight);
@@ -473,11 +474,13 @@ impl EdsId {
         self.height
     }
 
+    /// Encode eds id into the byte representation.
     pub fn encode(&self, bytes: &mut BytesMut) {
         bytes.reserve(EDS_ID_SIZE);
         bytes.put_u64(self.height);
     }
 
+    /// Decode eds id from the byte representation.
     pub fn decode(mut buffer: &[u8]) -> Result<Self> {
         if buffer.len() != EDS_ID_SIZE {
             return Err(Error::InvalidLength(buffer.len(), EDS_ID_SIZE));
@@ -485,12 +488,7 @@ impl EdsId {
 
         let height = buffer.get_u64();
 
-        if height == 0 {
-            return Err(Error::ZeroBlockHeight);
-        }
-
-        // TODO: use new after changing error type
-        Ok(EdsId { height })
+        EdsId::new(height)
     }
 }
 

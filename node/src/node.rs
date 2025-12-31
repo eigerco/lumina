@@ -425,6 +425,12 @@ where
         Ok(sample)
     }
 
+    /// Request a verified [`ExtendedDataSquare`] from the network.
+    ///
+    /// # Errors
+    ///
+    /// On failure to receive a verified [`ExtendedDataSquare`] within a certain time, the
+    /// `NodeError::P2p(P2pError::RequestTimedOut)` error will be returned.
     pub async fn request_extended_data_square(
         &self,
         block_height: u64,

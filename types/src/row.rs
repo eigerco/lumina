@@ -178,12 +178,14 @@ impl RowId {
         self.index
     }
 
+    /// Encode row id into the byte representation.
     pub fn encode(&self, bytes: &mut BytesMut) {
         bytes.reserve(ROW_ID_SIZE);
         self.eds_id.encode(bytes);
         bytes.put_u16(self.index);
     }
 
+    /// Decode row id from the byte representation.
     pub fn decode(buffer: &[u8]) -> Result<Self> {
         if buffer.len() != ROW_ID_SIZE {
             return Err(Error::InvalidLength(buffer.len(), ROW_ID_SIZE));

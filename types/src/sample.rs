@@ -262,12 +262,14 @@ impl SampleId {
         self.column_index
     }
 
+    /// Encode sample id into the byte representation.
     pub fn encode(&self, bytes: &mut BytesMut) {
         bytes.reserve(SAMPLE_ID_SIZE);
         self.row_id.encode(bytes);
         bytes.put_u16(self.column_index);
     }
 
+    /// Decode sample id from the byte representation.
     pub fn decode(buffer: &[u8]) -> Result<Self> {
         if buffer.len() != SAMPLE_ID_SIZE {
             return Err(Error::InvalidLength(buffer.len(), SAMPLE_ID_SIZE));
