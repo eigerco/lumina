@@ -31,7 +31,6 @@ use celestia_types::{Blob, ExtendedHeader, FraudProof};
 use cid::Cid;
 use futures::TryStreamExt;
 use futures::stream::FuturesOrdered;
-use libp2p::allow_block_list::{self, BlockedPeers};
 use libp2p::gossipsub::TopicHash;
 use libp2p::identity::Keypair;
 use libp2p::swarm::{NetworkBehaviour, NetworkInfo};
@@ -708,7 +707,6 @@ where
     B: Blockstore + 'static,
     S: Store + 'static,
 {
-    blacklist: allow_block_list::Behaviour<BlockedPeers>,
     bitswap: beetswap::Behaviour<MAX_MH_SIZE, B>,
     header_ex: header_ex::Behaviour<S>,
     shr_ex: shrex::Behaviour<S>,
@@ -770,7 +768,6 @@ where
         })?;
 
         let behaviour = Behaviour {
-            blacklist: Default::default(),
             bitswap,
             gossipsub,
             header_ex,
@@ -1013,7 +1010,7 @@ where
 
                 let blacklisted = blacklist_peers
                     .into_iter()
-                    .filter(|peer| self.swarm.context().behaviour.blacklist.block_peer(*peer))
+                    .filter(|peer| self.swarm.blacklist_peer(peer))
                     .count();
                 debug!("Added {added}, blacklisted {blacklisted} new peers");
             }
