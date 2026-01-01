@@ -105,7 +105,7 @@ impl Blob {
     ///     my_namespace,
     ///     b"some data to store on blockchain".to_vec(),
     ///     Some(signer),
-    ///     AppVersion::V5,
+    ///     AppVersion::latest(),
     /// )
     /// .expect("Failed to create a blob");
     ///
@@ -190,11 +190,11 @@ impl Blob {
     /// #
     /// # let namespace = Namespace::new_v0(&[1, 2, 3, 4, 5]).expect("Invalid namespace");
     ///
-    /// let mut blob = Blob::new(namespace, b"foo".to_vec(), None, AppVersion::V2).unwrap();
+    /// let mut blob = Blob::new(namespace, b"foo".to_vec(), None, AppVersion::latest()).unwrap();
     ///
-    /// assert!(blob.validate(AppVersion::V2).is_ok());
+    /// assert!(blob.validate(AppVersion::latest()).is_ok());
     ///
-    /// let other_blob = Blob::new(namespace, b"bar".to_vec(), None, AppVersion::V2).unwrap();
+    /// let other_blob = Blob::new(namespace, b"bar".to_vec(), None, AppVersion::latest()).unwrap();
     /// blob.commitment = other_blob.commitment;
     ///
     /// assert!(blob.validate(AppVersion::V2).is_err());
@@ -230,15 +230,15 @@ impl Blob {
     /// #
     /// # let namespace = Namespace::new_v0(&[1, 2, 3, 4, 5]).expect("Invalid namespace");
     /// #
-    /// # let commitment = Blob::new(namespace, b"foo".to_vec(), None, AppVersion::V2)
+    /// # let commitment = Blob::new(namespace, b"foo".to_vec(), None, AppVersion::latest())
     /// #     .unwrap()
     /// #     .commitment;
     ///
-    /// let blob = Blob::new(namespace, b"foo".to_vec(), None, AppVersion::V2).unwrap();
+    /// let blob = Blob::new(namespace, b"foo".to_vec(), None, AppVersion::latest()).unwrap();
     ///
-    /// assert!(blob.validate_with_commitment(&commitment, AppVersion::V2).is_ok());
+    /// assert!(blob.validate_with_commitment(&commitment, AppVersion::latest()).is_ok());
     ///
-    /// let other_commitment = Blob::new(namespace, b"bar".to_vec(), None, AppVersion::V2)
+    /// let other_commitment = Blob::new(namespace, b"bar".to_vec(), None, AppVersion::latest())
     ///     .unwrap()
     ///     .commitment;
     ///
@@ -275,7 +275,7 @@ impl Blob {
     /// # use celestia_types::nmt::Namespace;
     /// # let namespace = Namespace::new_v0(&[1, 2, 3, 4, 5]).expect("Invalid namespace");
     ///
-    /// let blob = Blob::new(namespace, b"foo".to_vec(), None, AppVersion::V2).unwrap();
+    /// let blob = Blob::new(namespace, b"foo".to_vec(), None, AppVersion::latest()).unwrap();
     /// let shares = blob.to_shares().unwrap();
     ///
     /// assert_eq!(shares.len(), 1);
@@ -312,7 +312,7 @@ impl Blob {
     /// let blob = Blob::new(namespace, b"foo".to_vec(), None, AppVersion::V2).unwrap();
     /// let shares = blob.to_shares().unwrap();
     ///
-    /// let reconstructed = Blob::reconstruct(&shares, AppVersion::V2).unwrap();
+    /// let reconstructed = Blob::reconstruct(&shares, AppVersion::latest()).unwrap();
     ///
     /// assert_eq!(blob, reconstructed);
     /// ```
@@ -393,12 +393,12 @@ impl Blob {
     /// # let namespace2 = Namespace::new_v0(&[2, 3, 4, 5, 6]).expect("Invalid namespace");
     ///
     /// let blobs = vec![
-    ///     Blob::new(namespace1, b"foo".to_vec(), None, AppVersion::V2).unwrap(),
-    ///     Blob::new(namespace2, b"bar".to_vec(), None, AppVersion::V2).unwrap(),
+    ///     Blob::new(namespace1, b"foo".to_vec(), None, AppVersion::latest()).unwrap(),
+    ///     Blob::new(namespace2, b"bar".to_vec(), None, AppVersion::latest()).unwrap(),
     /// ];
     /// let shares: Vec<_> = blobs.iter().flat_map(|blob| blob.to_shares().unwrap()).collect();
     ///
-    /// let reconstructed = Blob::reconstruct_all(&shares, AppVersion::V2).unwrap();
+    /// let reconstructed = Blob::reconstruct_all(&shares, AppVersion::latest()).unwrap();
     ///
     /// assert_eq!(blobs, reconstructed);
     /// ```
@@ -436,7 +436,7 @@ impl Blob {
     /// # use celestia_types::nmt::Namespace;
     /// # let namespace = Namespace::new_v0(&[1, 2, 3, 4, 5]).expect("Invalid namespace");
     ///
-    /// let blob = Blob::new(namespace, b"foo".to_vec(), None, AppVersion::V3).unwrap();
+    /// let blob = Blob::new(namespace, b"foo".to_vec(), None, AppVersion::latest()).unwrap();
     /// let shares_len = blob.shares_len();
     ///
     /// let blob_shares = blob.to_shares().unwrap();
