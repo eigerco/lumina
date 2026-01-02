@@ -2,12 +2,13 @@ use std::fmt::Display;
 use std::sync::{Arc, LazyLock};
 use std::task::{Context, Poll};
 
+use celestia_types::DataAvailabilityHeader;
 use celestia_types::eds::ExtendedDataSquare;
+use celestia_types::hash::Hash;
 use celestia_types::namespace_data::NamespaceData;
 use celestia_types::nmt::Namespace;
 use celestia_types::row::Row;
 use celestia_types::sample::Sample;
-use celestia_types::{DataAvailabilityHeader, Hash};
 use libp2p::core::Endpoint;
 use libp2p::core::transport::PortUse;
 use libp2p::gossipsub::{self, Message};
