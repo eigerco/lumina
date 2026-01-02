@@ -343,7 +343,10 @@ where
                         Ok(pool) => {
                             // insert connected peers from the existing pool to the map
                             pooled_peers.entry(height).or_insert_with(|| {
-                                pool.filter(|id| all_peers.contains(id)).cycle()
+                                let mut pool: Vec<_> =
+                                    pool.filter(|id| all_peers.contains(id)).collect();
+                                pool.shuffle(&mut rand::thread_rng());
+                                pool.into_iter().cycle()
                             });
                             true
                         }
@@ -367,7 +370,7 @@ where
             // height.
             // TODO: We can add a parameter for what kind of sorting we want for the peers.
             // For example we can sort by peer scoring or by ping latency etc.
-            let mut generic_peers: Vec<_> = all_peers.iter().copied().collect();
+            let mut generic_peers: Vec<_> = all_peers.into_iter().collect();
             generic_peers.shuffle(&mut rand::thread_rng());
             generic_peers.truncate(MAX_PEERS);
             let mut generic_peers = generic_peers.iter().copied().cycle();
