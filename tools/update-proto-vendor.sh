@@ -94,6 +94,13 @@ find "$shwap_dir" -name pb -type d -print0 | while read -r -d '' pb_dir; do
   cp -r "$pb_dir" "$out_dir"
 done
 
+# NOTE: celestia-node doesn't set the namespace for shrex proto,
+# only specifying he `go_package`. To not have it exported directly
+# from the root of `celestia_proto` crate, we append a namespace to it.
+# TODO: ideally fix in celestia-node
+sed -i'.bak' '2 a package share.p2p.shrex;' vendor/share/shwap/p2p/shrex/pb/shrex.proto
+rm vendor/share/shwap/p2p/shrex/pb/shrex.proto.bak
+
 rm -rf vendor/tendermint
 cp -r "../target/proto-vendor-src/cometbft-${COMETBFT//\//-}/proto/tendermint" vendor
 

@@ -5,9 +5,8 @@ use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
 use blockstore::EitherBlockstore;
+use celestia_rpc::Client;
 use celestia_rpc::prelude::*;
-use celestia_rpc::{Client, TxConfig};
-use celestia_types::nmt::Namespace;
 use clap::{Parser, value_parser};
 use directories::ProjectDirs;
 use libp2p::multiaddr::{Multiaddr, Protocol};
@@ -198,29 +197,6 @@ async fn fetch_bridge_multiaddrs(ws_url: &str) -> Result<Vec<Multiaddr>> {
             ma
         })
         .collect::<Vec<_>>();
-
-    tokio::spawn(async move {
-        let ns = Namespace::new_v0(&[1, 2, 3]).unwrap();
-        let mut i = 0;
-
-        loop {
-            let data = format!("blob{i}");
-            let blob = celestia_types::Blob::new(
-                ns,
-                data.as_bytes().to_vec(),
-                None,
-                celestia_types::AppVersion::V6,
-            )
-            .unwrap();
-            let height = client
-                .blob_submit(&[blob], TxConfig::default())
-                .await
-                .unwrap();
-
-            println!("Submitted blob '{data}' at height '{height}'");
-            i += 1;
-        }
-    });
 
     if addrs.is_empty() {
         bail!("Bridge doesn't listen on tcp");
