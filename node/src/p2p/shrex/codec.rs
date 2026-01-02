@@ -179,7 +179,7 @@ impl ResponseCodec for ExtendedDataSquare {
             return Err(CodecError::response_decode("Empty raw data"));
         }
 
-        if raw_data.len().is_multiple_of(SHARE_SIZE) {
+        if !raw_data.len().is_multiple_of(SHARE_SIZE) {
             return Err(CodecError::response_decode(
                 "Length of raw data of shares is not multiple of SHARE_SIZE",
             ));
