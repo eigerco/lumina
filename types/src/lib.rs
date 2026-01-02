@@ -19,9 +19,6 @@ pub mod fraud_proof;
 pub mod hash;
 mod merkle_proof;
 pub mod nmt;
-#[cfg(feature = "p2p")]
-#[cfg_attr(docsrs, doc(cfg(feature = "p2p")))]
-pub mod p2p;
 pub mod row;
 pub mod row_namespace_data;
 pub mod sample;

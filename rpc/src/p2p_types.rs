@@ -1,5 +1,3 @@
-//! Types related to the p2p layer of nodes in Celestia.
-
 use multiaddr::Multiaddr;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
@@ -35,9 +33,7 @@ pub struct Stat {
     pub memory: u32,
 }
 
-/// Statistics of the [`ResourceManager`] component in Go p2p nodes.
-///
-/// [`ResourceManager`]: https://github.com/libp2p/go-libp2p/tree/master/p2p/host/resource-manager
+/// Statistics of the `ResourceManager` component in Go p2p nodes.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct ResourceManagerStats {
@@ -53,9 +49,7 @@ pub struct ResourceManagerStats {
     pub peers: HashMap<String, Stat>,
 }
 
-/// A wrapper for the libp2p [`PeerId`].
-///
-/// [`PeerId`]: libp2p_identity::PeerId
+/// A wrapper for the libp2p `PeerId`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PeerId(
     #[serde(with = "tendermint_proto::serializers::from_str")] pub libp2p_identity::PeerId,
