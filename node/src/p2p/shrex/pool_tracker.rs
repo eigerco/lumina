@@ -305,9 +305,9 @@ where
                 .data_hash
                 .expect("headers from store must pass validate");
 
-            self.try_update_subjective_head(header.height());
+            self.try_update_subjective_head(height);
 
-            return Poll::Ready(self.validate_pool(data_hash, header.height()));
+            return Poll::Ready(self.validate_pool(data_hash, height));
         }
     }
 
