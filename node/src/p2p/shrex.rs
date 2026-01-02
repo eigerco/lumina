@@ -23,7 +23,7 @@ use tracing::{debug, info};
 
 mod client;
 mod codec;
-pub(crate) mod pool_tracker;
+mod pool_tracker;
 
 use crate::p2p::P2pError;
 use crate::p2p::shrex::client::Client;
@@ -56,7 +56,6 @@ where
     inner: InnerBehaviour,
     client: Client<S>,
     pool_tracker: PoolTracker<S>,
-    _store: Arc<S>,
 }
 
 #[derive(NetworkBehaviour)]
@@ -135,12 +134,12 @@ where
             .map_err(|e| P2pError::GossipsubInit(e.to_string()))?;
 
         let client = Client::new(&config);
+        let pool_tracker = PoolTracker::new(config.header_store);
 
         Ok(Self {
             inner: InnerBehaviour { shrex_sub },
             client,
-            pool_tracker: pool_tracker::PoolTracker::new(config.header_store.clone()),
-            _store: config.header_store,
+            pool_tracker,
         })
     }
 
