@@ -1,4 +1,4 @@
-use celestia_types::p2p::{
+use crate::p2p_types::{
     AddrInfo, BandwidthStats, Connectedness, PeerId, Reachability, ResourceManagerStats,
 };
 use jsonrpsee::proc_macros::rpc;
