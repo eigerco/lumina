@@ -186,7 +186,7 @@ where
             PeerPool::Candidates((voted, candidates)) => {
                 if !voted.insert(peer_id) {
                     // duplicate vote
-                    return Some(Event::PoolUpdate {
+                    return Some(Event::UpdatePeers {
                         blacklist_peers: vec![peer_id],
                         add_peers: vec![],
                     });
@@ -203,12 +203,12 @@ where
                         .entry(data_hash)
                         .or_default()
                         .push(peer_id);
-                    Some(Event::PoolUpdate {
+                    Some(Event::UpdatePeers {
                         blacklist_peers: vec![],
                         add_peers: vec![peer_id],
                     })
                 } else {
-                    Some(Event::PoolUpdate {
+                    Some(Event::UpdatePeers {
                         blacklist_peers: vec![peer_id],
                         add_peers: vec![],
                     })
@@ -342,7 +342,7 @@ where
                         .insert(data_hash, validated_peers.clone());
                     *pool = PeerPool::Validated(data_hash);
 
-                    return Some(Event::PoolUpdate {
+                    return Some(Event::UpdatePeers {
                         add_peers: validated_peers,
                         blacklist_peers: wrong_peers,
                     });
@@ -739,12 +739,12 @@ mod tests {
         added: impl IntoIterator<Item = &'a PeerId>,
         blacklisted: impl IntoIterator<Item = &'a PeerId>,
     ) {
-        let Event::PoolUpdate {
+        let Event::UpdatePeers {
             blacklist_peers,
             add_peers,
         } = ev
         else {
-            panic!("Invalid event type, expected PoolUpdate");
+            panic!("Invalid event type, expected UpdatePeers");
         };
         assert_eq!(
             blacklist_peers.iter().collect::<HashSet<_>>(),

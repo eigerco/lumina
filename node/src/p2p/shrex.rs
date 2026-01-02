@@ -76,7 +76,7 @@ pub(crate) struct InnerBehaviour {
 pub(crate) enum Event {
     SchedulePendingRequests,
 
-    PoolUpdate {
+    UpdatePeers {
         add_peers: Vec<PeerId>,
         blacklist_peers: Vec<PeerId>,
     },

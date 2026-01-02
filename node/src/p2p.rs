@@ -1119,7 +1119,7 @@ where
                     .schedule_pending_requests(ctx.peer_tracker);
             }
 
-            shrex::Event::PoolUpdate {
+            shrex::Event::UpdatePeers {
                 add_peers,
                 blacklist_peers,
             } => {

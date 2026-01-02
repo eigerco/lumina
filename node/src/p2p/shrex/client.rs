@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::io;
 use std::sync::Arc;
 use std::task::{Context, Poll};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use celestia_proto::share::p2p::shrex::{Response as ProtoResponse, Status as ProtoStatus};
 use celestia_types::eds::{EdsId, ExtendedDataSquare};
@@ -37,6 +37,7 @@ use crate::store::StoreError;
 use crate::utils::protocol_id;
 
 const MAX_PEERS: usize = 10;
+const PEER_COOLDOWN: Duration = Duration::from_secs(3);
 const SCHEDULE_PENDING_INTERVAL: Duration = Duration::from_millis(100);
 const STATUS_MAX_SIZE: usize = 16;
 const MAX_TRIES: usize = 5;
@@ -45,7 +46,7 @@ const OPEN_STREAM_TIMEOUT: Duration = Duration::from_secs(1);
 const SEND_REQ_TIMEOUT: Duration = Duration::from_secs(1);
 const RECV_RESP_TIMEOUT: Duration = Duration::from_secs(10);
 
-type OngoingReqTaskResult = (u64, Result<Vec<u8>, RequestError>);
+type OngoingReqTaskResult = (u64, PeerId, Result<Vec<u8>, RequestError>);
 
 pub(super) struct Client<S>
 where
@@ -60,6 +61,7 @@ where
     ongoing_reqs: HashMap<u64, Request>,
     ongoing_reqs_tasks: FuturesUnordered<BoxFuture<'static, Option<OngoingReqTaskResult>>>,
     schedule_pending_interval: Option<Interval>,
+    peers_cooldowns: HashMap<PeerId, Instant>,
 }
 
 struct Request {
@@ -129,6 +131,7 @@ where
             ongoing_reqs: HashMap::new(),
             ongoing_reqs_tasks: FuturesUnordered::new(),
             schedule_pending_interval: None,
+            peers_cooldowns: HashMap::new(),
         }
     }
 
@@ -144,6 +147,9 @@ where
             return None;
         }
 
+        // TODO: currently we cannot query for archival data bcs we would need to have a header in
+        // the store. Maybe add an event that retrieves needed header from header-ex if user wants
+        // some extra old height
         let header = match get_header(&*self.store, height).await {
             Ok(header) => header,
             Err(e) => {
@@ -321,16 +327,21 @@ where
             return;
         }
 
-        let all_peers = peer_tracker
+        let available_peers = peer_tracker
             .peers()
-            .filter(|peer| peer.is_full() && peer.is_connected())
+            .filter(|peer| {
+                peer.is_full()
+                    && peer.is_connected()
+                    // filter out peers on cooldown
+                    && !self.peers_cooldowns.contains_key(peer.id())
+            })
             .map(|peer| *peer.id())
             .collect::<HashSet<_>>();
 
         // if we don't have any connected full node, we need to wait for discovery.
         // we never time out here, but the request can time out on higher level, if
         // user set it
-        if !all_peers.is_empty() {
+        if !available_peers.is_empty() {
             // drain all the requests that can be immediately scheduled and
             // populate the map of heights to dedicated peers that announced
             // availability of data for those blocks
@@ -344,7 +355,7 @@ where
                             // insert connected peers from the existing pool to the map
                             pooled_peers.entry(height).or_insert_with(|| {
                                 let mut pool: Vec<_> =
-                                    pool.filter(|id| all_peers.contains(id)).collect();
+                                    pool.filter(|id| available_peers.contains(id)).collect();
                                 pool.shuffle(&mut rand::thread_rng());
                                 pool.into_iter().cycle()
                             });
@@ -370,7 +381,7 @@ where
             // height.
             // TODO: We can add a parameter for what kind of sorting we want for the peers.
             // For example we can sort by peer scoring or by ping latency etc.
-            let mut generic_peers: Vec<_> = all_peers.into_iter().collect();
+            let mut generic_peers: Vec<_> = available_peers.into_iter().collect();
             generic_peers.shuffle(&mut rand::thread_rng());
             generic_peers.truncate(MAX_PEERS);
             let mut generic_peers = generic_peers.iter().copied().cycle();
@@ -394,7 +405,7 @@ where
                         let res =
                             request_response_task(stream_ctrl, peer_id, raw_req, protocol_id).await;
 
-                        (id, res)
+                        (id, peer_id, res)
                     }),
                 ));
 
@@ -411,18 +422,31 @@ where
         self.schedule_pending_interval.take();
     }
 
-    fn on_result(&mut self, req_id: u64, res: Result<Vec<u8>, RequestError>) {
-        let Some(mut req) = self.ongoing_reqs.remove(&req_id) else {
-            return;
-        };
+    fn on_result(
+        &mut self,
+        req_id: u64,
+        peer_id: PeerId,
+        res: Result<Vec<u8>, RequestError>,
+    ) -> Option<Event> {
+        let mut req = self.ongoing_reqs.remove(&req_id)?;
 
         let raw_data = match res {
             Ok(raw_data) => raw_data,
-            Err(e) => return self.on_error(req_id, req, e.into()),
+            Err(e) => {
+                self.peers_cooldowns.insert(peer_id, Instant::now());
+                self.on_error(req_id, req, e.into());
+                return None;
+            }
         };
 
         if let Err(e) = req.decode_verify_respond(&raw_data) {
             self.on_error(req_id, req, e.into());
+            Some(Event::UpdatePeers {
+                add_peers: vec![],
+                blacklist_peers: vec![peer_id],
+            })
+        } else {
+            None
         }
     }
 
@@ -445,10 +469,17 @@ where
         self.ongoing_reqs
             .retain(|_, req| !req.poll_respond_channel_closed(cx).is_ready());
 
+        // Check if cooldown expired for any peers
+        let now = Instant::now();
+        self.peers_cooldowns
+            .retain(|_, cooldown_start| now.duration_since(*cooldown_start) <= PEER_COOLDOWN);
+
         while let Poll::Ready(Some(opt)) = self.ongoing_reqs_tasks.poll_next_unpin(cx) {
             // When a task is cancelled via its `cancellation_token`, then `None` is returned.
-            if let Some((req_id, res)) = opt {
-                self.on_result(req_id, res);
+            if let Some((req_id, peer_id, res)) = opt
+                && let Some(ev) = self.on_result(req_id, peer_id, res)
+            {
+                return Poll::Ready(ev);
             }
         }
 
