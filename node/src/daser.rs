@@ -975,14 +975,10 @@ mod tests {
         handle.expect_no_cmd().await;
 
         // However, a new head will be allowed because additional limit is applied
-<<<<<<< HEAD
         store
             .insert(generator.next_many_empty_verified(2))
             .await
             .unwrap();
-=======
-        store.insert(generator.next_many_verified(2)).await.unwrap();
->>>>>>> main
 
         for _ in 0..shares_per_block {
             let (cid, respond_to) = handle.expect_get_shwap_cid().await;
@@ -1007,14 +1003,10 @@ mod tests {
 
         // Generate 5 more heads
         for _ in 0..additional_headersub_concurrency {
-<<<<<<< HEAD
             store
                 .insert(generator.next_many_empty_verified(1))
                 .await
                 .unwrap();
-=======
-            store.insert(generator.next_many_verified(1)).await.unwrap();
->>>>>>> main
             // Give some time for Daser to schedule it
             sleep(Duration::from_millis(10)).await;
         }
