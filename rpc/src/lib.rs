@@ -14,6 +14,8 @@ pub mod fraud;
 mod header;
 #[cfg(feature = "p2p")]
 mod p2p;
+#[cfg(feature = "p2p")]
+pub mod p2p_types;
 pub mod share;
 mod state;
 mod tx_config;
