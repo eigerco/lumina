@@ -2,12 +2,12 @@ use std::fmt::Display;
 use std::sync::{Arc, LazyLock};
 use std::task::{Context, Poll};
 
-use celestia_types::DataAvailabilityHeader;
 use celestia_types::eds::ExtendedDataSquare;
 use celestia_types::namespace_data::NamespaceData;
 use celestia_types::nmt::Namespace;
 use celestia_types::row::Row;
 use celestia_types::sample::Sample;
+use celestia_types::{DataAvailabilityHeader, Hash};
 use libp2p::core::Endpoint;
 use libp2p::core::transport::PortUse;
 use libp2p::gossipsub::{self, Message};
@@ -19,7 +19,7 @@ use libp2p::swarm::{
 use libp2p::{Multiaddr, PeerId};
 use thiserror::Error;
 use tokio::sync::oneshot;
-use tracing::{debug, info};
+use tracing::debug;
 
 mod client;
 mod codec;
@@ -39,6 +39,7 @@ const EDS_PROTOCOL_ID: &str = "/shrex/v0.1.0/eds_v0";
 static EMPTY_EDS: LazyLock<ExtendedDataSquare> = LazyLock::new(ExtendedDataSquare::empty);
 static EMPTY_EDS_DAH: LazyLock<DataAvailabilityHeader> =
     LazyLock::new(|| DataAvailabilityHeader::from_eds(&EMPTY_EDS));
+static EMPTY_EDS_DATA_HASH: LazyLock<Hash> = LazyLock::new(|| EMPTY_EDS_DAH.hash());
 
 pub(crate) type Result<T, E = ShrExError> = std::result::Result<T, E>;
 
@@ -160,24 +161,41 @@ where
         match ev {
             gossipsub::Event::Message {
                 message: Message { source, data, .. },
+                message_id,
+                propagation_source,
                 ..
             } => {
-                if let Ok(EdsNotification { height, data_hash }) =
+                let acceptance = if let Ok(EdsNotification { height, data_hash }) =
                     EdsNotification::deserialize_and_validate(data.as_ref())
+                    && let Some(peer_id) = source
                 {
-                    if let Some(peer_id) = source {
+                    if height == 0 || data_hash == *EMPTY_EDS_DATA_HASH {
+                        // hardly reject messages with invalid height or about empty blocks
+                        gossipsub::MessageAcceptance::Reject
+                    } else {
                         self.pool_tracker
                             .add_peer_for_hash(peer_id, data_hash, height);
+                        // return `ignore` for all other messages, so we do not rebroadcast them
+                        gossipsub::MessageAcceptance::Ignore
                     }
                 } else {
+                    // if message was improperly encoded or didn't have the peer id that
+                    // advertises data availability, we reject it too
                     debug!("Invalid shrex sub message");
-                }
+                    gossipsub::MessageAcceptance::Reject
+                };
+
+                self.inner.shrex_sub.report_message_validation_result(
+                    &message_id,
+                    &propagation_source,
+                    acceptance,
+                );
             }
 
             gossipsub::Event::SlowPeer {
                 peer_id,
                 failed_messages,
-            } => info!("{peer_id} slow: {failed_messages:?}"),
+            } => debug!("shrex-sub {peer_id} slow: {failed_messages:?}"),
 
             _ => {}
         }
