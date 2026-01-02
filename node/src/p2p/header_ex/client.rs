@@ -332,7 +332,7 @@ where
                     }
                 }
 
-                // Otherwise return the header with the maximum height
+                // Otherwise, return the header with the maximum height
                 let resp = resps.into_iter().next().expect("no responses");
                 TaskResult::Head(Some(Box::new(resp)))
             }
@@ -444,9 +444,9 @@ where
             }
         }
 
-        // If we have pending requests then initialize interval.
+        // If we have requests pending, initialize interval.
         //
-        // We use this mechanism to give some buffer for more requests to
+        // We use this mechanism to give a time buffer for more requests to
         // be accumulated and avoid calling `schedule_pending_requests` on
         // each iteration.
         if self.schedule_pending_interval.is_none() && self.has_pending_requests() {
@@ -1573,7 +1573,7 @@ mod tests {
         handler.on_send_request(HeaderRequest::with_origin(5, 1), tx);
         assert!(handler.has_pending_requests());
 
-        // Try poll without peers
+        // Try to poll without peers
         let ev = poll_client(&mut handler, &mut mock_req, &empty_peer_tracker).await;
         // `SchedulePendingRequests` is generated when there are pending requests.
         // Since we have no peers, the requests are still pending.
@@ -1632,7 +1632,7 @@ mod tests {
         handler.on_send_request(HeaderRequest::head_request(), tx);
         assert!(handler.has_pending_requests());
 
-        // Try poll without peers
+        // Try to poll without peers
         let ev = poll_client(&mut handler, &mut mock_req, &empty_peer_tracker).await;
         assert!(matches!(ev, Event::NeedTrustedPeers));
         assert!(handler.has_pending_requests());

@@ -42,7 +42,7 @@ impl AsRef<[ExtendedHeader]> for VerifiedExtendedHeaders {
     }
 }
 
-/// 1-length hedaer span is internally verified, this is valid
+/// 1-length header span is internally verified, this is valid
 impl From<[ExtendedHeader; 1]> for VerifiedExtendedHeaders {
     fn from(value: [ExtendedHeader; 1]) -> Self {
         Self(value.into())
