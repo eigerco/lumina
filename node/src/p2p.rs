@@ -1121,14 +1121,21 @@ where
 
             shrex::Event::PoolUpdate {
                 add_peers,
-                #[allow(unused)]
                 blacklist_peers,
             } => {
-                for peer_id in add_peers {
-                    // TODO: I think `peer_maybe_discovered` doesn't have any functionality,
-                    // so we can remove it entirely.
-                    self.swarm.peer_maybe_discovered(&peer_id);
-                }
+                let added = add_peers
+                    .iter()
+                    .filter(|peer| self.swarm.peer_maybe_discovered(peer))
+                    .count();
+
+                let blacklisted = blacklist_peers
+                    .into_iter()
+                    .filter(|peer| self.swarm.blacklist_peer(peer))
+                    .count();
+
+                debug!(
+                    "Added {added}, blacklisted {blacklisted} new peers from shrex pool tracker"
+                );
             }
         }
     }

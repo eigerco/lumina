@@ -4,6 +4,7 @@ use std::sync::LazyLock;
 use std::time::Duration;
 
 use futures::StreamExt;
+use libp2p::allow_block_list::{self, BlockedPeers};
 use libp2p::core::transport::ListenerId;
 use libp2p::identity::Keypair;
 use libp2p::kad::{QueryInfo, RecordKey};
@@ -46,6 +47,7 @@ where
 {
     stream: libp2p_stream::Behaviour,
     connection_control: connection_control::Behaviour,
+    blacklist: allow_block_list::Behaviour<BlockedPeers>,
     autonat: autonat::Behaviour,
     ping: ping::Behaviour,
     identify: identify::Behaviour,
@@ -112,6 +114,7 @@ where
         let behaviour = SwarmBehaviour {
             stream: libp2p_stream::Behaviour::new(),
             connection_control,
+            blacklist: Default::default(),
             autonat,
             ping,
             identify,
@@ -546,12 +549,21 @@ where
         None
     }
 
-    pub(crate) fn peer_maybe_discovered(&mut self, peer_id: &PeerId) {
+    pub(crate) fn peer_maybe_discovered(&mut self, peer_id: &PeerId) -> bool {
         if !self.peer_tracker.add_peer_id(peer_id) {
-            return;
+            return false;
         }
 
         debug!("Peer discovered: {peer_id}");
+        true
+    }
+
+    pub(crate) fn blacklist_peer(&mut self, peer_id: &PeerId) -> bool {
+        if !self.swarm.behaviour_mut().blacklist.block_peer(*peer_id) {
+            return false;
+        }
+        debug!("Peer blacklisted: {peer_id}");
+        true
     }
 
     fn on_peer_connected(&mut self, peer_id: &PeerId, connection_id: ConnectionId) {
