@@ -4,8 +4,8 @@ use std::future::Future;
 use std::marker::{Send, Sync};
 
 use celestia_types::consts::appconsts::AppVersion;
+use celestia_types::namespace_data::NamespaceData;
 use celestia_types::nmt::Namespace;
-use celestia_types::row_namespace_data::NamespaceData;
 use celestia_types::sample::{RawSample, Sample, SampleId};
 use celestia_types::{ExtendedDataSquare, RawShare, Share, ShareProof};
 use jsonrpsee::core::client::{ClientT, Error};
@@ -319,7 +319,7 @@ pub trait ShareClient: ClientT {
             let ns_data =
                 rpc::ShareClient::share_get_namespace_data(self, height, namespace).await?;
 
-            for shr in ns_data.rows.iter().flat_map(|row| &row.shares) {
+            for shr in ns_data.rows().iter().flat_map(|row| &row.shares) {
                 shr.validate(app_version).map_err(custom_client_error)?;
             }
 
