@@ -27,8 +27,8 @@ use crate::p2p::P2pError;
 use crate::p2p::shrex::codec::{CodecError, RequestCodec, ResponseCodec};
 use crate::p2p::shrex::pool_tracker::{GetPoolError, PoolTracker};
 use crate::p2p::shrex::{
-    Config, EDS_PROTOCOL_ID, EMPTY_EDS, EMPTY_EDS_DAH, Event, NAMESPACE_DATA_PROTOCOL_ID,
-    ROW_PROTOCOL_ID, Result, SAMPLE_PROTOCOL_ID, ShrExError,
+    Config, EDS_PROTOCOL_ID, EMPTY_EDS, EMPTY_EDS_DAH, EMPTY_EDS_DATA_HASH, Event,
+    NAMESPACE_DATA_PROTOCOL_ID, ROW_PROTOCOL_ID, Result, SAMPLE_PROTOCOL_ID, ShrExError,
 };
 use crate::p2p::utils::OneshotSender;
 use crate::peer_tracker::PeerTracker;
@@ -183,7 +183,7 @@ where
             return;
         }
 
-        if header.dah == *EMPTY_EDS_DAH {
+        if header.header.data_hash == Some(*EMPTY_EDS_DATA_HASH) {
             let shares = EMPTY_EDS.row(index).expect("coordinates already checked");
             respond_to.maybe_send_ok(Row { shares });
             return;
@@ -224,7 +224,7 @@ where
             return;
         }
 
-        if header.dah == *EMPTY_EDS_DAH {
+        if header.header.data_hash == Some(*EMPTY_EDS_DATA_HASH) {
             let sample = Sample::new(row_index, column_index, AxisType::Row, &EMPTY_EDS)
                 .expect("coordinates already checked");
             respond_to.maybe_send_ok(sample);
@@ -255,7 +255,7 @@ where
             return;
         };
 
-        if header.dah == *EMPTY_EDS_DAH {
+        if header.header.data_hash == Some(*EMPTY_EDS_DATA_HASH) {
             let rows = EMPTY_EDS
                 .get_namespace_data(namespace, &EMPTY_EDS_DAH, height)
                 .expect("invalid eds or dah")
@@ -289,7 +289,7 @@ where
             return;
         };
 
-        if header.dah == *EMPTY_EDS_DAH {
+        if header.header.data_hash == Some(*EMPTY_EDS_DATA_HASH) {
             respond_to.maybe_send_ok(EMPTY_EDS.clone());
             return;
         }
