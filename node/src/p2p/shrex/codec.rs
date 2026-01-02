@@ -185,7 +185,7 @@ impl ResponseCodec for ExtendedDataSquare {
             ));
         }
 
-        let mut ods_shares = Vec::new();
+        let mut ods_shares = Vec::with_capacity(raw_data.len() / SHARE_SIZE);
 
         for raw_share in raw_data.chunks(SHARE_SIZE) {
             ods_shares.push(raw_share.to_vec());
