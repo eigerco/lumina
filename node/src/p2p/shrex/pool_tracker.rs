@@ -19,7 +19,7 @@ use lumina_utils::time::{Elapsed, timeout};
 use prost::Message;
 use tracing::{debug, trace, warn};
 
-use crate::p2p::shrex::Event;
+use crate::p2p::shrex::{EMPTY_EDS_DATA_HASH, Event};
 use crate::store::{Store, StoreError};
 
 const ROOT_HASH_WINDOW: u64 = 10;
@@ -69,6 +69,9 @@ pub enum NotifcationValidationError {
     /// Invalid notification with wrong hash length
     #[error("Invalid hash length, expected 32, got {0}")]
     InvalidHashLength(usize),
+    /// Invalid notification with empty block's data hash
+    #[error("Invalid notification about empty block")]
+    InvalidEmptyBlockDataHash,
     /// Invalid notification with all-zero hash
     #[error("Received notification with zero hash")]
     InvalidZeroHash,
@@ -113,6 +116,9 @@ impl EdsNotification {
                 .try_into()
                 .map_err(|v: Vec<_>| NotifcationValidationError::InvalidHashLength(v.len()))?,
         );
+        if data_hash == *EMPTY_EDS_DATA_HASH {
+            return Err(NotifcationValidationError::InvalidEmptyBlockDataHash);
+        }
         Ok(EdsNotification { height, data_hash })
     }
 }

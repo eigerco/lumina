@@ -169,18 +169,13 @@ where
                     EdsNotification::deserialize_and_validate(data.as_ref())
                     && let Some(peer_id) = source
                 {
-                    if height == 0 || data_hash == *EMPTY_EDS_DATA_HASH {
-                        // hardly reject messages with invalid height or about empty blocks
-                        gossipsub::MessageAcceptance::Reject
-                    } else {
-                        self.pool_tracker
-                            .add_peer_for_hash(peer_id, data_hash, height);
-                        // return `ignore` for all other messages, so we do not rebroadcast them
-                        gossipsub::MessageAcceptance::Ignore
-                    }
+                    self.pool_tracker
+                        .add_peer_for_hash(peer_id, data_hash, height);
+                    // return `ignore` for all valid messages, so we do not rebroadcast them
+                    gossipsub::MessageAcceptance::Ignore
                 } else {
-                    // if message was improperly encoded or didn't have the peer id that
-                    // advertises data availability, we reject it too
+                    // if message decoding or validation failed, or it didn't have the peer id
+                    // that advertises data availability, we hardly reject it
                     debug!("Invalid shrex sub message");
                     gossipsub::MessageAcceptance::Reject
                 };
