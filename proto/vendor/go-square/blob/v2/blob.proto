@@ -1,7 +1,7 @@
 syntax = "proto3";
-package proto.blob.v1;
+package proto.blob.v2;
 
-option go_package = "github.com/celestiaorg/go-square/v2/proto/blob/v1";
+option go_package = "github.com/celestiaorg/go-square/v3/proto/blob/v2";
 
 // BlobProto is the protobuf representation of a blob (binary large object)
 // to be published to the Celestia blockchain. The data of a Blob is published

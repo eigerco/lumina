@@ -6,8 +6,8 @@ use crate::Result;
 use crate::api::share::{GetRangeResponse, GetRowResponse, SampleCoordinates};
 use crate::client::ClientInner;
 use crate::types::AppVersion;
+use crate::types::namespace_data::NamespaceData;
 use crate::types::nmt::Namespace;
-use crate::types::row_namespace_data::NamespaceData;
 use crate::types::sample::Sample;
 use crate::types::{ExtendedDataSquare, Share};
 

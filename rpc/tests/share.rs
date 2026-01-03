@@ -57,7 +57,7 @@ async fn get_shares_by_namespace() {
         .unwrap();
 
     let reconstructed = Blob::reconstruct_all(
-        ns_shares.rows.iter().flat_map(|row| row.shares.iter()),
+        ns_shares.rows().iter().flat_map(|row| row.shares.iter()),
         AppVersion::V2,
     )
     .unwrap();
@@ -218,10 +218,10 @@ async fn get_shares_by_namespace_wrong_ns() {
         .share_get_namespace_data(header.height(), header.app_version(), random_ns)
         .await
         .unwrap();
-    assert_eq!(ns_shares.rows.len(), 1);
-    assert!(ns_shares.rows[0].shares.is_empty());
+    assert_eq!(ns_shares.rows().len(), 1);
+    assert!(ns_shares.rows()[0].shares.is_empty());
 
-    let proof = &ns_shares.rows[0].proof;
+    let proof = &ns_shares.rows()[0].proof;
     assert!(proof.is_of_absence());
 
     let no_leaves: &[&[u8]] = &[];
@@ -253,7 +253,7 @@ async fn get_shares_by_namespace_wrong_ns_out_of_range() {
         .await
         .unwrap();
 
-    assert!(ns_shares.rows.is_empty());
+    assert!(ns_shares.rows().is_empty());
     assert!(!root_hash.contains::<NamespacedSha2Hasher>(random_ns.into()));
 }
 
@@ -273,7 +273,7 @@ async fn get_shares_by_namespace_wrong_roots() {
         .await
         .unwrap();
 
-    assert!(ns_shares.rows.is_empty());
+    assert!(ns_shares.rows().is_empty());
 }
 
 #[async_test]

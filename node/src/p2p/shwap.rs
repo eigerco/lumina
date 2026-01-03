@@ -82,14 +82,12 @@ where
 }
 
 pub(crate) fn sample_cid(row_index: u16, column_index: u16, block_height: u64) -> Result<Cid> {
-    let sample_id = SampleId::new(row_index, column_index, block_height).map_err(P2pError::Cid)?;
+    let sample_id = SampleId::new(row_index, column_index, block_height)?;
     convert_cid(&sample_id.into())
 }
 
 pub(crate) fn convert_cid<const S: usize>(cid: &CidGeneric<S>) -> Result<Cid> {
-    beetswap::utils::convert_cid(cid).ok_or(P2pError::Cid(celestia_types::Error::CidError(
-        CidError::InvalidMultihashLength(64),
-    )))
+    beetswap::utils::convert_cid(cid).ok_or(P2pError::Cid(CidError::InvalidMultihashLength(64)))
 }
 
 /// Extracts the `container` part from shwap's `Block` wrapper if its CID matches the expected one
