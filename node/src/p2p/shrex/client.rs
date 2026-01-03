@@ -1,8 +1,9 @@
 use std::collections::{HashMap, HashSet};
 use std::io;
+use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use celestia_proto::share::p2p::shrex::{Response as ProtoResponse, Status as ProtoStatus};
 use celestia_types::eds::{EdsId, ExtendedDataSquare};
@@ -11,12 +12,13 @@ use celestia_types::nmt::Namespace;
 use celestia_types::row::{Row, RowId};
 use celestia_types::sample::{Sample, SampleId};
 use celestia_types::{AppVersion, AxisType, DataAvailabilityHeader, ExtendedHeader};
+use futures::FutureExt;
 use futures::future::BoxFuture;
 use futures::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 use futures::stream::{FuturesUnordered, StreamExt};
 use integer_encoding::VarInt;
 use libp2p::{PeerId, StreamProtocol};
-use lumina_utils::time::{Interval, timeout};
+use lumina_utils::time::{Interval, Sleep, sleep, timeout};
 use prost::Message;
 use rand::seq::SliceRandom;
 use tokio::sync::oneshot;
@@ -61,7 +63,7 @@ where
     ongoing_reqs: HashMap<u64, Request>,
     ongoing_reqs_tasks: FuturesUnordered<BoxFuture<'static, Option<OngoingReqTaskResult>>>,
     schedule_pending_interval: Option<Interval>,
-    peers_cooldowns: HashMap<PeerId, Instant>,
+    peers_cooldowns: HashMap<PeerId, Pin<Box<Sleep>>>,
 }
 
 struct Request {
@@ -433,7 +435,8 @@ where
         let raw_data = match res {
             Ok(raw_data) => raw_data,
             Err(e) => {
-                self.peers_cooldowns.insert(peer_id, Instant::now());
+                self.peers_cooldowns
+                    .insert(peer_id, Box::pin(sleep(PEER_COOLDOWN)));
                 self.on_error(req_id, req, e.into());
                 return None;
             }
@@ -470,9 +473,8 @@ where
             .retain(|_, req| !req.poll_respond_channel_closed(cx).is_ready());
 
         // Check if cooldown expired for any peers
-        let now = Instant::now();
         self.peers_cooldowns
-            .retain(|_, cooldown_start| now.duration_since(*cooldown_start) <= PEER_COOLDOWN);
+            .retain(|_, cooldown| !cooldown.poll_unpin(cx).is_ready());
 
         while let Poll::Ready(Some(opt)) = self.ongoing_reqs_tasks.poll_next_unpin(cx) {
             // When a task is cancelled via its `cancellation_token`, then `None` is returned.
