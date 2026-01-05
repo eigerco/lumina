@@ -472,7 +472,7 @@ where
         // Check if cooldown expired for any peers
         let now = Instant::now();
         self.peers_cooldowns
-            .retain(|_, cooldown| now.duration_since(*cooldown) >= PEER_COOLDOWN);
+            .retain(|_, cooldown| now.duration_since(*cooldown) <= PEER_COOLDOWN);
 
         while let Poll::Ready(Some(opt)) = self.ongoing_reqs_tasks.poll_next_unpin(cx) {
             // When a task is cancelled via its `cancellation_token`, then `None` is returned.
