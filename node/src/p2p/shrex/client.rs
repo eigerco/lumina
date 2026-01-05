@@ -441,10 +441,7 @@ where
 
         if let Err(e) = req.decode_verify_respond(&raw_data) {
             self.on_error(req_id, req, e.into());
-            Some(Event::UpdatePeers {
-                add_peers: vec![],
-                blacklist_peers: vec![peer_id],
-            })
+            Some(Event::BlockPeers(vec![peer_id]))
         } else {
             None
         }

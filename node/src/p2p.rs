@@ -1119,23 +1119,22 @@ where
                     .schedule_pending_requests(ctx.peer_tracker);
             }
 
-            shrex::Event::UpdatePeers {
-                add_peers,
-                blacklist_peers,
-            } => {
-                let added = add_peers
+            shrex::Event::AddPeers(peers) => {
+                let added = peers
                     .iter()
                     .filter(|peer| self.swarm.peer_maybe_discovered(peer))
                     .count();
 
-                let blacklisted = blacklist_peers
+                debug!("Added {added} peers discovered through shrex");
+            }
+
+            shrex::Event::BlockPeers(peers) => {
+                let blocked = peers
                     .into_iter()
                     .filter(|peer| self.swarm.blacklist_peer(peer))
                     .count();
 
-                debug!(
-                    "Added {added}, blacklisted {blacklisted} new peers from shrex pool tracker"
-                );
+                debug!("Blocked {blocked} peers for shrex missbehaviour");
             }
         }
     }

@@ -77,10 +77,9 @@ pub(crate) struct InnerBehaviour {
 pub(crate) enum Event {
     SchedulePendingRequests,
 
-    UpdatePeers {
-        add_peers: Vec<PeerId>,
-        blacklist_peers: Vec<PeerId>,
-    },
+    AddPeers(Vec<PeerId>),
+
+    BlockPeers(Vec<PeerId>),
 }
 
 #[derive(Debug, Error)]
@@ -340,13 +339,9 @@ where
         }
 
         if let Poll::Ready(ev) = self.client.poll(cx) {
-            // remove blacklisted peers from pool tracker
-            if let Event::UpdatePeers {
-                blacklist_peers, ..
-            } = &ev
-                && !blacklist_peers.is_empty()
-            {
-                for peer in blacklist_peers {
+            // remove peers blacklisted by client from pool tracker
+            if let Event::BlockPeers(peers) = &ev {
+                for peer in peers {
                     self.pool_tracker.remove_peer(peer);
                 }
             }

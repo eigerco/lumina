@@ -5,7 +5,7 @@
 //! Once a header is received and validated, the pool is promoted and peers are added to the
 //! general discovered peers pool.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::slice::Iter;
 use std::sync::Arc;
 use std::task::{Context, Poll, ready};
@@ -23,13 +23,15 @@ use crate::p2p::shrex::{EMPTY_EDS_DATA_HASH, Event};
 use crate::store::{Store, StoreError};
 
 const ROOT_HASH_WINDOW: u64 = 10;
-const POOL_VALIDATION_TIMEOUT: Duration = Duration::from_secs(10);
+// The same value as in go implementation
+// https://github.com/celestiaorg/celestia-node/blob/da3b0d37488305051b6c8d2144a2caadfeadcc7d/share/shwap/p2p/shrex/peers/options.go#L54
+const POOL_VALIDATION_TIMEOUT: Duration = Duration::from_secs(120);
 
 /// Pool tracker for managing hash-specific and discovered peer pools
 pub struct PoolTracker<S> {
     /// Height-specific pools: height -> peer pool
     hash_pools: HashMap<u64, PeerPool>,
-
+    /// Pools that were successfully validated
     validated_pools: HashMap<Hash, Vec<PeerId>>,
     /// Highest known validated store height
     subjective_head: Option<u64>,
@@ -38,6 +40,7 @@ pub struct PoolTracker<S> {
 
     new_headers_tasks:
         FuturesUnordered<BoxFuture<'static, Result<ExtendedHeader, HeaderTaskError>>>,
+    pending_events: VecDeque<Event>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -152,6 +155,7 @@ where
             subjective_head: None,
             store,
             new_headers_tasks: FuturesUnordered::from_iter([get_subjective_head]),
+            pending_events: VecDeque::new(),
         }
     }
 
@@ -159,18 +163,13 @@ where
     ///
     /// Called when receiving a ShrEx/Sub notification. The peer is added to the hash-specific pool.
     /// If the pool is already validated, the peer is immediately promoted to discovered peers.
-    pub fn add_peer_for_hash(
-        &mut self,
-        peer_id: PeerId,
-        data_hash: Hash,
-        height: u64,
-    ) -> Option<Event> {
+    pub fn add_peer_for_hash(&mut self, peer_id: PeerId, data_hash: Hash, height: u64) {
         if self
             .subjective_head
             .map(stale_height_threshold)
             .is_none_or(|stale_height| height <= stale_height)
         {
-            return None;
+            return;
         }
 
         let pool = match self.hash_pools.get_mut(&height) {
@@ -186,16 +185,13 @@ where
             PeerPool::Candidates((voted, candidates)) => {
                 if !voted.insert(peer_id) {
                     // duplicate vote
-                    return Some(Event::UpdatePeers {
-                        blacklist_peers: vec![peer_id],
-                        add_peers: vec![],
-                    });
+                    self.pending_events
+                        .push_back(Event::BlockPeers(vec![peer_id]));
                 }
                 candidates
                     .entry(data_hash)
                     .or_insert_with(Vec::new)
                     .push(peer_id);
-                None
             }
             PeerPool::Validated(validated_hash) => {
                 if *validated_hash == data_hash {
@@ -203,15 +199,11 @@ where
                         .entry(data_hash)
                         .or_default()
                         .push(peer_id);
-                    Some(Event::UpdatePeers {
-                        blacklist_peers: vec![],
-                        add_peers: vec![peer_id],
-                    })
+                    self.pending_events
+                        .push_back(Event::AddPeers(vec![peer_id]));
                 } else {
-                    Some(Event::UpdatePeers {
-                        blacklist_peers: vec![peer_id],
-                        add_peers: vec![],
-                    })
+                    self.pending_events
+                        .push_back(Event::BlockPeers(vec![peer_id]));
                 }
             }
         }
@@ -287,6 +279,16 @@ where
 
     pub(super) fn poll(&mut self, cx: &mut Context<'_>) -> Poll<Option<Event>> {
         loop {
+            if let Some(ev) = self.pending_events.pop_front() {
+                // remove blocked peers from all pools
+                if let Event::BlockPeers(peers) = &ev {
+                    for peer in peers {
+                        self.remove_peer(peer);
+                    }
+                }
+                return Poll::Ready(Some(ev));
+            }
+
             let Some(header) = ready!(self.new_headers_tasks.poll_next_unpin(cx)) else {
                 return Poll::Pending;
             };
@@ -294,7 +296,17 @@ where
             let header = match header {
                 Ok(h) => h,
                 Err(HeaderTaskError::Timeout(height)) => {
-                    self.hash_pools.remove(&height);
+                    // blacklist all the peers who announced availability for headers
+                    // we haven't received
+                    // TODO: we might have just lost internet, but for now, this equals
+                    // the behaviour of the go shrex peer manager. Also we should likely
+                    // receive notifications and headers around the same time, so the race
+                    // should be tiny
+                    if let Some(PeerPool::Candidates((peers, _))) = self.hash_pools.remove(&height)
+                    {
+                        let bad_peers = peers.into_iter().collect();
+                        self.pending_events.push_back(Event::BlockPeers(bad_peers));
+                    }
                     continue;
                 }
                 Err(HeaderTaskError::StoreError { height, source }) => {
@@ -311,8 +323,9 @@ where
                 .expect("headers from store must pass validate");
 
             self.try_update_subjective_head(height);
+            self.validate_pool(data_hash, height);
 
-            return Poll::Ready(self.validate_pool(data_hash, height));
+            return Poll::Ready(None);
         }
     }
 
@@ -320,13 +333,18 @@ where
     ///
     /// Validates the pool with a valid header, promoting all peers for the matching hash to
     /// discovered peers.
-    fn validate_pool(&mut self, data_hash: Hash, height: u64) -> Option<Event> {
+    fn validate_pool(&mut self, data_hash: Hash, height: u64) {
         if let Some(pool) = self.hash_pools.get_mut(&height) {
             match pool {
                 PeerPool::Candidates((_, candidates)) => {
                     let validated_peers = candidates.remove(&data_hash).unwrap_or_default();
 
-                    let wrong_peers: Vec<PeerId> = candidates
+                    if !validated_peers.is_empty() {
+                        self.pending_events
+                            .push_back(Event::AddPeers(validated_peers.clone()));
+                    }
+
+                    let bad_peers: Vec<PeerId> = candidates
                         .values()
                         .flat_map(|pool| pool.iter().cloned())
                         .collect();
@@ -334,28 +352,21 @@ where
                     trace!(
                         "Promoted valid pool for {height} with {} peers, {} peers blacklisted",
                         validated_peers.len(),
-                        wrong_peers.len()
+                        bad_peers.len()
                     );
 
-                    self.validated_pools
-                        .insert(data_hash, validated_peers.clone());
-                    *pool = PeerPool::Validated(data_hash);
-
-                    for peer in &wrong_peers {
-                        self.remove_peer(peer);
+                    if !bad_peers.is_empty() {
+                        self.pending_events.push_back(Event::BlockPeers(bad_peers));
                     }
 
-                    return Some(Event::UpdatePeers {
-                        add_peers: validated_peers,
-                        blacklist_peers: wrong_peers,
-                    });
+                    self.validated_pools.insert(data_hash, validated_peers);
+                    *pool = PeerPool::Validated(data_hash);
                 }
                 PeerPool::Validated(_) => {
                     warn!("Multiple validate_pool for the same height, should not happen");
                 }
             }
         }
-        None
     }
 
     fn try_update_subjective_head(&mut self, height: u64) {
@@ -411,11 +422,7 @@ mod tests {
         tracker.add_peer_for_hash(peer0, hash0, height);
 
         store.insert(header).await.unwrap();
-        assert_peer_update(
-            &poll_fn(|ctx| tracker.poll(ctx)).await.unwrap(),
-            [&peer0],
-            [],
-        );
+        assert_peers_added(&mut tracker, [&peer0]).await;
 
         let height_peers: Vec<_> = tracker.get_pool(height).unwrap().collect();
         assert_eq!(height_peers, vec![&peer0]);
@@ -432,11 +439,7 @@ mod tests {
         tracker.add_peer_for_hash(peer0, other_hash, height);
 
         store.insert(header).await.unwrap();
-        assert_peer_update(
-            &poll_fn(|ctx| tracker.poll(ctx)).await.unwrap(),
-            [],
-            [&peer0],
-        );
+        assert_peers_blocked(&mut tracker, [&peer0]).await;
 
         assert!(matches!(
             tracker.get_pool(height + 1),
@@ -485,11 +488,8 @@ mod tests {
 
         store.insert(header).await.unwrap();
 
-        assert_peer_update(
-            &poll_fn(|ctx| tracker.poll(ctx)).await.unwrap(),
-            [&peer1_0, &peer1_1],
-            [&peer0],
-        );
+        assert_peers_added(&mut tracker, [&peer1_0, &peer1_1]).await;
+        assert_peers_blocked(&mut tracker, [&peer0]).await;
 
         let height_peers: HashSet<_> = tracker.get_pool(height).unwrap().collect();
         assert_eq!(height_peers, vec_to_set(vec![&peer1_0, &peer1_1]));
@@ -511,36 +511,19 @@ mod tests {
         tracker.add_peer_for_hash(peer0, valid_hash, height);
 
         store.insert(header).await.unwrap();
-        assert_peer_update(
-            &poll_fn(|ctx| tracker.poll(ctx)).await.unwrap(),
-            [&peer0],
-            [],
-        );
+        assert_peers_added(&mut tracker, [&peer0]).await;
 
         let peers: Vec<_> = tracker.get_pool(height).unwrap().collect();
         assert_eq!(peers, vec![&peer0]);
 
-        assert_peer_update(
-            &tracker
-                .add_peer_for_hash(peer1, valid_hash, height)
-                .unwrap(),
-            [&peer1],
-            [],
-        );
-        assert_peer_update(
-            &tracker
-                .add_peer_for_hash(peer2, valid_hash, height)
-                .unwrap(),
-            [&peer2],
-            [],
-        );
-        assert_peer_update(
-            &tracker
-                .add_peer_for_hash(peer3, invalid_hash, height)
-                .unwrap(),
-            [],
-            [&peer3],
-        );
+        tracker.add_peer_for_hash(peer1, valid_hash, height);
+        assert_peers_added(&mut tracker, [&peer1]).await;
+
+        tracker.add_peer_for_hash(peer2, valid_hash, height);
+        assert_peers_added(&mut tracker, [&peer2]).await;
+
+        tracker.add_peer_for_hash(peer3, invalid_hash, height);
+        assert_peers_blocked(&mut tracker, [&peer3]).await;
 
         let discovered_peers: HashSet<_> = tracker.get_pool(height).unwrap().collect();
         assert_eq!(discovered_peers, vec_to_set(vec![&peer0, &peer1, &peer2]));
@@ -558,18 +541,20 @@ mod tests {
         let peer1 = PeerId::random();
         let invalid_hash1 = Hash::Sha256([3u8; 32]);
 
-        // only first vote should be counted
+        // the second vote will block the peer
         tracker.add_peer_for_hash(peer0, valid_hash, height);
         tracker.add_peer_for_hash(peer0, invalid_hash0, height);
+        assert_peers_blocked(&mut tracker, [&peer0]).await;
 
         tracker.add_peer_for_hash(peer1, invalid_hash1, height);
         tracker.add_peer_for_hash(peer1, valid_hash, height);
+        assert_peers_blocked(&mut tracker, [&peer1]).await;
 
         store.insert(header).await.unwrap();
         poll_fn(|ctx| tracker.poll(ctx)).await;
 
         let discovered_peers: Vec<_> = tracker.get_pool(height).unwrap().collect();
-        assert_eq!(discovered_peers, vec![&peer0]);
+        assert!(discovered_peers.is_empty());
     }
 
     #[async_test]
@@ -614,11 +599,7 @@ mod tests {
 
         tracker.add_peer_for_hash(old_peer, stale_hash, stale_height);
         store.insert(old_header).await.unwrap();
-        assert_peer_update(
-            &poll_fn(|ctx| tracker.poll(ctx)).await.unwrap(),
-            [&old_peer],
-            [],
-        );
+        assert_peers_added(&mut tracker, [&old_peer]).await;
 
         let discovered_peers: Vec<_> = tracker.get_pool(stale_height).unwrap().collect();
         assert_eq!(discovered_peers, vec![&old_peer]);
@@ -631,19 +612,12 @@ mod tests {
         // during tests we need to trigger cleanup, by explicitly sending a shrex
         // notification for a new height.
         tracker.add_peer_for_hash(peer, new_head.header.data_hash.unwrap(), new_head.height());
-        assert_peer_update(
-            &poll_fn(|ctx| tracker.poll(ctx)).await.unwrap(),
-            [&peer],
-            [],
-        );
+        assert_peers_added(&mut tracker, [&peer]).await;
 
         // we no longer track this pool, shouldn't trigger event
         let slow_notification_peer = PeerId::random();
-        assert!(
-            tracker
-                .add_peer_for_hash(slow_notification_peer, stale_hash, stale_height)
-                .is_none()
-        );
+        tracker.add_peer_for_hash(slow_notification_peer, stale_hash, stale_height);
+        assert!(poll_until_pending(&mut tracker).await.is_empty());
 
         assert!(matches!(
             tracker.get_pool(stale_height),
@@ -668,13 +642,13 @@ mod tests {
         tracker.add_peer_for_hash(peer0, hash0, height0);
         tracker.add_peer_for_hash(peer1, hash0, height0);
         store.insert(&headers[0]).await.unwrap();
-        poll_fn(|ctx| tracker.poll(ctx)).await;
+        poll_until_pending(&mut tracker).await;
 
         tracker.add_peer_for_hash(peer0, hash1, height1);
         tracker.add_peer_for_hash(peer1, invalid_hash, height1);
         tracker.add_peer_for_hash(peer2, hash1, height1);
         store.insert(&headers[1]).await.unwrap();
-        poll_fn(|ctx| tracker.poll(ctx)).await;
+        poll_until_pending(&mut tracker).await;
 
         // peer0 and peer2 sent notification for height1, they should go first
         let height_peers: HashSet<_> = tracker.get_pool(height1).unwrap().collect();
@@ -696,7 +670,7 @@ mod tests {
         tracker.add_peer_for_hash(peer1, hash0, height0);
 
         store.insert(&headers[0]).await.unwrap();
-        poll_fn(|ctx| tracker.poll(ctx)).await;
+        poll_until_pending(&mut tracker).await;
 
         let discovered_peers: HashSet<_> = tracker.get_pool(height0).unwrap().collect();
         assert_eq!(discovered_peers, vec_to_set(vec![&peer0, &peer1]));
@@ -710,7 +684,7 @@ mod tests {
         assert_eq!(discovered_peers, vec![&peer1]);
 
         store.insert(&headers[1]).await.unwrap();
-        poll_fn(|ctx| tracker.poll(ctx)).await;
+        poll_until_pending(&mut tracker).await;
 
         let height_peers: Vec<_> = tracker.get_pool(height1).unwrap().collect();
         assert_eq!(height_peers, vec![&peer1]);
@@ -736,26 +710,55 @@ mod tests {
         (tracker, store, g)
     }
 
-    #[track_caller]
-    fn assert_peer_update<'a>(
-        ev: &'a Event,
+    async fn assert_peers_added<'a>(
+        tracker: &mut PoolTracker<InMemoryStore>,
         added: impl IntoIterator<Item = &'a PeerId>,
-        blacklisted: impl IntoIterator<Item = &'a PeerId>,
     ) {
-        let Event::UpdatePeers {
-            blacklist_peers,
-            add_peers,
-        } = ev
-        else {
-            panic!("Invalid event type, expected UpdatePeers");
+        let Event::AddPeers(peers) = next_event(tracker).await else {
+            panic!("Invalid event type, expected AddPeers");
         };
         assert_eq!(
-            blacklist_peers.iter().collect::<HashSet<_>>(),
-            blacklisted.into_iter().collect()
-        );
-        assert_eq!(
-            add_peers.iter().collect::<HashSet<_>>(),
+            peers.iter().collect::<HashSet<_>>(),
             added.into_iter().collect()
         );
+    }
+
+    async fn assert_peers_blocked<'a>(
+        tracker: &mut PoolTracker<InMemoryStore>,
+        blocked: impl IntoIterator<Item = &'a PeerId>,
+    ) {
+        let Event::BlockPeers(peers) = next_event(tracker).await else {
+            panic!("Invalid event type, expected BlockPeers");
+        };
+        assert_eq!(
+            peers.iter().collect::<HashSet<_>>(),
+            blocked.into_iter().collect()
+        );
+    }
+
+    async fn next_event(tracker: &mut PoolTracker<InMemoryStore>) -> Event {
+        loop {
+            if let Some(ev) = poll_fn(|ctx| tracker.poll(ctx)).await {
+                return ev;
+            }
+        }
+    }
+
+    async fn poll_until_pending(tracker: &mut PoolTracker<InMemoryStore>) -> Vec<Event> {
+        let mut events = Vec::new();
+
+        poll_fn(|ctx| {
+            match tracker.poll(ctx) {
+                Poll::Ready(Some(ev)) => events.push(ev),
+                Poll::Pending => return Poll::Ready(()),
+                _ => (),
+            }
+
+            ctx.waker().wake_by_ref();
+            Poll::Pending
+        })
+        .await;
+
+        events
     }
 }
