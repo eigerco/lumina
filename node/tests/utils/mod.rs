@@ -6,7 +6,6 @@ use std::time::Duration;
 use blockstore::Blockstore;
 use celestia_rpc::{Client, TxConfig, prelude::*};
 use celestia_types::Blob;
-use celestia_types::nmt::Namespace;
 use libp2p::{Multiaddr, PeerId, multiaddr::Protocol};
 use lumina_node::NodeBuilder;
 use lumina_node::blockstore::InMemoryBlockstore;
