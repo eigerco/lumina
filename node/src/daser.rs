@@ -532,7 +532,7 @@ where
                     // If the sample is not valid, it will never be delivered to us
                     // as the data of the CID. Because of that, the only signal
                     // that data sampling verification failed is query timing out.
-                    Err(P2pError::BitswapQueryTimeout) => true,
+                    Err(P2pError::RequestTimedOut) => true,
                     Err(e) => return Err(e.into()),
                 };
 
@@ -889,7 +889,7 @@ mod tests {
         while let Some(cmd) = handle.try_recv_cmd().await {
             match cmd {
                 P2pCmd::GetShwapCid { respond_to, .. } => {
-                    let _ = respond_to.send(Err(P2pError::BitswapQueryTimeout));
+                    let _ = respond_to.send(Err(P2pError::RequestTimedOut));
                 }
                 cmd => panic!("Unexpected command: {cmd:?}"),
             }
@@ -947,7 +947,7 @@ mod tests {
 
         let mut generator = ExtendedHeaderGenerator::new();
         store
-            .insert(generator.next_many_verified(30))
+            .insert(generator.next_many_empty_verified(30))
             .await
             .unwrap();
 
@@ -975,7 +975,10 @@ mod tests {
         handle.expect_no_cmd().await;
 
         // However, a new head will be allowed because additional limit is applied
-        store.insert(generator.next_many_verified(2)).await.unwrap();
+        store
+            .insert(generator.next_many_empty_verified(2))
+            .await
+            .unwrap();
 
         for _ in 0..shares_per_block {
             let (cid, respond_to) = handle.expect_get_shwap_cid().await;
@@ -1000,7 +1003,10 @@ mod tests {
 
         // Generate 5 more heads
         for _ in 0..additional_headersub_concurrency {
-            store.insert(generator.next_many_verified(1)).await.unwrap();
+            store
+                .insert(generator.next_many_empty_verified(1))
+                .await
+                .unwrap();
             // Give some time for Daser to schedule it
             sleep(Duration::from_millis(10)).await;
         }
@@ -1012,7 +1018,10 @@ mod tests {
 
         // Concurrency limit for heads is reached
         handle.expect_no_cmd().await;
-        store.insert(generator.next_many_verified(1)).await.unwrap();
+        store
+            .insert(generator.next_many_empty_verified(1))
+            .await
+            .unwrap();
         handle.expect_no_cmd().await;
 
         // Now we stop 1 block and Daser will schedule the head
@@ -1026,7 +1035,10 @@ mod tests {
 
         // Concurrency limit for heads is reached again
         handle.expect_no_cmd().await;
-        store.insert(generator.next_many_verified(1)).await.unwrap();
+        store
+            .insert(generator.next_many_empty_verified(1))
+            .await
+            .unwrap();
         handle.expect_no_cmd().await;
     }
 
@@ -1162,7 +1174,7 @@ mod tests {
 
         for idx in indexes.into_iter().rev() {
             let (_cid, respond_to) = responders.remove(idx);
-            respond_to.send(Err(P2pError::BitswapQueryTimeout)).unwrap();
+            respond_to.send(Err(P2pError::RequestTimedOut)).unwrap();
         }
     }
 
@@ -1328,7 +1340,7 @@ mod tests {
 
             // Simulate sampling timeout
             if info.simulate_sampling_timeout && info.requests_count == REQ_TIMEOUT_SHARE_NUM {
-                respond_to.send(Err(P2pError::BitswapQueryTimeout)).unwrap();
+                respond_to.send(Err(P2pError::RequestTimedOut)).unwrap();
                 continue;
             }
 

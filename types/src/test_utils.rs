@@ -1,4 +1,5 @@
 //! Utilities for writing tests.
+use std::iter;
 use std::time::Duration;
 
 use ed25519_consensus::SigningKey;
@@ -16,7 +17,7 @@ use crate::consts::appconsts::{
 };
 use crate::consts::version;
 use crate::hash::{Hash, HashExt};
-use crate::nmt::{NS_SIZE, Namespace};
+use crate::nmt::{NS_SIZE, Namespace, NamespacedHash, NamespacedHashExt};
 use crate::{
     Blob, DataAvailabilityHeader, ExtendedDataSquare, ExtendedHeader, Share, ValidatorSet,
 };
@@ -73,7 +74,7 @@ impl ExtendedHeaderGenerator {
         generator
     }
 
-    /// Generates the next header.
+    /// Generates the next header for a random non-empty data square.
     ///
     /// ```
     /// use celestia_types::test_utils::ExtendedHeaderGenerator;
@@ -83,14 +84,19 @@ impl ExtendedHeaderGenerator {
     /// ```
     #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> ExtendedHeader {
-        let time = self.get_and_increment_time(1);
-        let header = match self.current_header {
-            Some(ref header) => generate_next(1, header, time, &self.key, None),
-            None => generate_new(GENESIS_HEIGHT, &self.chain_id, time, &self.key, None),
-        };
+        self.next_impl(Some(generate_dah(8)))
+    }
 
-        self.current_header = Some(header.clone());
-        header
+    /// Generates the next header for an empty data square.
+    ///
+    /// ```
+    /// use celestia_types::test_utils::ExtendedHeaderGenerator;
+    ///
+    /// let mut generator = ExtendedHeaderGenerator::new();
+    /// let header1 = generator.next_empty();
+    /// ```
+    pub fn next_empty(&mut self) -> ExtendedHeader {
+        self.next_impl(None)
     }
 
     /// Generates the next header with the given [`DataAvailabilityHeader`]
@@ -106,17 +112,21 @@ impl ExtendedHeaderGenerator {
     /// ```
     #[allow(clippy::should_implement_trait)]
     pub fn next_with_dah(&mut self, dah: DataAvailabilityHeader) -> ExtendedHeader {
+        self.next_impl(Some(dah))
+    }
+
+    fn next_impl(&mut self, maybe_dah: Option<DataAvailabilityHeader>) -> ExtendedHeader {
         let time = self.get_and_increment_time(1);
         let header = match self.current_header {
-            Some(ref header) => generate_next(1, header, time, &self.key, Some(dah)),
-            None => generate_new(GENESIS_HEIGHT, &self.chain_id, time, &self.key, Some(dah)),
+            Some(ref header) => generate_next(1, header, time, &self.key, maybe_dah),
+            None => generate_new(GENESIS_HEIGHT, &self.chain_id, time, &self.key, maybe_dah),
         };
 
         self.current_header = Some(header.clone());
         header
     }
 
-    /// Generate the next amount of headers.
+    /// Generate the `amount` of subsequent non-empty headers.
     pub fn next_many(&mut self, amount: u64) -> Vec<ExtendedHeader> {
         let mut headers = Vec::with_capacity(amount as usize);
 
@@ -124,6 +134,15 @@ impl ExtendedHeaderGenerator {
             headers.push(self.next());
         }
 
+        headers
+    }
+
+    /// Generate the `amount` of subsequent empty headers.
+    pub fn next_many_empty(&mut self, amount: u64) -> Vec<ExtendedHeader> {
+        let mut headers = Vec::with_capacity(amount as usize);
+        for _ in 0..amount {
+            headers.push(self.next_empty());
+        }
         headers
     }
 
@@ -361,6 +380,100 @@ pub fn unverify(header: &mut ExtendedHeader) {
     } else {
         header.validate().expect("invalid header generated");
     }
+}
+
+/// Generate a dummy DAH, with semi-real namespace structure
+///
+/// Computes fake roots of an EDS where:
+/// - first share is PFB
+/// - second is primary padding
+/// - last is tail padding
+/// - each share between is a blob within unique namespace
+fn generate_dah(square_width: usize) -> DataAvailabilityHeader {
+    // allow minimum ODS to be 2x2, to not handle case with single
+    // share in ODS
+    assert!(square_width >= 4);
+
+    let ods_width = square_width / 2;
+
+    // toss random namespaces for our blobs. we do it for the whole ODS even tho
+    // 3 of those will be unused, but it makes operating on indexes simpler
+    let blob_namespaces: Vec<_> = (0..ods_width * ods_width)
+        .map(|n| {
+            let ns = [
+                // ensure ordering
+                (n as u32).to_be_bytes().as_slice(),
+                random_bytes(6).as_slice(),
+            ]
+            .concat();
+            Namespace::new_v0(&ns).unwrap()
+        })
+        .collect();
+
+    let random_namespaced_hash = |(min_ns, max_ns): (Namespace, Namespace)| {
+        let hash = [
+            min_ns.as_bytes(),
+            max_ns.as_bytes(),
+            random_bytes(32).as_slice(),
+        ]
+        .concat();
+        NamespacedHash::from_raw(&hash).unwrap()
+    };
+
+    // within ODS, create hashes with proper min and max namespaces
+    // based on blobs namespaces we created earlier. Outside ODS
+    // everything is parity
+    let row_roots: Vec<_> = (0..ods_width)
+        .map(|n| {
+            let min_ns = match n {
+                0 => Namespace::PAY_FOR_BLOB,
+                _ => {
+                    // take blobs from first column
+                    let first_blob_in_row = ods_width * n;
+                    blob_namespaces[first_blob_in_row]
+                }
+            };
+            let max_ns = if n == ods_width - 1 {
+                Namespace::TAIL_PADDING
+            } else {
+                // take blobs from last column
+                let last_blob_in_row = ods_width * (n + 1) - 1;
+                blob_namespaces[last_blob_in_row]
+            };
+            (min_ns, max_ns)
+        })
+        .chain(iter::repeat_n(
+            (Namespace::PARITY_SHARE, Namespace::PARITY_SHARE),
+            ods_width,
+        ))
+        .map(random_namespaced_hash)
+        .collect();
+
+    let col_roots: Vec<_> = (0..ods_width)
+        .map(|n| {
+            let min_ns = match n {
+                0 => Namespace::PAY_FOR_BLOB,
+                1 => Namespace::PRIMARY_RESERVED_PADDING,
+                // take blobs from first row
+                _ => blob_namespaces[n],
+            };
+            let max_ns = if n == ods_width - 1 {
+                Namespace::TAIL_PADDING
+            } else {
+                // take blobs from last row
+                let last_blob_in_col = ods_width * (ods_width - 1) + n;
+                blob_namespaces[last_blob_in_col]
+            };
+            (min_ns, max_ns)
+        })
+        .chain(iter::repeat_n(
+            (Namespace::PARITY_SHARE, Namespace::PARITY_SHARE),
+            ods_width,
+        ))
+        .map(random_namespaced_hash)
+        .collect();
+
+    DataAvailabilityHeader::new_unchecked(row_roots, col_roots)
 }
 
 /// Generate a properly encoded [`ExtendedDataSquare`] with random data.
