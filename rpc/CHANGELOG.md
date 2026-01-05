@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.0](https://github.com/eigerco/lumina/compare/celestia-rpc-v0.15.0...celestia-rpc-v0.16.0) - 2026-01-05
+
+### Added
+
+- *(proto,types,node)* [**breaking**] Implement shrex data availability protocol ([#857](https://github.com/eigerco/lumina/pull/857))
+- *(client,rpc)* [**breaking**] don't require headers for share rpc calls ([#848](https://github.com/eigerco/lumina/pull/848))
+- *(types,grpc)* [**breaking**] switch from Height to u64, infallible app_version() ([#846](https://github.com/eigerco/lumina/pull/846))
+
+### Other
+
+- adds AppVersion()::latest() in doc-comments ([#855](https://github.com/eigerco/lumina/pull/855))
+- *(ci)* use compose healthchecks to ensure docker setup is ready ([#818](https://github.com/eigerco/lumina/pull/818))
+
 ## [0.15.0](https://github.com/eigerco/lumina/compare/celestia-rpc-v0.14.0...celestia-rpc-v0.15.0) - 2025-11-19
 
 ### Added
