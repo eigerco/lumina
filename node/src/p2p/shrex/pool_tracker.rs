@@ -249,7 +249,6 @@ where
     }
 
     /// Remove peer from all pools
-    #[allow(dead_code)] // TODO: remove once integrated
     pub fn remove_peer(&mut self, peer_id: &PeerId) {
         for pool in self.hash_pools.values_mut() {
             match pool {
@@ -341,6 +340,10 @@ where
                     self.validated_pools
                         .insert(data_hash, validated_peers.clone());
                     *pool = PeerPool::Validated(data_hash);
+
+                    for peer in &wrong_peers {
+                        self.remove_peer(peer);
+                    }
 
                     return Some(Event::UpdatePeers {
                         add_peers: validated_peers,

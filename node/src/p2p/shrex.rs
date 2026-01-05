@@ -340,6 +340,17 @@ where
         }
 
         if let Poll::Ready(ev) = self.client.poll(cx) {
+            // remove blacklisted peers from pool tracker
+            if let Event::UpdatePeers {
+                blacklist_peers, ..
+            } = &ev
+                && !blacklist_peers.is_empty()
+            {
+                for peer in blacklist_peers {
+                    self.pool_tracker.remove_peer(peer);
+                }
+            }
+
             return Poll::Ready(ToSwarm::GenerateEvent(ev));
         }
 
