@@ -4,10 +4,12 @@ use std::sync::LazyLock;
 use std::time::Duration;
 
 use futures::StreamExt;
+use libp2p::allow_block_list::{self, BlockedPeers};
 use libp2p::core::transport::ListenerId;
 use libp2p::identity::Keypair;
 use libp2p::kad::{QueryInfo, RecordKey};
 use libp2p::multiaddr::{Multiaddr, Protocol};
+use libp2p::swarm::behaviour::toggle::Toggle;
 use libp2p::swarm::dial_opts::{DialOpts, PeerCondition};
 use libp2p::swarm::{ConnectionId, DialError, NetworkBehaviour, NetworkInfo, Swarm, SwarmEvent};
 use libp2p::{PeerId, autonat, identify, kad, ping};
@@ -43,12 +45,21 @@ where
     B: NetworkBehaviour + 'static,
     B::ToSwarm: Debug,
 {
+    stream: libp2p_stream::Behaviour,
     connection_control: connection_control::Behaviour,
+    blacklist: allow_block_list::Behaviour<BlockedPeers>,
     autonat: autonat::Behaviour,
     ping: ping::Behaviour,
     identify: identify::Behaviour,
     kademlia: kad::Behaviour<kad::store::MemoryStore>,
-    behaviour: B,
+    // We use `Toggle` here because we want a way to initialize `SwarmManager`
+    // without the need to pass user's Behaviour in the constructor.
+    //
+    // The main reason we want this, is because `SwarmBehaviour` has its own
+    // `libp2p_stream::Behaviour`, and user's Behaviour may need an allocated
+    // `libp2p_stream::Control` from it, which creates chicken and the egg situation.
+    // With `Toggle` we allow user to attach its Behaviour, after `SwarmManager` construction.
+    behaviour: Toggle<B>,
 }
 
 pub(crate) struct SwarmManager<B>
@@ -87,7 +98,6 @@ where
         listen_on: &[Multiaddr],
         mut peer_tracker: PeerTracker,
         event_pub: EventPublisher,
-        behaviour: B,
     ) -> Result<SwarmManager<B>> {
         let local_peer_id = PeerId::from(keypair.public());
 
@@ -102,12 +112,14 @@ where
         let identify = identify::Behaviour::new(identify_config);
 
         let behaviour = SwarmBehaviour {
+            stream: libp2p_stream::Behaviour::new(),
             connection_control,
+            blacklist: Default::default(),
             autonat,
             ping,
             identify,
             kademlia,
-            behaviour,
+            behaviour: None.into(),
         };
 
         let mut swarm = new_swarm(keypair.to_owned(), behaviour).await?;
@@ -163,7 +175,23 @@ where
         Ok(manager)
     }
 
+    pub(crate) fn attach_behaviour(&mut self, behaviour: B) {
+        if self.swarm.behaviour_mut().behaviour.is_enabled() {
+            panic!("Behaviour can be attached on SwarmManager only once!");
+        }
+
+        self.swarm.behaviour_mut().behaviour = Some(behaviour).into();
+    }
+
+    pub(crate) fn stream_control(&self) -> libp2p_stream::Control {
+        self.swarm.behaviour().stream.new_control()
+    }
+
     pub(crate) async fn poll(&mut self) -> Result<B::ToSwarm> {
+        if !self.swarm.behaviour_mut().behaviour.is_enabled() {
+            panic!("Behaviour not attached on SwarmManager");
+        }
+
         loop {
             select! {
                 _ = self.peer_tracker_info_watcher.changed() => {
@@ -186,7 +214,12 @@ where
 
     pub(crate) fn context<'a>(&'a mut self) -> SwarmContext<'a, B> {
         SwarmContext {
-            behaviour: &mut self.swarm.behaviour_mut().behaviour,
+            behaviour: self
+                .swarm
+                .behaviour_mut()
+                .behaviour
+                .as_mut()
+                .expect("Behaviour not attached on SwarmManager"),
             peer_tracker: &self.peer_tracker,
         }
     }
@@ -491,7 +524,9 @@ where
                 SwarmBehaviourEvent::Identify(ev) => self.on_identify_event(ev),
                 SwarmBehaviourEvent::Kademlia(ev) => self.on_kademlia_event(ev),
                 SwarmBehaviourEvent::Ping(ev) => self.on_ping_event(ev),
-                SwarmBehaviourEvent::ConnectionControl(_) | SwarmBehaviourEvent::Autonat(_) => {}
+                SwarmBehaviourEvent::Stream(_)
+                | SwarmBehaviourEvent::ConnectionControl(_)
+                | SwarmBehaviourEvent::Autonat(_) => {}
                 SwarmBehaviourEvent::Behaviour(ev) => return Some(ev),
             },
             SwarmEvent::ConnectionEstablished {
@@ -514,12 +549,21 @@ where
         None
     }
 
-    pub(crate) fn peer_maybe_discovered(&mut self, peer_id: &PeerId) {
+    pub(crate) fn peer_maybe_discovered(&mut self, peer_id: &PeerId) -> bool {
         if !self.peer_tracker.add_peer_id(peer_id) {
-            return;
+            return false;
         }
 
         debug!("Peer discovered: {peer_id}");
+        true
+    }
+
+    pub(crate) fn blacklist_peer(&mut self, peer_id: &PeerId) -> bool {
+        if !self.swarm.behaviour_mut().blacklist.block_peer(*peer_id) {
+            return false;
+        }
+        debug!("Peer blacklisted: {peer_id}");
+        true
     }
 
     fn on_peer_connected(&mut self, peer_id: &PeerId, connection_id: ConnectionId) {

@@ -49,7 +49,7 @@ type ReqRespEvent = request_response::Event<RequestType, ResponseType>;
 type ReqRespMessage = request_response::Message<RequestType, ResponseType>;
 type ReqRespConnectionHandler = <ReqRespBehaviour as NetworkBehaviour>::ConnectionHandler;
 
-pub(crate) struct HeaderExBehaviour<S>
+pub(crate) struct Behaviour<S>
 where
     S: Store + 'static,
 {
@@ -58,7 +58,7 @@ where
     server_handler: HeaderExServerHandler<S>,
 }
 
-pub(crate) struct HeaderExConfig<'a, S> {
+pub(crate) struct Config<'a, S> {
     pub network_id: &'a str,
     pub header_store: Arc<S>,
 }
@@ -100,12 +100,12 @@ pub(crate) enum Event {
     NeedArchivalPeers,
 }
 
-impl<S> HeaderExBehaviour<S>
+impl<S> Behaviour<S>
 where
     S: Store + 'static,
 {
-    pub(crate) fn new(config: HeaderExConfig<'_, S>) -> Self {
-        HeaderExBehaviour {
+    pub(crate) fn new(config: Config<'_, S>) -> Self {
+        Behaviour {
             req_resp: ReqRespBehaviour::new(
                 [(
                     protocol_id(config.network_id, "/header-ex/v0.0.3"),
@@ -217,7 +217,7 @@ where
     }
 }
 
-impl<S> NetworkBehaviour for HeaderExBehaviour<S>
+impl<S> NetworkBehaviour for Behaviour<S>
 where
     S: Store + 'static,
 {

@@ -15,7 +15,7 @@ use crate::consts::data_availability_header::{
 };
 use crate::eds::AxisType;
 use crate::hash::Hash;
-use crate::nmt::{NamespacedHash, NamespacedHashExt};
+use crate::nmt::{Namespace, NamespacedHash, NamespacedHashExt, NamespacedSha2Hasher};
 use crate::{
     Error, ExtendedDataSquare, MerkleProof, Result, ValidateBasicWithAppVersion, ValidationError,
     bail_validation, bail_verification, validation_error,
@@ -150,10 +150,27 @@ impl DataAvailabilityHeader {
         self.row_roots.get(row).cloned()
     }
 
+    /// Check if row with given index contains provided namespace.
+    pub fn row_contains(&self, row: u16, namespace: Namespace) -> Result<bool> {
+        let row_root = self
+            .row_root(row)
+            .ok_or(Error::IndexOutOfRange(row as usize, self.row_roots.len()))?;
+        Ok(row_root.contains::<NamespacedSha2Hasher>(*namespace))
+    }
+
     /// Get the a root of the column with the given index.
     pub fn column_root(&self, column: u16) -> Option<NamespacedHash> {
         let column = usize::from(column);
         self.column_roots.get(column).cloned()
+    }
+
+    /// Check if column with given index contains provided namespace.
+    pub fn column_contains(&self, column: u16, namespace: Namespace) -> Result<bool> {
+        let column_root = self.column_root(column).ok_or(Error::IndexOutOfRange(
+            column as usize,
+            self.column_roots.len(),
+        ))?;
+        Ok(column_root.contains::<NamespacedSha2Hasher>(*namespace))
     }
 
     /// Compute the combined hash of all rows and columns.
