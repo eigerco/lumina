@@ -13,7 +13,7 @@ use web_sys::MessageChannel;
 const RPC_URL: &str = "http://127.0.0.1:26658";
 
 pub async fn new_rpc_client() -> Client {
-    Client::new(RPC_URL, None).await.unwrap()
+    Client::new(RPC_URL, None, None, None).await.unwrap()
 }
 
 pub async fn spawn_connected_node(bootnodes: Vec<String>) -> NodeClient {

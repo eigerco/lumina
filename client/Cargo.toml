@@ -51,6 +51,7 @@ getrandom_02.workspace = true
 tonic-web-wasm-client.workspace = true
 
 [dev-dependencies]
+jsonrpsee.workspace = true
 lumina-utils = { workspace = true, features = ["test-utils"] }
 rand.workspace = true
 serde.workspace = true

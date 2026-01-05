@@ -1,6 +1,7 @@
 //! Compatibility layer for exporting gRPC functionality via uniffi
 
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use k256::ecdsa::VerifyingKey;
 use uniffi::Object;
@@ -108,6 +109,13 @@ impl GrpcClientBuilder {
     #[uniffi::method(name = "withMetadataBin")]
     pub fn metadata_bin(self: Arc<Self>, key: &str, value: &[u8]) -> Arc<Self> {
         self.map_builder(move |builder| builder.metadata_bin(key, value));
+        self
+    }
+
+    /// Sets the request timeout in milliseconds, overriding default one from the transport.
+    #[uniffi::method(name = "withTimeout")]
+    pub fn timeout(self: Arc<Self>, timeout_ms: u64) -> Arc<Self> {
+        self.map_builder(move |builder| builder.timeout(Duration::from_millis(timeout_ms)));
         self
     }
 

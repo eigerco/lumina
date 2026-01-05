@@ -19,7 +19,7 @@ use tokio::time::sleep;
 const WS_URL: &str = "ws://localhost:26658";
 
 pub async fn bridge_client() -> Client {
-    Client::new(WS_URL, None).await.unwrap()
+    Client::new(WS_URL, None, None, None).await.unwrap()
 }
 
 pub async fn fetch_bridge_info() -> (PeerId, Multiaddr) {

@@ -18,7 +18,7 @@ pub(crate) const TEST_GRPC_URL: &str = "http://localhost:19090";
 
 /// gRPC-Web url
 #[cfg(target_arch = "wasm32")]
-const TEST_GRPC_URL: &str = "http://localhost:18080";
+pub(crate) const TEST_GRPC_URL: &str = "http://localhost:18080";
 
 // We have to sequence the tests which submits transactions.
 // Multiple independent tx clients don't work well in parallel

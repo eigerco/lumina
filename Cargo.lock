@@ -785,6 +785,7 @@ dependencies = [
  "hex",
  "http",
  "http-body",
+ "jsonrpsee",
  "jsonrpsee-core",
  "jsonrpsee-types",
  "k256",
@@ -885,6 +886,7 @@ dependencies = [
  "futures-util",
  "getrandom 0.2.16",
  "gloo-net",
+ "gloo-timers 0.3.0",
  "http",
  "jsonrpsee",
  "libp2p",
@@ -900,6 +902,7 @@ dependencies = [
  "tokio",
  "tracing",
  "wasm-bindgen-test",
+ "web-sys",
 ]
 
 [[package]]

@@ -75,7 +75,12 @@ impl GrpcMethod {
                             ::tonic::Extensions::new(),
                             ::std::clone::Clone::clone(&param),
                         );
-                        request.set_timeout(::std::time::Duration::from_secs(30));
+
+                        if let Some(timeout) = context.timeout {
+                            request.set_timeout(timeout);
+                        } else {
+                            request.set_timeout(::std::time::Duration::from_secs(30));
+                        }
 
                         let fut = client.#grpc_method_name(request);
 

@@ -2,6 +2,7 @@ use arc_swap::ArcSwap;
 use std::error::Error as StdError;
 use std::fmt;
 use std::sync::Arc;
+use std::time::Duration;
 
 use bytes::Bytes;
 use k256::ecdsa::{SigningKey, VerifyingKey};
@@ -31,6 +32,7 @@ enum TransportEntry {
 #[derive(Default)]
 pub struct GrpcClientBuilder {
     transports: Vec<TransportEntry>,
+    timeout: Option<Duration>,
     signer_kind: Option<SignerKind>,
     ascii_metadata: Vec<(String, String)>,
     binary_metadata: Vec<(String, Vec<u8>)>,
@@ -142,9 +144,15 @@ impl GrpcClientBuilder {
         self
     }
 
-    /// Sets the initial metadata map that will be attached to all requestes made by the client.
+    /// Sets the initial metadata map that will be attached to all the requests made by the client.
     pub fn metadata_map(mut self, metadata: MetadataMap) -> GrpcClientBuilder {
         self.metadata_map = Some(metadata);
+        self
+    }
+
+    /// Sets the request timeout, overriding default one from the transport
+    pub fn timeout(mut self, timeout: Duration) -> GrpcClientBuilder {
+        self.timeout = Some(timeout);
         self
     }
 
@@ -169,7 +177,10 @@ impl GrpcClientBuilder {
 
         let signer_config = self.signer_kind.map(TryInto::try_into).transpose()?;
 
-        let mut context = Context::default();
+        let mut context = Context {
+            timeout: self.timeout,
+            ..Default::default()
+        };
         for (key, value) in self.ascii_metadata {
             context.append_metadata(&key, &value)?;
         }
