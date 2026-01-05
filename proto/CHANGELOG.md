@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0](https://github.com/eigerco/lumina/compare/celestia-proto-v0.11.0...celestia-proto-v0.12.0) - 2026-01-05
+
+### Added
+
+- *(proto,types,node)* [**breaking**] Implement shrex data availability protocol ([#857](https://github.com/eigerco/lumina/pull/857))
+
 ## [0.11.0](https://github.com/eigerco/lumina/compare/celestia-proto-v0.10.0...celestia-proto-v0.11.0) - 2025-11-19
 
 ### Other
