@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0](https://github.com/eigerco/lumina/compare/celestia-grpc-v0.9.0...celestia-grpc-v0.10.0) - 2026-01-05
+
+### Added
+
+- *(types,grpc)* [**breaking**] switch from Height to u64, infallible app_version() ([#846](https://github.com/eigerco/lumina/pull/846))
+- *(grpc)* Split submission and confirmation ([#843](https://github.com/eigerco/lumina/pull/843))
+- *(grpc)* AsyncGrpcCall: Send ([#844](https://github.com/eigerco/lumina/pull/844))
+- *(grpc)* use multiple endpoints, fallback in case of errors ([#836](https://github.com/eigerco/lumina/pull/836))
+
+### Other
+
+- *(grpc)* fix flaky submit_and_get_tx test ([#822](https://github.com/eigerco/lumina/pull/822))
+- bump celestia-node to 0.28.2; celestia-app to 6.2.5 ([#808](https://github.com/eigerco/lumina/pull/808))
+
 ## [0.9.0](https://github.com/eigerco/lumina/compare/celestia-grpc-v0.8.0...celestia-grpc-v0.9.0) - 2025-11-19
 
 ### Added
