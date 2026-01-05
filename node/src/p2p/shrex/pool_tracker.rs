@@ -187,6 +187,7 @@ where
                     // duplicate vote
                     self.pending_events
                         .push_back(Event::BlockPeers(vec![peer_id]));
+                    return;
                 }
                 candidates
                     .entry(data_hash)
