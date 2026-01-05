@@ -165,7 +165,7 @@ impl Daser {
 
     /// Stop the worker.
     pub(crate) fn stop(&self) {
-        // Singal the Worker to stop.
+        // Signal the Worker to stop.
         self.cancellation_token.cancel();
     }
 
@@ -426,7 +426,7 @@ where
     }
 
     async fn schedule_next_sample_block(&mut self) -> Result<bool> {
-        // Schedule the most recent un-sampled block.
+        // Schedule the most recent unsampled block.
         let header = loop {
             let Some(height) = self.queue.pop_head() else {
                 return Ok(false);
@@ -496,7 +496,7 @@ where
         let event_pub = self.event_pub.clone();
         let sampling_window = self.sampling_window;
 
-        // Schedule retrival of the CIDs. This will be run later on in the `select!` loop.
+        // Schedule retrieval of the CIDs. This will be run later on in the `select!` loop.
         let fut = async move {
             let now = Instant::now();
 
@@ -532,7 +532,7 @@ where
                     // If the sample is not valid, it will never be delivered to us
                     // as the data of the CID. Because of that, the only signal
                     // that data sampling verification failed is query timing out.
-                    Err(P2pError::BitswapQueryTimeout) => true,
+                    Err(P2pError::RequestTimedOut) => true,
                     Err(e) => return Err(e.into()),
                 };
 
@@ -889,7 +889,7 @@ mod tests {
         while let Some(cmd) = handle.try_recv_cmd().await {
             match cmd {
                 P2pCmd::GetShwapCid { respond_to, .. } => {
-                    let _ = respond_to.send(Err(P2pError::BitswapQueryTimeout));
+                    let _ = respond_to.send(Err(P2pError::RequestTimedOut));
                 }
                 cmd => panic!("Unexpected command: {cmd:?}"),
             }
@@ -939,7 +939,7 @@ mod tests {
         // Concurrency limit
         let concurrency_limit = 10;
         // Additional concurrency limit for heads.
-        // In other words concurrency limit becames 15.
+        // In other words concurrency limit becomes 15.
         let additional_headersub_concurrency = 5;
         // Default number of shares that ExtendedHeaderGenerator
         // generates per block.
@@ -947,7 +947,7 @@ mod tests {
 
         let mut generator = ExtendedHeaderGenerator::new();
         store
-            .insert(generator.next_many_verified(30))
+            .insert(generator.next_many_empty_verified(30))
             .await
             .unwrap();
 
@@ -974,8 +974,11 @@ mod tests {
         // Concurrency limit reached
         handle.expect_no_cmd().await;
 
-        // However a new head will be allowed because additional limit is applied
-        store.insert(generator.next_many_verified(2)).await.unwrap();
+        // However, a new head will be allowed because additional limit is applied
+        store
+            .insert(generator.next_many_empty_verified(2))
+            .await
+            .unwrap();
 
         for _ in 0..shares_per_block {
             let (cid, respond_to) = handle.expect_get_shwap_cid().await;
@@ -1000,8 +1003,11 @@ mod tests {
 
         // Generate 5 more heads
         for _ in 0..additional_headersub_concurrency {
-            store.insert(generator.next_many_verified(1)).await.unwrap();
-            // Give some time for Daser to shedule it
+            store
+                .insert(generator.next_many_empty_verified(1))
+                .await
+                .unwrap();
+            // Give some time for Daser to schedule it
             sleep(Duration::from_millis(10)).await;
         }
 
@@ -1012,7 +1018,10 @@ mod tests {
 
         // Concurrency limit for heads is reached
         handle.expect_no_cmd().await;
-        store.insert(generator.next_many_verified(1)).await.unwrap();
+        store
+            .insert(generator.next_many_empty_verified(1))
+            .await
+            .unwrap();
         handle.expect_no_cmd().await;
 
         // Now we stop 1 block and Daser will schedule the head
@@ -1026,7 +1035,10 @@ mod tests {
 
         // Concurrency limit for heads is reached again
         handle.expect_no_cmd().await;
-        store.insert(generator.next_many_verified(1)).await.unwrap();
+        store
+            .insert(generator.next_many_empty_verified(1))
+            .await
+            .unwrap();
         handle.expect_no_cmd().await;
     }
 
@@ -1072,7 +1084,7 @@ mod tests {
         handle.expect_no_cmd().await;
         handle.announce_peer_connected();
 
-        // Blocks that are currently stored are ratelimited, so we shouldn't get any command.
+        // Blocks that are currently stored are rate-limited, so we shouldn't get any command.
         handle.expect_no_cmd().await;
 
         // Any blocks above 1000 are not limited because they are not in prunable area
@@ -1095,10 +1107,10 @@ mod tests {
         )
         .await;
 
-        // Again back to ratelimited
+        // Again back to rate-limited
         handle.expect_no_cmd().await;
 
-        // Now Pruner reports that number of prunable blocks is lower that the threshold
+        // Now Pruner reports that number of prunable blocks is lower than the threshold
         daser
             .update_number_of_prunable_blocks(PRUNER_THRESHOLD - 1)
             .await
@@ -1143,7 +1155,7 @@ mod tests {
         )
         .await;
 
-        // Daser is ratelimited again
+        // Daser is rate-limited again
         handle.expect_no_cmd().await;
     }
 
@@ -1162,7 +1174,7 @@ mod tests {
 
         for idx in indexes.into_iter().rev() {
             let (_cid, respond_to) = responders.remove(idx);
-            respond_to.send(Err(P2pError::BitswapQueryTimeout)).unwrap();
+            respond_to.send(Err(P2pError::RequestTimedOut)).unwrap();
         }
     }
 
@@ -1328,7 +1340,7 @@ mod tests {
 
             // Simulate sampling timeout
             if info.simulate_sampling_timeout && info.requests_count == REQ_TIMEOUT_SHARE_NUM {
-                respond_to.send(Err(P2pError::BitswapQueryTimeout)).unwrap();
+                respond_to.send(Err(P2pError::RequestTimedOut)).unwrap();
                 continue;
             }
 

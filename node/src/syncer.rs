@@ -148,7 +148,7 @@ where
 
     /// Stop the worker.
     pub(crate) fn stop(&self) {
-        // Singal the Worker to stop.
+        // Signal the Worker to stop.
         self.cancellation_token.cancel();
     }
 
@@ -962,7 +962,7 @@ mod tests {
         p2p_mock.announce_new_head(headers.last().unwrap().clone());
         assert_syncing(&syncer, &store, &[1..=2017], 3001).await;
 
-        // Syncer continues syncing forwads (batch 2)
+        // Syncer continues syncing forwards (batch 2)
         handle_session_batch(&mut p2p_mock, &headers, 2018..=2529, true).await;
         assert_syncing(&syncer, &store, &[1..=2529], 3001).await;
 
@@ -1005,7 +1005,7 @@ mod tests {
         syncer.trigger_fetch_next_batch().await.unwrap();
         p2p_mock.expect_no_cmd().await;
 
-        // After marking the 1st and more than of the 2nd batch, syncer
+        // After marking the 1st and more than of the 2nd batch, Syncer
         // will finally request the 3rd batch.
         for height in 1250..=2048 {
             // Simulate Daser
@@ -1153,7 +1153,7 @@ mod tests {
         // Announce a trusted peer.
         p2p_mock.announce_trusted_peer_connected();
 
-        // Now syncer will send request for HEAD.
+        // Now Syncer will send request for HEAD.
         let (height, amount, respond_to) = p2p_mock.expect_header_request_for_height_cmd().await;
         assert_eq!(height, 0);
         assert_eq!(amount, 1);
@@ -1210,7 +1210,7 @@ mod tests {
         // Announce a trusted peer.
         p2p_mock.announce_trusted_peer_connected();
 
-        // Now syncer will send request for HEAD.
+        // Now Syncer will send request for HEAD.
         let (height, amount, respond_to) = p2p_mock.expect_header_request_for_height_cmd().await;
         assert_eq!(height, 0);
         assert_eq!(amount, 1);
@@ -1254,7 +1254,7 @@ mod tests {
         // Syncer requests missing headers again
         handle_session_batch(&mut p2p_mock, &headers, 1..=19, true).await;
 
-        // With a correct resposne, syncer should update the store
+        // With a correct response, Syncer should update the store
         assert_syncing(&syncer, &store, &[1..=20], 20).await;
     }
 
@@ -1275,7 +1275,7 @@ mod tests {
         // Syncer requests missing headers again
         handle_session_batch(&mut p2p_mock, &headers, 1..=19, true).await;
 
-        // With a correct resposne, syncer should update the store
+        // With a correct response, Syncer should update the store
         assert_syncing(&syncer, &store, &[1..=20], 20).await;
     }
 
@@ -1532,7 +1532,7 @@ mod tests {
             // if we have to do more requests than our concurrency limit anyway
             max_requests
         } else {
-            // otherwise we can handle batch fully concurrent
+            // otherwise, we can handle batch fully concurrent
             header_session::MAX_CONCURRENT_REQS.min(min_requests)
         }
     }

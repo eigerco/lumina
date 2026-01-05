@@ -247,7 +247,7 @@ impl StateApi {
     ///     .await?;
     ///
     /// let ns = Namespace::new_v0(b"abcd").unwrap();
-    /// let blob = Blob::new(ns, "some data".into(), None, AppVersion::V3).unwrap();
+    /// let blob = Blob::new(ns, "some data".into(), None, AppVersion::latest()).unwrap();
     ///
     /// client
     ///     .state()

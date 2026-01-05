@@ -28,7 +28,7 @@ Supported features:
 - Backward and forward Data Availability Sampling
 - Native and browser persistent storage
 - Streaming events happening on the node
-- Native, wasm and uniffi libraries, embed the node anywhere
+- Native, Wasm and UniFFI libraries, embed the node anywhere
 - Integration tests with Go implementation
 
 ## Installing the node
@@ -123,7 +123,7 @@ For security reasons, browsers only allow WebTransport to be used in [Secure Con
 ## Running Go Celestia node for integration
 
 Follow [this guide](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry#authenticating-with-a-personal-access-token-classic)
-to authorize yourself in github's container registry.
+to authorize yourself in GitHub's container registry.
 
 Starting a Celestia network with single validator and some DA nodes
 ```bash
@@ -167,7 +167,7 @@ cargo test
 
 ## Frontend
 
-Check out the front end at [eigerco/lumina-front](https://github.com/eigerco/lumina-front)
+Check out the frontend at [eigerco/lumina-front](https://github.com/eigerco/lumina-front)
 
 ## About Eiger
 

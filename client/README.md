@@ -76,7 +76,7 @@ async fn main() -> Result<()> {
         ns,
         b"some data to store".to_vec(),
         Some(client.address()?),
-        AppVersion::V5,
+        AppVersion::latest(),
     )?;
 
     // This is the hash of the blob which is needed later on for retrieving

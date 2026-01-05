@@ -37,14 +37,18 @@ libp2p = { workspace = true, features = [
   "request-response",
   "kad",
 ] }
+libp2p-stream = "0.4.0-alpha"
 prost.workspace = true
 tendermint-proto.workspace = true
 tendermint.workspace = true
 
 async-trait.workspace = true
+bytes.workspace = true
 cid = { workspace = true, features = ["serde-codec"] }
 dashmap = "6"
+either = "1.12"
 futures.workspace = true
+integer-encoding = "4.1.0"
 multihash-codetable = { version = "0.1.2", features = ["sha2"] }
 rand.workspace = true
 serde = { workspace = true, features = ["derive"] }

@@ -3,15 +3,30 @@
 use std::cmp::Ordering;
 use std::fmt::Display;
 
+use bytes::{Buf, BufMut, BytesMut};
 use serde::{Deserialize, Serialize};
 
 use crate::consts::appconsts::{AppVersion, SHARE_SIZE};
 use crate::consts::data_availability_header::{
     MIN_EXTENDED_SQUARE_WIDTH, max_extended_square_width,
 };
-use crate::nmt::{NS_SIZE, Namespace, NamespacedSha2Hasher, Nmt, NmtExt};
+use crate::nmt::{NS_SIZE, Namespace, Nmt, NmtExt};
 use crate::row_namespace_data::{RowNamespaceData, RowNamespaceDataId};
 use crate::{DataAvailabilityHeader, Error, InfoByte, Result, Share, bail_validation};
+
+/// Number of bytes needed to represent [`EdsId`] in `multihash`.
+pub const EDS_ID_SIZE: usize = 8;
+
+/// Represents an EDS of a specific Height
+///
+/// # Note
+///
+/// EdsId is excluded from shwap operating on top of bitswap due to possible
+/// EDS sizes exceeding bitswap block limits.
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub struct EdsId {
+    height: u64,
+}
 
 /// Represents either column or row of the [`ExtendedDataSquare`].
 ///
@@ -412,11 +427,7 @@ impl ExtendedDataSquare {
         let mut rows = Vec::new();
 
         for row in 0..self.square_width {
-            let Some(row_root) = dah.row_root(row) else {
-                break;
-            };
-
-            if !row_root.contains::<NamespacedSha2Hasher>(*namespace) {
+            if !dah.row_contains(row, namespace)? {
                 continue;
             }
 
@@ -445,6 +456,39 @@ impl ExtendedDataSquare {
         }
 
         Ok(rows)
+    }
+}
+
+impl EdsId {
+    /// Create a new eds id.
+    pub fn new(height: u64) -> Result<Self> {
+        if height == 0 {
+            return Err(Error::ZeroBlockHeight);
+        }
+
+        Ok(EdsId { height })
+    }
+
+    /// A height of the block which contains the data.
+    pub fn block_height(&self) -> u64 {
+        self.height
+    }
+
+    /// Encode eds id into the byte representation.
+    pub fn encode(&self, bytes: &mut BytesMut) {
+        bytes.reserve(EDS_ID_SIZE);
+        bytes.put_u64(self.height);
+    }
+
+    /// Decode eds id from the byte representation.
+    pub fn decode(mut buffer: &[u8]) -> Result<Self> {
+        if buffer.len() != EDS_ID_SIZE {
+            return Err(Error::InvalidLength(buffer.len(), EDS_ID_SIZE));
+        }
+
+        let height = buffer.get_u64();
+
+        EdsId::new(height)
     }
 }
 
