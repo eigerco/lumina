@@ -1,6 +1,6 @@
 #![cfg(all(feature = "p2p", not(target_arch = "wasm32")))]
 
-use celestia_rpc::p2p_types as p2p;
+use celestia_rpc::p2p;
 use celestia_rpc::prelude::*;
 use libp2p::{PeerId, identity};
 use tokio::time::{Duration, sleep};

@@ -3,7 +3,7 @@
 use std::time::Duration;
 
 use celestia_rpc::TxConfig;
-use celestia_rpc::p2p_types::PeerId;
+use celestia_rpc::p2p::PeerId;
 use celestia_rpc::prelude::*;
 use celestia_types::nmt::Namespace;
 use celestia_types::{AppVersion, Blob};
