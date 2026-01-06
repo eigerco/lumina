@@ -289,7 +289,7 @@ mod wbg {
                 priority: value.priority().unwrap_or_default(),
                 confirmation_interval_ms: value
                     .confirmation_interval_ms()
-                    .unwrap_or(DEFAULT_CONFIRMATION_INTERVAL_MS),
+                    .unwrap_or(TxConfig::default().confirmation_interval_ms),
             }
         }
     }
