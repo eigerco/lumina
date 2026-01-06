@@ -14,6 +14,7 @@ pub use self::wasm::Client;
 mod native {
     use std::fmt;
     use std::result::Result;
+    use std::sync::Arc;
     use std::time::Duration;
 
     use http::{HeaderValue, header};
@@ -21,9 +22,12 @@ mod native {
     use jsonrpsee::core::client::{BatchResponse, ClientT, Subscription, SubscriptionClientT};
     use jsonrpsee::core::params::BatchRequestBuilder;
     use jsonrpsee::core::traits::ToRpcParams;
+    use jsonrpsee::core::JsonRawValue;
     use jsonrpsee::http_client::{HeaderMap, HttpClient, HttpClientBuilder};
     use jsonrpsee::ws_client::{PingConfig, WsClient, WsClientBuilder};
     use serde::de::DeserializeOwned;
+    use serde_json;
+    use tokio::sync::RwLock;
     use tracing::warn;
 
     use crate::Error;
@@ -35,7 +39,7 @@ mod native {
         /// A client using 'http\[s\]' protocol.
         Http(HttpClient),
         /// A client using 'ws\[s\]' protocol.
-        Ws(WsClient),
+        Ws(WsReconnectClient),
     }
 
     impl Client {
@@ -53,16 +57,10 @@ mod native {
             connect_timeout: Option<Duration>,
             request_timeout: Option<Duration>,
         ) -> Result<Self, Error> {
-            let mut headers = HeaderMap::new();
-
-            if let Some(token) = auth_token {
-                let val = HeaderValue::from_str(&format!("Bearer {token}"))?;
-                headers.insert(header::AUTHORIZATION, val);
-            }
-
             let protocol = url.split_once(':').map(|(proto, _)| proto);
             let client = match protocol {
                 Some("http") | Some("https") => {
+                    let headers = build_headers(auth_token)?;
                     let mut builder = HttpClientBuilder::default()
                         .max_response_size(MAX_RESPONSE_SIZE as u32)
                         .set_headers(headers);
@@ -75,23 +73,252 @@ mod native {
                     Client::Http(builder.build(url)?)
                 }
                 Some("ws") | Some("wss") => {
-                    let mut builder = WsClientBuilder::default()
-                        .max_response_size(MAX_RESPONSE_SIZE as u32)
-                        .set_headers(headers)
-                        .enable_ws_ping(PingConfig::default());
-                    if let Some(timeout) = request_timeout {
-                        builder = builder.request_timeout(timeout);
-                    }
-                    if let Some(timeout) = connect_timeout {
-                        builder = builder.connection_timeout(timeout);
-                    }
-                    Client::Ws(builder.build(url).await?)
+                    Client::Ws(
+                        WsReconnectClient::new(
+                            url,
+                            auth_token,
+                            connect_timeout,
+                            request_timeout,
+                        )
+                        .await?,
+                    )
                 }
                 _ => return Err(Error::ProtocolNotSupported(url.into())),
             };
 
             Ok(client)
         }
+    }
+
+    pub struct WsReconnectClient {
+        state: RwLock<WsState>,
+        url: String,
+        auth_token: Option<String>,
+        connect_timeout: Option<Duration>,
+        request_timeout: Option<Duration>,
+    }
+
+    struct WsState {
+        inner: Arc<WsClient>,
+        epoch: u64,
+    }
+
+    impl WsReconnectClient {
+        async fn new(
+            url: &str,
+            auth_token: Option<&str>,
+            connect_timeout: Option<Duration>,
+            request_timeout: Option<Duration>,
+        ) -> Result<Self, Error> {
+            let inner =
+                Arc::new(build_ws_client(url, auth_token, connect_timeout, request_timeout).await?);
+            Ok(Self {
+                state: RwLock::new(WsState { inner, epoch: 0 }),
+                url: url.to_owned(),
+                auth_token: auth_token.map(str::to_owned),
+                connect_timeout,
+                request_timeout,
+            })
+        }
+
+        async fn reconnect(&self, expected_epoch: u64) -> Result<(), ClientError> {
+            let mut state = self.state.write().await;
+            if state.epoch != expected_epoch {
+                return Ok(());
+            }
+
+            let new_inner = Arc::new(
+                build_ws_client(
+                    &self.url,
+                    self.auth_token.as_deref(),
+                    self.connect_timeout,
+                    self.request_timeout,
+                )
+                .await
+                .map_err(|err| ClientError::Custom(err.to_string()))?,
+            );
+            state.inner = new_inner;
+            state.epoch += 1;
+            Ok(())
+        }
+
+        fn to_raw_params<Params>(params: Params) -> Result<ReusableParams, ClientError>
+        where
+            Params: ToRpcParams,
+        {
+            Ok(ReusableParams(
+                params
+                    .to_rpc_params()?
+                    .map(|raw| raw.get().to_owned()),
+            ))
+        }
+
+        async fn notification<Params>(
+            &self,
+            method: &str,
+            params: Params,
+        ) -> Result<(), ClientError>
+        where
+            Params: ToRpcParams + Send,
+        {
+            let params = Self::to_raw_params(params)?;
+            loop {
+                let (epoch, inner) = {
+                    let state = self.state.read().await;
+                    (state.epoch, state.inner.clone())
+                };
+                let params = params.clone();
+
+                match inner.notification(method, params).await {
+                    Err(ClientError::RestartNeeded(_)) => {
+                        self.reconnect(epoch).await?;
+                        continue;
+                    }
+                    res => return res,
+                }
+            }
+        }
+
+        async fn request<R, Params>(&self, method: &str, params: Params) -> Result<R, ClientError>
+        where
+            R: DeserializeOwned,
+            Params: ToRpcParams + Send,
+        {
+            let params = Self::to_raw_params(params)?;
+            loop {
+                let (epoch, inner) = {
+                    let state = self.state.read().await;
+                    (state.epoch, state.inner.clone())
+                };
+                let params = params.clone();
+
+                let should_retry = {
+                    let res = inner.request(method, params).await;
+                    match res {
+                        Err(ClientError::RestartNeeded(_)) => true,
+                        res => return res,
+                    }
+                };
+                if should_retry {
+                    self.reconnect(epoch).await?;
+                    continue;
+                }
+            }
+        }
+
+        async fn batch_request<'a, R>(
+            &self,
+            batch: BatchRequestBuilder<'a>,
+        ) -> Result<BatchResponse<'a, R>, ClientError>
+        where
+            R: DeserializeOwned + fmt::Debug + 'a,
+        {
+            let inner = {
+                let state = self.state.read().await;
+                state.inner.clone()
+            };
+            inner.batch_request(batch).await
+        }
+
+        async fn subscribe<'a, N, Params>(
+            &self,
+            subscribe_method: &'a str,
+            params: Params,
+            unsubscribe_method: &'a str,
+        ) -> Result<Subscription<N>, ClientError>
+        where
+            Params: ToRpcParams + Send,
+            N: DeserializeOwned,
+        {
+            let params = Self::to_raw_params(params)?;
+            loop {
+                let (epoch, inner) = {
+                    let state = self.state.read().await;
+                    (state.epoch, state.inner.clone())
+                };
+                let params = params.clone();
+
+                let should_retry = {
+                    let res = inner
+                        .subscribe(subscribe_method, params, unsubscribe_method)
+                        .await;
+                    match res {
+                        Err(ClientError::RestartNeeded(_)) => true,
+                        res => return res,
+                    }
+                };
+                if should_retry {
+                    self.reconnect(epoch).await?;
+                    continue;
+                }
+            }
+        }
+
+        async fn subscribe_to_method<N>(&self, method: &str) -> Result<Subscription<N>, ClientError>
+        where
+            N: DeserializeOwned,
+        {
+            loop {
+                let (epoch, inner) = {
+                    let state = self.state.read().await;
+                    (state.epoch, state.inner.clone())
+                };
+                let should_retry = {
+                    let res = inner.subscribe_to_method(method).await;
+                    match res {
+                        Err(ClientError::RestartNeeded(_)) => true,
+                        res => return res,
+                    }
+                };
+                if should_retry {
+                    self.reconnect(epoch).await?;
+                    continue;
+                }
+            }
+        }
+    }
+
+    #[derive(Clone)]
+    struct ReusableParams(Option<String>);
+
+    impl ToRpcParams for ReusableParams {
+        fn to_rpc_params(self) -> Result<Option<Box<JsonRawValue>>, serde_json::Error> {
+            match self.0 {
+                Some(raw) => Ok(Some(JsonRawValue::from_string(raw)?)),
+                None => Ok(None),
+            }
+        }
+    }
+
+    fn build_headers(auth_token: Option<&str>) -> Result<HeaderMap, Error> {
+        let mut headers = HeaderMap::new();
+
+        if let Some(token) = auth_token {
+            let val = HeaderValue::from_str(&format!("Bearer {token}"))?;
+            headers.insert(header::AUTHORIZATION, val);
+        }
+
+        Ok(headers)
+    }
+
+    async fn build_ws_client(
+        url: &str,
+        auth_token: Option<&str>,
+        connect_timeout: Option<Duration>,
+        request_timeout: Option<Duration>,
+    ) -> Result<WsClient, Error> {
+        let headers = build_headers(auth_token)?;
+        let mut builder = WsClientBuilder::default()
+            .max_response_size(MAX_RESPONSE_SIZE as u32)
+            .set_headers(headers)
+            .enable_ws_ping(PingConfig::default());
+        if let Some(timeout) = request_timeout {
+            builder = builder.request_timeout(timeout);
+        }
+        if let Some(timeout) = connect_timeout {
+            builder = builder.connection_timeout(timeout);
+        }
+        Ok(builder.build(url).await?)
     }
 
     impl ClientT for Client {
@@ -151,11 +378,9 @@ mod native {
                         .subscribe(subscribe_method, params, unsubscribe_method)
                         .await
                 }
-                Client::Ws(client) => {
-                    client
-                        .subscribe(subscribe_method, params, unsubscribe_method)
-                        .await
-                }
+                Client::Ws(client) => client
+                    .subscribe(subscribe_method, params, unsubscribe_method)
+                    .await,
             }
         }
 
