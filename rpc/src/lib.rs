@@ -13,6 +13,7 @@ mod error;
 pub mod fraud;
 mod header;
 #[cfg(feature = "p2p")]
+/// Types and client for the p2p JSON-RPC API.
 pub mod p2p;
 pub mod share;
 mod state;
