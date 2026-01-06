@@ -19,10 +19,10 @@ mod native {
 
     use http::{HeaderValue, header};
     use jsonrpsee::core::ClientError;
+    use jsonrpsee::core::JsonRawValue;
     use jsonrpsee::core::client::{BatchResponse, ClientT, Subscription, SubscriptionClientT};
     use jsonrpsee::core::params::BatchRequestBuilder;
     use jsonrpsee::core::traits::ToRpcParams;
-    use jsonrpsee::core::JsonRawValue;
     use jsonrpsee::http_client::{HeaderMap, HttpClient, HttpClientBuilder};
     use jsonrpsee::ws_client::{PingConfig, WsClient, WsClientBuilder};
     use serde::de::DeserializeOwned;
@@ -39,7 +39,7 @@ mod native {
         /// A client using 'http\[s\]' protocol.
         Http(HttpClient),
         /// A client using 'ws\[s\]' protocol.
-        Ws(WsReconnectClient),
+        Ws(WsReconnectClient<WsClient>),
     }
 
     impl Client {
@@ -72,17 +72,10 @@ mod native {
                     }
                     Client::Http(builder.build(url)?)
                 }
-                Some("ws") | Some("wss") => {
-                    Client::Ws(
-                        WsReconnectClient::new(
-                            url,
-                            auth_token,
-                            connect_timeout,
-                            request_timeout,
-                        )
+                Some("ws") | Some("wss") => Client::Ws(
+                    WsReconnectClient::new(url, auth_token, connect_timeout, request_timeout)
                         .await?,
-                    )
-                }
+                ),
                 _ => return Err(Error::ProtocolNotSupported(url.into())),
             };
 
@@ -90,34 +83,54 @@ mod native {
         }
     }
 
-    pub struct WsReconnectClient {
-        state: RwLock<WsState>,
-        url: String,
-        auth_token: Option<String>,
-        connect_timeout: Option<Duration>,
-        request_timeout: Option<Duration>,
+    pub struct WsReconnectClient<C> {
+        state: RwLock<WsState<C>>,
+        build: BuildFn<C>,
     }
 
-    struct WsState {
-        inner: Arc<WsClient>,
+    struct WsState<C> {
+        inner: Arc<C>,
         epoch: u64,
     }
 
-    impl WsReconnectClient {
+    type BuildFn<C> =
+        Arc<dyn Fn() -> futures_util::future::BoxFuture<'static, Result<C, Error>> + Send + Sync>;
+
+    impl WsReconnectClient<WsClient> {
         async fn new(
             url: &str,
             auth_token: Option<&str>,
             connect_timeout: Option<Duration>,
             request_timeout: Option<Duration>,
         ) -> Result<Self, Error> {
-            let inner =
-                Arc::new(build_ws_client(url, auth_token, connect_timeout, request_timeout).await?);
+            let url = url.to_owned();
+            let auth_token = auth_token.map(str::to_owned);
+            let build: BuildFn<WsClient> = Arc::new(move || {
+                let url = url.clone();
+                let auth_token = auth_token.clone();
+                Box::pin(async move {
+                    build_ws_client(
+                        &url,
+                        auth_token.as_deref(),
+                        connect_timeout,
+                        request_timeout,
+                    )
+                    .await
+                })
+            });
+            WsReconnectClient::new_with_factory(build).await
+        }
+    }
+
+    impl<C> WsReconnectClient<C>
+    where
+        C: ClientT + SubscriptionClientT + Send + Sync + 'static,
+    {
+        async fn new_with_factory(build: BuildFn<C>) -> Result<Self, Error> {
+            let inner = Arc::new((build)().await?);
             Ok(Self {
                 state: RwLock::new(WsState { inner, epoch: 0 }),
-                url: url.to_owned(),
-                auth_token: auth_token.map(str::to_owned),
-                connect_timeout,
-                request_timeout,
+                build,
             })
         }
 
@@ -128,14 +141,9 @@ mod native {
             }
 
             let new_inner = Arc::new(
-                build_ws_client(
-                    &self.url,
-                    self.auth_token.as_deref(),
-                    self.connect_timeout,
-                    self.request_timeout,
-                )
-                .await
-                .map_err(|err| ClientError::Custom(err.to_string()))?,
+                (self.build)()
+                    .await
+                    .map_err(|err| ClientError::Custom(err.to_string()))?,
             );
             state.inner = new_inner;
             state.epoch += 1;
@@ -147,9 +155,7 @@ mod native {
             Params: ToRpcParams,
         {
             Ok(ReusableParams(
-                params
-                    .to_rpc_params()?
-                    .map(|raw| raw.get().to_owned()),
+                params.to_rpc_params()?.map(|raw| raw.get().to_owned()),
             ))
         }
 
@@ -204,20 +210,6 @@ mod native {
                     continue;
                 }
             }
-        }
-
-        async fn batch_request<'a, R>(
-            &self,
-            batch: BatchRequestBuilder<'a>,
-        ) -> Result<BatchResponse<'a, R>, ClientError>
-        where
-            R: DeserializeOwned + fmt::Debug + 'a,
-        {
-            let inner = {
-                let state = self.state.read().await;
-                state.inner.clone()
-            };
-            inner.batch_request(batch).await
         }
 
         async fn subscribe<'a, N, Params>(
@@ -356,7 +348,13 @@ mod native {
         {
             match self {
                 Client::Http(client) => client.batch_request(batch).await,
-                Client::Ws(client) => client.batch_request(batch).await,
+                Client::Ws(client) => {
+                    let inner = {
+                        let state = client.state.read().await;
+                        state.inner.clone()
+                    };
+                    inner.batch_request(batch).await
+                }
             }
         }
     }
@@ -378,9 +376,11 @@ mod native {
                         .subscribe(subscribe_method, params, unsubscribe_method)
                         .await
                 }
-                Client::Ws(client) => client
-                    .subscribe(subscribe_method, params, unsubscribe_method)
-                    .await,
+                Client::Ws(client) => {
+                    client
+                        .subscribe(subscribe_method, params, unsubscribe_method)
+                        .await
+                }
             }
         }
 
@@ -392,6 +392,169 @@ mod native {
                 Client::Http(client) => client.subscribe_to_method(method).await,
                 Client::Ws(client) => client.subscribe_to_method(method).await,
             }
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+
+        use jsonrpsee::core::ClientError;
+        use jsonrpsee::core::params::BatchRequestBuilder;
+        use serde::de::DeserializeOwned;
+        use serde_json::Value as JsonValue;
+        use tokio::join;
+
+        use super::{BuildFn, WsReconnectClient};
+
+        struct FakeWsClient {
+            fail_first: AtomicBool,
+            response: JsonValue,
+        }
+
+        impl FakeWsClient {
+            fn new(fail_first: bool, response: JsonValue) -> Self {
+                Self {
+                    fail_first: AtomicBool::new(fail_first),
+                    response,
+                }
+            }
+        }
+
+        impl jsonrpsee::core::client::ClientT for FakeWsClient {
+            fn notification<Params>(
+                &self,
+                _method: &str,
+                _params: Params,
+            ) -> impl std::future::Future<Output = Result<(), ClientError>> + Send
+            where
+                Params: jsonrpsee::core::traits::ToRpcParams + Send,
+            {
+                async move { Ok(()) }
+            }
+
+            fn request<R, Params>(
+                &self,
+                _method: &str,
+                _params: Params,
+            ) -> impl std::future::Future<Output = Result<R, ClientError>> + Send
+            where
+                R: DeserializeOwned,
+                Params: jsonrpsee::core::traits::ToRpcParams + Send,
+            {
+                let should_fail = self.fail_first.swap(false, Ordering::SeqCst);
+                let response = self.response.clone();
+                async move {
+                    if should_fail {
+                        return Err(ClientError::RestartNeeded(Arc::new(ClientError::Custom(
+                            "restart".into(),
+                        ))));
+                    }
+                    serde_json::from_value(response).map_err(ClientError::ParseError)
+                }
+            }
+
+            fn batch_request<'a, R>(
+                &self,
+                _batch: BatchRequestBuilder<'a>,
+            ) -> impl std::future::Future<
+                Output = Result<jsonrpsee::core::client::BatchResponse<'a, R>, ClientError>,
+            > + Send
+            where
+                R: DeserializeOwned + std::fmt::Debug + 'a,
+            {
+                async move {
+                    Err(ClientError::Custom(
+                        "batch_request not implemented in FakeWsClient".into(),
+                    ))
+                }
+            }
+        }
+
+        impl jsonrpsee::core::client::SubscriptionClientT for FakeWsClient {
+            fn subscribe<'a, N, Params>(
+                &self,
+                _subscribe_method: &'a str,
+                _params: Params,
+                _unsubscribe_method: &'a str,
+            ) -> impl std::future::Future<
+                Output = Result<jsonrpsee::core::client::Subscription<N>, ClientError>,
+            > + Send
+            where
+                Params: jsonrpsee::core::traits::ToRpcParams + Send,
+                N: DeserializeOwned,
+            {
+                async move {
+                    Err(ClientError::Custom(
+                        "subscribe not implemented in FakeWsClient".into(),
+                    ))
+                }
+            }
+
+            fn subscribe_to_method<N>(
+                &self,
+                _method: &str,
+            ) -> impl std::future::Future<
+                Output = Result<jsonrpsee::core::client::Subscription<N>, ClientError>,
+            > + Send
+            where
+                N: DeserializeOwned,
+            {
+                async move {
+                    Err(ClientError::Custom(
+                        "subscribe_to_method not implemented in FakeWsClient".into(),
+                    ))
+                }
+            }
+        }
+
+        #[tokio::test]
+        async fn request_reconnects_once_on_restart_needed() {
+            let build_count = Arc::new(AtomicUsize::new(0));
+            let response = serde_json::json!(7u64);
+            let build: BuildFn<FakeWsClient> = {
+                let build_count = build_count.clone();
+                Arc::new(move || {
+                    let build_count = build_count.clone();
+                    let response = response.clone();
+                    Box::pin(async move {
+                        let id = build_count.fetch_add(1, Ordering::SeqCst);
+                        Ok(FakeWsClient::new(id == 0, response))
+                    })
+                })
+            };
+
+            let client = WsReconnectClient::new_with_factory(build).await.unwrap();
+            let value: u64 = client.request("test", Vec::<u8>::new()).await.unwrap();
+            assert_eq!(value, 7);
+            assert_eq!(build_count.load(Ordering::SeqCst), 2);
+        }
+
+        #[tokio::test]
+        async fn concurrent_restart_triggers_single_reconnect() {
+            let build_count = Arc::new(AtomicUsize::new(0));
+            let response = serde_json::json!(5u64);
+            let build: BuildFn<FakeWsClient> = {
+                let build_count = build_count.clone();
+                Arc::new(move || {
+                    let build_count = build_count.clone();
+                    let response = response.clone();
+                    Box::pin(async move {
+                        let id = build_count.fetch_add(1, Ordering::SeqCst);
+                        Ok(FakeWsClient::new(id == 0, response))
+                    })
+                })
+            };
+
+            let client = WsReconnectClient::new_with_factory(build).await.unwrap();
+            let (a, b) = join!(
+                client.request::<u64, _>("test", Vec::<u8>::new()),
+                client.request::<u64, _>("test", Vec::<u8>::new())
+            );
+            assert_eq!(a.unwrap(), 5);
+            assert_eq!(b.unwrap(), 5);
+            assert_eq!(build_count.load(Ordering::SeqCst), 2);
         }
     }
 
