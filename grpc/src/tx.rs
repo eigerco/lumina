@@ -112,10 +112,6 @@ impl TxConfig {
         self
     }
 
-    /// Return the confirmation polling interval in milliseconds.
-    pub fn confirmation_interval_ms(&self) -> u64 {
-        self.confirmation_interval_ms
-    }
 }
 
 impl Default for TxConfig {
