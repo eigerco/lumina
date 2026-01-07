@@ -22,11 +22,11 @@ beetswap = "0.5"
 blockstore = "0.8"
 leopard-codec = "0.2"
 lumina-node = { version = "0.18.0", path = "node" }
-lumina-node-wasm = { version = "0.13.0", path = "node-wasm" }
+lumina-node-wasm = { version = "0.13.1", path = "node-wasm" }
 lumina-utils = { version = "0.5.1", path = "utils" }
-celestia-client = { version = "0.4.0", path = "client" }
+celestia-client = { version = "0.4.1", path = "client" }
 celestia-proto = { version = "0.12.0", path = "proto" }
-celestia-grpc = { version = "0.10.0", path = "grpc", default-features = false }
+celestia-grpc = { version = "0.11.0", path = "grpc", default-features = false }
 celestia-grpc-macros = { version = "0.6.0", path = "grpc/grpc-macros" }
 celestia-rpc = { version = "0.16.0", path = "rpc", default-features = false }
 celestia-types = { version = "0.18.0", path = "types", default-features = false }
