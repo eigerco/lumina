@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.1](https://github.com/eigerco/lumina/compare/celestia-grpc-v0.10.0...celestia-grpc-v0.10.1) - 2026-01-07
+
+### Fixed
+
+- *(client)* Fix CI errors, adding all possible error codes ([#866](https://github.com/eigerco/lumina/pull/866))
+
 ## [0.10.0](https://github.com/eigerco/lumina/compare/celestia-grpc-v0.9.0...celestia-grpc-v0.10.0) - 2026-01-05
 
 ### Added

@@ -771,7 +771,7 @@ dependencies = [
 
 [[package]]
 name = "celestia-client"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "async-stream",
  "blockstore",
@@ -803,7 +803,7 @@ dependencies = [
 
 [[package]]
 name = "celestia-grpc"
-version = "0.10.0"
+version = "0.10.1"
 dependencies = [
  "arc-swap",
  "async-trait",
@@ -3523,7 +3523,7 @@ dependencies = [
 
 [[package]]
 name = "lumina-node-uniffi"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "async-trait",
  "blockstore",
@@ -3546,7 +3546,7 @@ dependencies = [
 
 [[package]]
 name = "lumina-node-wasm"
-version = "0.13.0"
+version = "0.13.1"
 dependencies = [
  "anyhow",
  "blockstore",
