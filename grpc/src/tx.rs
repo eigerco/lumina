@@ -111,7 +111,6 @@ impl TxConfig {
         self.confirmation_interval_ms = confirmation_interval_ms;
         self
     }
-
 }
 
 impl Default for TxConfig {
