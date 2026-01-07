@@ -501,7 +501,13 @@ impl GrpcClient {
 
     /// Manually confirm transaction broadcasted with [`GrpcClient::broadcast_blobs`] or [`GrpcClient::broadcast_message`].
     // in this case both uniffi and wasm-bindgen bindings are compiled out and the method is unused
-    #[cfg_attr(all(feature = "uniffi", target_arch = "wasm32"), allow(dead_code))]
+    #[cfg_attr(
+        any(
+            all(not(feature = "wasm-bindgen"), target_arch = "wasm32"),
+            all(feature = "uniffi", target_arch = "wasm32")
+        ),
+        allow(dead_code)
+    )]
     pub(crate) fn confirm_broadcasted_tx(
         &self,
         tx: BroadcastedTx,
