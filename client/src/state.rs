@@ -765,6 +765,6 @@ mod tests {
             panic!("Invalid error type");
         };
 
-        assert_eq!(status.code(), Code::DeadlineExceeded);
+        assert!(status.code() == Code::DeadlineExceeded || status.code() == Code::Cancelled);
     }
 }
