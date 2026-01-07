@@ -90,6 +90,7 @@ mod native {
 
     struct WsState<C> {
         inner: Arc<C>,
+        poisoned: bool,
         epoch: u64,
     }
 
@@ -129,25 +130,43 @@ mod native {
         async fn new_with_factory(build: BuildFn<C>) -> Result<Self, Error> {
             let inner = Arc::new((build)().await?);
             Ok(Self {
-                state: RwLock::new(WsState { inner, epoch: 0 }),
+                state: RwLock::new(WsState {
+                    inner,
+                    poisoned: false,
+                    epoch: 0,
+                }),
                 build,
             })
         }
 
-        async fn reconnect(&self, expected_epoch: u64) -> Result<(), ClientError> {
-            let mut state = self.state.write().await;
-            if state.epoch != expected_epoch {
-                return Ok(());
+        async fn get_inner(&self) -> Result<Arc<C>, ClientError> {
+            let (epoch, poisoned, inner) = {
+                let state = self.state.read().await;
+                (state.epoch, state.poisoned, state.inner.clone())
+            };
+            if !poisoned {
+                return Ok(inner);
             }
 
-            let new_inner = Arc::new(
-                (self.build)()
-                    .await
-                    .map_err(|err| ClientError::Custom(err.to_string()))?,
-            );
-            state.inner = new_inner;
-            state.epoch += 1;
-            Ok(())
+            let mut state = self.state.write().await;
+            if state.poisoned && state.epoch == epoch {
+                let new_inner = Arc::new(
+                    (self.build)()
+                        .await
+                        .map_err(|err| ClientError::Custom(err.to_string()))?,
+                );
+                state.inner = new_inner;
+                state.poisoned = false;
+            }
+            Ok(state.inner.clone())
+        }
+
+        async fn mark_poisoned(&self) {
+            let mut state = self.state.write().await;
+            if !state.poisoned {
+                state.poisoned = true;
+                state.epoch += 1;
+            }
         }
 
         fn to_raw_params<Params>(params: Params) -> Result<ReusableParams, ClientError>
@@ -168,21 +187,15 @@ mod native {
             Params: ToRpcParams + Send,
         {
             let params = Self::to_raw_params(params)?;
-            loop {
-                let (epoch, inner) = {
-                    let state = self.state.read().await;
-                    (state.epoch, state.inner.clone())
-                };
-                let params = params.clone();
+            let inner = self.get_inner().await?;
+            let params = params.clone();
 
-                match inner.notification(method, params).await {
-                    Err(ClientError::RestartNeeded(_)) => {
-                        self.reconnect(epoch).await?;
-                        continue;
-                    }
-                    res => return res,
-                }
-            }
+            let err = match inner.notification(method, params).await {
+                Err(err @ ClientError::RestartNeeded(_)) => err,
+                res => return res,
+            };
+            self.mark_poisoned().await;
+            Err(err)
         }
 
         async fn request<R, Params>(&self, method: &str, params: Params) -> Result<R, ClientError>
@@ -191,25 +204,15 @@ mod native {
             Params: ToRpcParams + Send,
         {
             let params = Self::to_raw_params(params)?;
-            loop {
-                let (epoch, inner) = {
-                    let state = self.state.read().await;
-                    (state.epoch, state.inner.clone())
-                };
-                let params = params.clone();
+            let inner = self.get_inner().await?;
+            let params = params.clone();
 
-                let should_retry = {
-                    let res = inner.request(method, params).await;
-                    match res {
-                        Err(ClientError::RestartNeeded(_)) => true,
-                        res => return res,
-                    }
-                };
-                if should_retry {
-                    self.reconnect(epoch).await?;
-                    continue;
-                }
-            }
+            let err = match inner.request(method, params).await {
+                Err(err @ ClientError::RestartNeeded(_)) => err,
+                res => return res,
+            };
+            self.mark_poisoned().await;
+            Err(err)
         }
 
         async fn subscribe<'a, N, Params>(
@@ -223,50 +226,31 @@ mod native {
             N: DeserializeOwned,
         {
             let params = Self::to_raw_params(params)?;
-            loop {
-                let (epoch, inner) = {
-                    let state = self.state.read().await;
-                    (state.epoch, state.inner.clone())
-                };
-                let params = params.clone();
+            let inner = self.get_inner().await?;
+            let params = params.clone();
 
-                let should_retry = {
-                    let res = inner
-                        .subscribe(subscribe_method, params, unsubscribe_method)
-                        .await;
-                    match res {
-                        Err(ClientError::RestartNeeded(_)) => true,
-                        res => return res,
-                    }
-                };
-                if should_retry {
-                    self.reconnect(epoch).await?;
-                    continue;
-                }
-            }
+            let err = match inner
+                .subscribe(subscribe_method, params, unsubscribe_method)
+                .await
+            {
+                Err(err @ ClientError::RestartNeeded(_)) => err,
+                res => return res,
+            };
+            self.mark_poisoned().await;
+            Err(err)
         }
 
         async fn subscribe_to_method<N>(&self, method: &str) -> Result<Subscription<N>, ClientError>
         where
             N: DeserializeOwned,
         {
-            loop {
-                let (epoch, inner) = {
-                    let state = self.state.read().await;
-                    (state.epoch, state.inner.clone())
-                };
-                let should_retry = {
-                    let res = inner.subscribe_to_method(method).await;
-                    match res {
-                        Err(ClientError::RestartNeeded(_)) => true,
-                        res => return res,
-                    }
-                };
-                if should_retry {
-                    self.reconnect(epoch).await?;
-                    continue;
-                }
-            }
+            let inner = self.get_inner().await?;
+            let err = match inner.subscribe_to_method(method).await {
+                Err(err @ ClientError::RestartNeeded(_)) => err,
+                res => return res,
+            };
+            self.mark_poisoned().await;
+            Err(err)
         }
     }
 
@@ -349,11 +333,13 @@ mod native {
             match self {
                 Client::Http(client) => client.batch_request(batch).await,
                 Client::Ws(client) => {
-                    let inner = {
-                        let state = client.state.read().await;
-                        state.inner.clone()
+                    let inner = client.get_inner().await?;
+                    let err = match inner.batch_request(batch).await {
+                        Err(err @ ClientError::RestartNeeded(_)) => err,
+                        res => return res,
                     };
-                    inner.batch_request(batch).await
+                    client.mark_poisoned().await;
+                    Err(err)
                 }
             }
         }
@@ -404,26 +390,41 @@ mod native {
     #[cfg(test)]
     mod tests {
         use std::sync::Arc;
-        use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+        use std::sync::atomic::{AtomicUsize, Ordering};
 
         use jsonrpsee::core::ClientError;
         use jsonrpsee::core::params::BatchRequestBuilder;
         use serde::de::DeserializeOwned;
         use serde_json::Value as JsonValue;
         use tokio::join;
+        use tokio::sync::Barrier;
 
         use super::{BuildFn, WsReconnectClient};
 
         struct FakeWsClient {
-            fail_first: AtomicBool,
+            remaining_failures: AtomicUsize,
             response: JsonValue,
+            barrier: Option<Arc<tokio::sync::Barrier>>,
         }
 
         impl FakeWsClient {
-            fn new(fail_first: bool, response: JsonValue) -> Self {
+            fn new(remaining_failures: usize, response: JsonValue) -> Self {
                 Self {
-                    fail_first: AtomicBool::new(fail_first),
+                    remaining_failures: AtomicUsize::new(remaining_failures),
                     response,
+                    barrier: None,
+                }
+            }
+
+            fn new_with_barrier(
+                remaining_failures: usize,
+                response: JsonValue,
+                barrier: Arc<tokio::sync::Barrier>,
+            ) -> Self {
+                Self {
+                    remaining_failures: AtomicUsize::new(remaining_failures),
+                    response,
+                    barrier: Some(barrier),
                 }
             }
         }
@@ -449,9 +450,18 @@ mod native {
                 R: DeserializeOwned,
                 Params: jsonrpsee::core::traits::ToRpcParams + Send,
             {
-                let should_fail = self.fail_first.swap(false, Ordering::SeqCst);
+                let barrier = self.barrier.clone();
                 let response = self.response.clone();
                 async move {
+                    if let Some(barrier) = barrier {
+                        barrier.wait().await;
+                    }
+                    let should_fail = self
+                        .remaining_failures
+                        .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |value| {
+                            value.checked_sub(1)
+                        })
+                        .is_ok();
                     if should_fail {
                         return Err(ClientError::RestartNeeded(Arc::new(ClientError::Custom(
                             "restart".into(),
@@ -504,7 +514,7 @@ mod native {
         }
 
         #[tokio::test]
-        async fn request_reconnects_once_on_restart_needed() {
+        async fn request_marks_poisoned_on_restart_needed() {
             let build_count = Arc::new(AtomicUsize::new(0));
             let response = serde_json::json!(7u64);
             let build: BuildFn<FakeWsClient> = {
@@ -514,19 +524,27 @@ mod native {
                     let response = response.clone();
                     Box::pin(async move {
                         let id = build_count.fetch_add(1, Ordering::SeqCst);
-                        Ok(FakeWsClient::new(id == 0, response))
+                        let failures = if id == 0 { 1 } else { 0 };
+                        Ok(FakeWsClient::new(failures, response))
                     })
                 })
             };
 
             let client = WsReconnectClient::new_with_factory(build).await.unwrap();
+            let err = client
+                .request::<u64, _>("test", Vec::<u8>::new())
+                .await
+                .unwrap_err();
+            assert!(matches!(err, ClientError::RestartNeeded(_)));
+            assert_eq!(build_count.load(Ordering::SeqCst), 1);
+
             let value: u64 = client.request("test", Vec::<u8>::new()).await.unwrap();
             assert_eq!(value, 7);
             assert_eq!(build_count.load(Ordering::SeqCst), 2);
         }
 
         #[tokio::test]
-        async fn concurrent_restart_triggers_single_reconnect() {
+        async fn concurrent_requests_share_single_reconnect() {
             let build_count = Arc::new(AtomicUsize::new(0));
             let response = serde_json::json!(5u64);
             let build: BuildFn<FakeWsClient> = {
@@ -536,7 +554,49 @@ mod native {
                     let response = response.clone();
                     Box::pin(async move {
                         let id = build_count.fetch_add(1, Ordering::SeqCst);
-                        Ok(FakeWsClient::new(id == 0, response))
+                        let failures = if id == 0 { 1 } else { 0 };
+                        Ok(FakeWsClient::new(failures, response))
+                    })
+                })
+            };
+
+            let client = WsReconnectClient::new_with_factory(build).await.unwrap();
+            let err = client
+                .request::<u64, _>("test", Vec::<u8>::new())
+                .await
+                .unwrap_err();
+            assert!(matches!(err, ClientError::RestartNeeded(_)));
+            assert_eq!(build_count.load(Ordering::SeqCst), 1);
+
+            let (a, b) = join!(
+                client.request::<u64, _>("test", Vec::<u8>::new()),
+                client.request::<u64, _>("test", Vec::<u8>::new())
+            );
+            assert_eq!(a.unwrap(), 5);
+            assert_eq!(b.unwrap(), 5);
+            assert_eq!(build_count.load(Ordering::SeqCst), 2);
+        }
+
+        #[tokio::test]
+        async fn concurrent_restart_needed_dedupes_reconnect() {
+            let build_count = Arc::new(AtomicUsize::new(0));
+            let response = serde_json::json!(9u64);
+            let barrier = Arc::new(Barrier::new(2));
+            let build: BuildFn<FakeWsClient> = {
+                let build_count = build_count.clone();
+                let barrier = barrier.clone();
+                Arc::new(move || {
+                    let build_count = build_count.clone();
+                    let response = response.clone();
+                    let barrier = barrier.clone();
+                    Box::pin(async move {
+                        let id = build_count.fetch_add(1, Ordering::SeqCst);
+                        let failures = if id == 0 { 2 } else { 0 };
+                        if id == 0 {
+                            Ok(FakeWsClient::new_with_barrier(failures, response, barrier))
+                        } else {
+                            Ok(FakeWsClient::new(failures, response))
+                        }
                     })
                 })
             };
@@ -546,8 +606,12 @@ mod native {
                 client.request::<u64, _>("test", Vec::<u8>::new()),
                 client.request::<u64, _>("test", Vec::<u8>::new())
             );
-            assert_eq!(a.unwrap(), 5);
-            assert_eq!(b.unwrap(), 5);
+            assert!(matches!(a.unwrap_err(), ClientError::RestartNeeded(_)));
+            assert!(matches!(b.unwrap_err(), ClientError::RestartNeeded(_)));
+            assert_eq!(build_count.load(Ordering::SeqCst), 1);
+
+            let value: u64 = client.request("test", Vec::<u8>::new()).await.unwrap();
+            assert_eq!(value, 9);
             assert_eq!(build_count.load(Ordering::SeqCst), 2);
         }
     }
