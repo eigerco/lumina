@@ -500,11 +500,14 @@ impl GrpcClient {
     }
 
     /// Manually confirm transaction broadcasted with [`GrpcClient::broadcast_blobs`] or [`GrpcClient::broadcast_message`].
+    // this method is unused for native builds and exists for uniffi/wasm32 api only. Some targets
+    // we build in CI actually compile out that api, so we also allow those cases.
     #[cfg_attr(
-        not(any(
-            feature = "uniffi",
-            all(feature = "wasm-bindgen", target_arch = "wasm32")
-        )),
+        any(
+            all(not(target_arch = "wasm32"), not(feature = "uniffi")), // native build
+            all(not(feature = "wasm-bindgen"), target_arch = "wasm32"),
+            all(feature = "uniffi", target_arch = "wasm32")
+        ),
         allow(dead_code)
     )]
     pub(crate) fn confirm_broadcasted_tx(
