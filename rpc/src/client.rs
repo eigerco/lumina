@@ -395,6 +395,12 @@ mod native {
         }
     }
 
+    impl fmt::Debug for Client {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.write_str("Client { .. }")
+        }
+    }
+
     #[cfg(test)]
     mod tests {
         use std::sync::Arc;
@@ -423,15 +429,15 @@ mod native {
         }
 
         impl jsonrpsee::core::client::ClientT for FakeWsClient {
-            fn notification<Params>(
+            async fn notification<Params>(
                 &self,
                 _method: &str,
                 _params: Params,
-            ) -> impl std::future::Future<Output = Result<(), ClientError>> + Send
+            ) -> Result<(), ClientError>
             where
                 Params: jsonrpsee::core::traits::ToRpcParams + Send,
             {
-                async move { Ok(()) }
+                Ok(())
             }
 
             fn request<R, Params>(
@@ -455,57 +461,45 @@ mod native {
                 }
             }
 
-            fn batch_request<'a, R>(
+            async fn batch_request<'a, R>(
                 &self,
                 _batch: BatchRequestBuilder<'a>,
-            ) -> impl std::future::Future<
-                Output = Result<jsonrpsee::core::client::BatchResponse<'a, R>, ClientError>,
-            > + Send
+            ) -> Result<jsonrpsee::core::client::BatchResponse<'a, R>, ClientError>
             where
                 R: DeserializeOwned + std::fmt::Debug + 'a,
             {
-                async move {
-                    Err(ClientError::Custom(
-                        "batch_request not implemented in FakeWsClient".into(),
-                    ))
-                }
+                Err(ClientError::Custom(
+                    "batch_request not implemented in FakeWsClient".into(),
+                ))
             }
         }
 
         impl jsonrpsee::core::client::SubscriptionClientT for FakeWsClient {
-            fn subscribe<'a, N, Params>(
+            async fn subscribe<'a, N, Params>(
                 &self,
                 _subscribe_method: &'a str,
                 _params: Params,
                 _unsubscribe_method: &'a str,
-            ) -> impl std::future::Future<
-                Output = Result<jsonrpsee::core::client::Subscription<N>, ClientError>,
-            > + Send
+            ) -> Result<jsonrpsee::core::client::Subscription<N>, ClientError>
             where
                 Params: jsonrpsee::core::traits::ToRpcParams + Send,
                 N: DeserializeOwned,
             {
-                async move {
-                    Err(ClientError::Custom(
-                        "subscribe not implemented in FakeWsClient".into(),
-                    ))
-                }
+                Err(ClientError::Custom(
+                    "subscribe not implemented in FakeWsClient".into(),
+                ))
             }
 
-            fn subscribe_to_method<N>(
+            async fn subscribe_to_method<N>(
                 &self,
                 _method: &str,
-            ) -> impl std::future::Future<
-                Output = Result<jsonrpsee::core::client::Subscription<N>, ClientError>,
-            > + Send
+            ) -> Result<jsonrpsee::core::client::Subscription<N>, ClientError>
             where
                 N: DeserializeOwned,
             {
-                async move {
-                    Err(ClientError::Custom(
-                        "subscribe_to_method not implemented in FakeWsClient".into(),
-                    ))
-                }
+                Err(ClientError::Custom(
+                    "subscribe_to_method not implemented in FakeWsClient".into(),
+                ))
             }
         }
 
@@ -555,12 +549,6 @@ mod native {
             assert_eq!(a.unwrap(), 5);
             assert_eq!(b.unwrap(), 5);
             assert_eq!(build_count.load(Ordering::SeqCst), 2);
-        }
-    }
-
-    impl fmt::Debug for Client {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            f.write_str("Client { .. }")
         }
     }
 }
