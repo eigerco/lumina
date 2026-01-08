@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.0](https://github.com/eigerco/lumina/compare/celestia-types-v0.18.0...celestia-types-v0.19.0) - 2026-01-08
+
+### Other
+
+- moves non re-usable types from types to rpc ([#856](https://github.com/eigerco/lumina/pull/856))
+
 ## [0.18.0](https://github.com/eigerco/lumina/compare/celestia-types-v0.17.0...celestia-types-v0.18.0) - 2026-01-05
 
 ### Added

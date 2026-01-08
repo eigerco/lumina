@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.1](https://github.com/eigerco/lumina/compare/celestia-rpc-v0.16.0...celestia-rpc-v0.16.1) - 2026-01-08
+
+### Added
+
+- reconnect on RestartNeeded ([#863](https://github.com/eigerco/lumina/pull/863))
+
+### Other
+
+- moves non re-usable types from types to rpc ([#856](https://github.com/eigerco/lumina/pull/856))
+
 ## [0.16.0](https://github.com/eigerco/lumina/compare/celestia-rpc-v0.15.0...celestia-rpc-v0.16.0) - 2026-01-05
 
 ### Added
