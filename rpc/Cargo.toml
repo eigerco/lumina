@@ -28,6 +28,7 @@ base64.workspace = true
 futures-util.workspace = true
 jsonrpsee = { workspace = true, features = ["client-core", "macros"] }
 serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
 serde_repr.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
@@ -38,6 +39,7 @@ tendermint-proto.workspace = true
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 http.workspace = true
 jsonrpsee = { workspace = true, features = ["http-client", "ws-client"] }
+tokio = { workspace = true, features = ["sync"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 gloo-net = { version = "0.6", default-features = false, features = ["http", "json"] }
