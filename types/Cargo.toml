@@ -31,8 +31,6 @@ const_format = "0.2.32"
 ed25519-consensus = { version = "2", optional = true }
 enum_dispatch = "0.3.13"
 leopard-codec.workspace = true
-libp2p-identity = { workspace = true, optional = true }
-multiaddr = { version = "0.18.1", optional = true }
 multihash = "0.19.1"
 rand = { workspace = true, optional = true }
 rust_decimal = { version = "1.35", default-features = false, features = ["serde"] }
@@ -65,15 +63,14 @@ indoc = "2"
 wasm-bindgen-test.workspace = true
 
 [features]
-default = ["p2p"]
-p2p = ["dep:libp2p-identity", "dep:multiaddr"]
+default = []
 test-utils = ["dep:ed25519-consensus", "dep:rand"]
 tonic = ["celestia-proto/tonic"]
 wasm-bindgen = ["dep:js-sys", "dep:serde-wasm-bindgen", "dep:wasm-bindgen", "nmt-rs/serde", "time/wasm-bindgen", "celestia-proto/wasm-bindgen"]
 uniffi = ["dep:uniffi", "celestia-proto/uniffi"]
 
 [package.metadata.docs.rs]
-features = ["p2p", "test-utils"]
+features = ["test-utils"]
 rustdoc-args = ["--cfg", "docsrs"]
 
 [package.metadata.cargo-udeps.ignore]

@@ -2,8 +2,8 @@
 
 use std::time::Duration;
 
+use celestia_rpc::p2p::PeerId;
 use celestia_rpc::prelude::*;
-use celestia_types::p2p::PeerId;
 use gloo_timers::future::sleep;
 use lumina_node_wasm::utils::setup_logging;
 use wasm_bindgen_test::wasm_bindgen_test;

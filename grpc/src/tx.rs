@@ -55,8 +55,14 @@ pub struct BroadcastedTx {
     pub sequence: u64,
 }
 
+const DEFAULT_CONFIRMATION_INTERVAL_MS: u64 = 500;
+
+fn default_confirmation_interval_ms() -> u64 {
+    DEFAULT_CONFIRMATION_INTERVAL_MS
+}
+
 /// Configuration for the transaction.
-#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct TxConfig {
     /// Custom gas limit for the transaction (in `utia`). By default, client will
@@ -69,6 +75,10 @@ pub struct TxConfig {
     pub memo: Option<String>,
     /// Priority of the transaction, used with gas estimation service
     pub priority: TxPriority,
+    /// Interval between confirmation polling attempts, in milliseconds.
+    /// Defaults to 500ms.
+    #[serde(default = "default_confirmation_interval_ms")]
+    pub confirmation_interval_ms: u64,
 }
 
 impl TxConfig {
@@ -94,6 +104,24 @@ impl TxConfig {
     pub fn with_priority(mut self, priority: TxPriority) -> Self {
         self.priority = priority;
         self
+    }
+
+    /// Specify the confirmation polling interval in milliseconds.
+    pub fn with_confirmation_interval_ms(mut self, confirmation_interval_ms: u64) -> Self {
+        self.confirmation_interval_ms = confirmation_interval_ms;
+        self
+    }
+}
+
+impl Default for TxConfig {
+    fn default() -> Self {
+        TxConfig {
+            gas_limit: None,
+            gas_price: None,
+            memo: None,
+            priority: TxPriority::default(),
+            confirmation_interval_ms: DEFAULT_CONFIRMATION_INTERVAL_MS,
+        }
     }
 }
 
@@ -163,6 +191,10 @@ mod wbg {
        * Priority of the transaction, used with gas estimation service
        */
       priority?: TxPriority;
+      /**
+       * Interval between confirmation polling attempts, in milliseconds.
+       */
+      confirmationIntervalMs?: bigint;
     }
     ";
 
@@ -200,6 +232,9 @@ mod wbg {
 
         #[wasm_bindgen(method, getter, js_name = priority)]
         pub fn priority(this: &JsTxConfig) -> Option<TxPriority>;
+
+        #[wasm_bindgen(method, getter, js_name = confirmationIntervalMs)]
+        pub fn confirmation_interval_ms(this: &JsTxConfig) -> Option<u64>;
     }
 
     impl From<TxInfo> for JsTxInfo {
@@ -247,6 +282,9 @@ mod wbg {
                 gas_price: value.gas_price(),
                 memo: value.memo(),
                 priority: value.priority().unwrap_or_default(),
+                confirmation_interval_ms: value
+                    .confirmation_interval_ms()
+                    .unwrap_or(TxConfig::default().confirmation_interval_ms),
             }
         }
     }
