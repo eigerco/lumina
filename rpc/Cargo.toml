@@ -31,6 +31,9 @@ serde = { workspace = true, features = ["derive"] }
 serde_repr.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
+libp2p-identity = { workspace = true, optional = true }
+multiaddr = { version = "0.18.1", optional = true }
+tendermint-proto.workspace = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 http.workspace = true
@@ -69,7 +72,7 @@ wasm-bindgen-test.workspace = true
 
 [features]
 default = ["p2p"]
-p2p = ["celestia-types/p2p"]
+p2p = ["dep:libp2p-identity", "dep:multiaddr"]
 wasm-bindgen = ["celestia-types/wasm-bindgen", "jsonrpsee/wasm-client"]
 
 [package.metadata.docs.rs]

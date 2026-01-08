@@ -1,7 +1,7 @@
 //! Tiny p2p node without any defined behaviour celestia can connect to so that we can test RPC p2p
 //! calls
 
-use celestia_types::p2p;
+use celestia_rpc::p2p;
 use futures_util::StreamExt;
 use libp2p::{
     SwarmBuilder, noise,
