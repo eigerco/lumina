@@ -19,14 +19,12 @@ mod native {
 
     use http::{HeaderValue, header};
     use jsonrpsee::core::ClientError;
-    use jsonrpsee::core::JsonRawValue;
     use jsonrpsee::core::client::{BatchResponse, ClientT, Subscription, SubscriptionClientT};
     use jsonrpsee::core::params::BatchRequestBuilder;
     use jsonrpsee::core::traits::ToRpcParams;
     use jsonrpsee::http_client::{HeaderMap, HttpClient, HttpClientBuilder};
     use jsonrpsee::ws_client::{PingConfig, WsClient, WsClientBuilder};
     use serde::de::DeserializeOwned;
-    use serde_json;
     use tokio::sync::RwLock;
     use tracing::warn;
 
@@ -169,15 +167,6 @@ mod native {
             }
         }
 
-        fn to_raw_params<Params>(params: Params) -> Result<ReusableParams, ClientError>
-        where
-            Params: ToRpcParams,
-        {
-            Ok(ReusableParams(
-                params.to_rpc_params()?.map(|raw| raw.get().to_owned()),
-            ))
-        }
-
         async fn notification<Params>(
             &self,
             method: &str,
@@ -186,10 +175,7 @@ mod native {
         where
             Params: ToRpcParams + Send,
         {
-            let params = Self::to_raw_params(params)?;
             let inner = self.get_inner().await?;
-            let params = params.clone();
-
             let err = match inner.notification(method, params).await {
                 Err(err @ ClientError::RestartNeeded(_)) => err,
                 res => return res,
@@ -203,10 +189,7 @@ mod native {
             R: DeserializeOwned,
             Params: ToRpcParams + Send,
         {
-            let params = Self::to_raw_params(params)?;
             let inner = self.get_inner().await?;
-            let params = params.clone();
-
             let err = match inner.request(method, params).await {
                 Err(err @ ClientError::RestartNeeded(_)) => err,
                 res => return res,
@@ -225,10 +208,7 @@ mod native {
             Params: ToRpcParams + Send,
             N: DeserializeOwned,
         {
-            let params = Self::to_raw_params(params)?;
             let inner = self.get_inner().await?;
-            let params = params.clone();
-
             let err = match inner
                 .subscribe(subscribe_method, params, unsubscribe_method)
                 .await
@@ -251,18 +231,6 @@ mod native {
             };
             self.mark_poisoned().await;
             Err(err)
-        }
-    }
-
-    #[derive(Clone)]
-    struct ReusableParams(Option<String>);
-
-    impl ToRpcParams for ReusableParams {
-        fn to_rpc_params(self) -> Result<Option<Box<JsonRawValue>>, serde_json::Error> {
-            match self.0 {
-                Some(raw) => Ok(Some(JsonRawValue::from_string(raw)?)),
-                None => Ok(None),
-            }
         }
     }
 
