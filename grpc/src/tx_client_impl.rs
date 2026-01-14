@@ -11,7 +11,7 @@ use celestia_types::blob::{MsgPayForBlobs, RawBlobTx, RawMsgPayForBlobs};
 use celestia_types::state::auth::BaseAccount;
 use celestia_types::state::RawTxBody;
 
-use crate::grpc::TxPriority;
+use crate::grpc::{GasEstimate, TxPriority};
 use crate::signer::{BoxedDocSigner, sign_tx};
 use crate::tx_client_v2::{SignFn, Transaction, TxCallbacks, TxRequest};
 use crate::{Error, Result, TxConfig};
@@ -23,6 +23,11 @@ pub(crate) trait SignContext: Send + Sync {
     async fn get_account(&self) -> Result<BaseAccount>;
     async fn chain_id(&self) -> Result<Id>;
     async fn estimate_gas_price(&self, priority: TxPriority) -> Result<f64>;
+    async fn estimate_gas_price_and_usage(
+        &self,
+        priority: TxPriority,
+        tx_bytes: Vec<u8>,
+    ) -> Result<GasEstimate>;
 }
 
 pub(crate) struct SignFnBuilder {
@@ -76,18 +81,10 @@ impl SignFn for BuiltSignFn {
             .get_or_try_init(|| async { self.context.get_account().await })
             .await?
             .clone();
-        let gas_limit = cfg.gas_limit.ok_or_else(|| {
-            Error::UnexpectedResponseType("missing gas_limit in TxConfig".into())
-        })?;
-        let gas_price = match cfg.gas_price {
-            Some(price) => price,
-            None => self.context.estimate_gas_price(cfg.priority).await?,
-        };
-        let fee = (gas_limit as f64 * gas_price).ceil() as u64;
 
         let mut account = base.clone();
         account.sequence = sequence;
-        let bytes = match request {
+        let (tx_body, blobs) = match request {
             TxRequest::Blobs(blobs) => {
                 let pfb = MsgPayForBlobs::new(blobs, account.address)
                     .map_err(Error::CelestiaTypesError)?;
@@ -96,22 +93,7 @@ impl SignFn for BuiltSignFn {
                     memo: cfg.memo.clone().unwrap_or_default(),
                     ..RawTxBody::default()
                 };
-                let tx = sign_tx(
-                    tx_body,
-                    chain_id,
-                    &account,
-                    &self.pubkey,
-                    &*self.signer,
-                    gas_limit,
-                    fee,
-                )
-                .await?;
-                let blob_tx = RawBlobTx {
-                    tx: tx.encode_to_vec(),
-                    blobs: blobs.iter().cloned().map(Into::into).collect(),
-                    type_id: BLOB_TX_TYPE_ID.to_string(),
-                };
-                blob_tx.encode_to_vec()
+                (tx_body, Some(blobs))
             }
             TxRequest::Message(msg) => {
                 let tx_body = RawTxBody {
@@ -119,23 +101,64 @@ impl SignFn for BuiltSignFn {
                     memo: cfg.memo.clone().unwrap_or_default(),
                     ..RawTxBody::default()
                 };
-                let tx = sign_tx(
-                    tx_body,
-                    chain_id,
-                    &account,
-                    &self.pubkey,
-                    &*self.signer,
-                    gas_limit,
-                    fee,
-                )
-                .await?;
-                tx.encode_to_vec()
+                (tx_body, None)
             }
             TxRequest::RawPayload(_) => {
                 return Err(Error::UnexpectedResponseType(
                     "raw payload not supported".into(),
                 ));
             }
+        };
+
+        let (gas_limit, gas_price) = match cfg.gas_limit {
+            Some(gas_limit) => {
+                let gas_price = match cfg.gas_price {
+                    Some(price) => price,
+                    None => self.context.estimate_gas_price(cfg.priority).await?,
+                };
+                (gas_limit, gas_price)
+            }
+            None => {
+                let probe_tx = sign_tx(
+                    tx_body.clone(),
+                    chain_id.clone(),
+                    &account,
+                    &self.pubkey,
+                    &*self.signer,
+                    0,
+                    1,
+                )
+                .await?;
+                let GasEstimate { price, usage } = self
+                    .context
+                    .estimate_gas_price_and_usage(cfg.priority, probe_tx.encode_to_vec())
+                    .await?;
+                let gas_price = cfg.gas_price.unwrap_or(price);
+                (usage, gas_price)
+            }
+        };
+        let fee = (gas_limit as f64 * gas_price).ceil() as u64;
+
+        let tx = sign_tx(
+            tx_body,
+            chain_id,
+            &account,
+            &self.pubkey,
+            &*self.signer,
+            gas_limit,
+            fee,
+        )
+        .await?;
+        let bytes = match blobs {
+            Some(blobs) => {
+                let blob_tx = RawBlobTx {
+                    tx: tx.encode_to_vec(),
+                    blobs: blobs.iter().cloned().map(Into::into).collect(),
+                    type_id: BLOB_TX_TYPE_ID.to_string(),
+                };
+                blob_tx.encode_to_vec()
+            }
+            None => tx.encode_to_vec(),
         };
         Ok(Transaction {
             sequence,
@@ -174,6 +197,17 @@ mod tests {
 
         async fn estimate_gas_price(&self, _priority: TxPriority) -> Result<f64> {
             Ok(self.gas_price)
+        }
+
+        async fn estimate_gas_price_and_usage(
+            &self,
+            _priority: TxPriority,
+            _tx_bytes: Vec<u8>,
+        ) -> Result<GasEstimate> {
+            Ok(GasEstimate {
+                price: self.gas_price,
+                usage: 123,
+            })
         }
     }
 
