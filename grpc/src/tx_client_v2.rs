@@ -1,12 +1,12 @@
 use std::collections::{HashMap, VecDeque};
 use std::hash::Hash as StdHash;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::time::Duration;
 
 use async_trait::async_trait;
 use celestia_types::state::ErrorCode;
-use tokio::sync::{Mutex, Notify, oneshot};
+use tokio::sync::{mpsc, Mutex, Notify, oneshot};
 use tokio::task::JoinSet;
 use tokio::time;
 
@@ -26,6 +26,64 @@ pub struct Transaction {
 pub struct TxCallbacks {
     pub on_submit: Option<oneshot::Sender<Result<()>>>,
     pub on_confirm: Option<oneshot::Sender<Result<()>>>,
+}
+
+#[derive(Debug)]
+pub struct TxHandle {
+    pub sequence: u64,
+    pub on_submit: oneshot::Receiver<Result<()>>,
+    pub on_confirm: oneshot::Receiver<Result<()>>,
+}
+
+pub trait SignFn: Send + Sync {
+    fn sign(&self, sequence: u64, bytes: &[u8]) -> Result<Transaction>;
+}
+
+#[derive(Clone)]
+pub struct TransactionManager {
+    add_tx: mpsc::Sender<Transaction>,
+    next_sequence: Arc<Mutex<u64>>,
+    max_sent: Arc<AtomicU64>,
+    signer: Arc<dyn SignFn>,
+}
+
+impl TransactionManager {
+    pub async fn add_tx(&self, bytes: Vec<u8>) -> Result<TxHandle> {
+        let mut sequence = self.next_sequence.lock().await;
+        let current = *sequence;
+        let mut tx = self.signer.sign(current, &bytes)?;
+        if tx.sequence != current {
+            return Err(Error::UnexpectedResponseType(format!(
+                "tx sequence mismatch: expected {}, got {}",
+                current, tx.sequence
+            )));
+        }
+        let (submit_tx, submit_rx) = oneshot::channel();
+        let (confirm_tx, confirm_rx) = oneshot::channel();
+        tx.callbacks.on_submit = Some(submit_tx);
+        tx.callbacks.on_confirm = Some(confirm_tx);
+        match self.add_tx.try_send(tx) {
+            Ok(()) => {
+                *sequence = sequence.saturating_add(1);
+                self.max_sent.fetch_add(1, Ordering::Relaxed);
+                Ok(TxHandle {
+                    sequence: current,
+                    on_submit: submit_rx,
+                    on_confirm: confirm_rx,
+                })
+            }
+            Err(mpsc::error::TrySendError::Full(_)) => Err(Error::UnexpectedResponseType(
+                "transaction queue full".to_string(),
+            )),
+            Err(mpsc::error::TrySendError::Closed(_)) => Err(Error::UnexpectedResponseType(
+                "transaction manager closed".to_string(),
+            )),
+        }
+    }
+
+    pub fn max_sent(&self) -> u64 {
+        self.max_sent.load(Ordering::Relaxed)
+    }
 }
 
 #[derive(Debug)]
@@ -150,13 +208,14 @@ struct ConfirmationResult<TxId> {
     statuses: HashMap<TxId, TxStatus>,
 }
 
-pub struct TransactionManager<S: TxServer> {
+pub struct TransactionManagerWorker<S: TxServer> {
     nodes: HashMap<NodeId, Arc<S>>,
     txs: VecDeque<Transaction>,
     tx_index: HashMap<S::TxId, TxIndexEntry<S::TxId>>,
     events: VecDeque<TransactionEvent<S::TxId>>,
     confirmed_sequence: u64,
     node_state: HashMap<NodeId, NodeSubmissionState>,
+    add_tx_rx: mpsc::Receiver<Transaction>,
     new_event: Arc<Notify>,
     new_submit: Arc<Notify>,
     submissions: JoinSet<SubmissionResult<S::TxId>>,
@@ -166,46 +225,63 @@ pub struct TransactionManager<S: TxServer> {
     max_status_batch: usize,
 }
 
-impl<S: TxServer + 'static> TransactionManager<S> {
+impl<S: TxServer + 'static> TransactionManagerWorker<S> {
     pub fn new(
         nodes: HashMap<NodeId, Arc<S>>,
         confirm_interval: Duration,
         max_status_batch: usize,
-    ) -> Self {
+        signer: Arc<dyn SignFn>,
+        start_sequence: u64,
+        add_tx_capacity: usize,
+    ) -> (TransactionManager, Self) {
+        let (add_tx_tx, add_tx_rx) = mpsc::channel(add_tx_capacity);
+        let next_sequence = Arc::new(Mutex::new(start_sequence));
+        let max_sent = Arc::new(AtomicU64::new(0));
+        let manager = TransactionManager {
+            add_tx: add_tx_tx,
+            next_sequence,
+            max_sent,
+            signer,
+        };
         let node_state = nodes
             .keys()
             .map(|node_id| (node_id.clone(), NodeSubmissionState::default()))
             .collect();
-        Self {
-            nodes,
-            txs: VecDeque::new(),
-            tx_index: HashMap::new(),
-            events: VecDeque::new(),
-            confirmed_sequence: 0,
-            node_state,
-            new_event: Arc::new(Notify::new()),
-            new_submit: Arc::new(Notify::new()),
-            submissions: JoinSet::new(),
-            confirmations: JoinSet::new(),
-            confirm_ticker: time::interval(confirm_interval),
-            confirm_interval,
-            max_status_batch,
-        }
+        (
+            manager,
+            TransactionManagerWorker {
+                add_tx_rx,
+                nodes,
+                txs: VecDeque::new(),
+                tx_index: HashMap::new(),
+                events: VecDeque::new(),
+                confirmed_sequence: start_sequence.saturating_sub(1),
+                node_state,
+                new_event: Arc::new(Notify::new()),
+                new_submit: Arc::new(Notify::new()),
+                submissions: JoinSet::new(),
+                confirmations: JoinSet::new(),
+                confirm_ticker: time::interval(confirm_interval),
+                confirm_interval,
+                max_status_batch,
+            },
+        )
     }
 
-    pub async fn add_tx(&mut self, tx: Transaction) -> Result<()> {
+    fn enqueue_tx(&mut self, tx: Transaction) -> Result<()> {
         let expected = self
             .confirmed_sequence
             .saturating_add(self.txs.len() as u64)
             .saturating_add(1);
         if tx.sequence != expected {
+            // Invariant: add_tx sequences before enqueue, so mismatch is fatal.
             return Err(crate::Error::UnexpectedResponseType(format!(
                 "tx sequence gap: expected {expected}, got {}",
                 tx.sequence
             )));
         }
-        self.events.push_back(TransactionEvent::Added(tx));
-        self.new_event.notify_one();
+        self.txs.push_back(tx);
+        self.new_submit.notify_one();
         Ok(())
     }
 
@@ -280,6 +356,10 @@ impl<S: TxServer + 'static> TransactionManager<S> {
     async fn run_submitting(&mut self, shutdown: &Notify) -> Result<ProcessorState> {
         loop {
             let next_state = tokio::select! {
+                Some(tx) = self.add_tx_rx.recv() => {
+                    self.enqueue_tx(tx)?;
+                    ProcessorState::Submitting
+                }
                 _ = self.new_submit.notified() => {
                     self.spawn_submissions();
                     ProcessorState::Submitting
@@ -720,493 +800,574 @@ impl<S: TxServer + 'static> TransactionManager<S> {
     }
 }
 
-pub struct FakeTxServer<TxId>
-where
-    TxId: Clone + Eq + StdHash + Send + Sync + 'static,
-{
-    submit_results: Mutex<VecDeque<TxSubmitResult<TxId>>>,
-    status_batches: Mutex<VecDeque<HashMap<TxId, TxStatus>>>,
-    current_sequences: Mutex<VecDeque<u64>>,
-    submit_delays: Mutex<VecDeque<Duration>>,
-    status_delays: Mutex<VecDeque<Duration>>,
-    current_sequence_delays: Mutex<VecDeque<Duration>>,
-    submit_calls: Mutex<Vec<(Vec<u8>, u64)>>,
-    status_calls: Mutex<Vec<Vec<TxId>>>,
-    current_sequence_calls: AtomicUsize,
-    default_current_sequence: AtomicU64,
-    default_submit_delay_ms: AtomicU64,
-    default_status_delay_ms: AtomicU64,
-    default_current_sequence_delay_ms: AtomicU64,
-}
-
-impl<TxId> FakeTxServer<TxId>
-where
-    TxId: Clone + Eq + StdHash + Send + Sync + 'static,
-{
-    pub fn new(default_current_sequence: u64) -> Self {
-        Self {
-            submit_results: Mutex::new(VecDeque::new()),
-            status_batches: Mutex::new(VecDeque::new()),
-            current_sequences: Mutex::new(VecDeque::new()),
-            submit_delays: Mutex::new(VecDeque::new()),
-            status_delays: Mutex::new(VecDeque::new()),
-            current_sequence_delays: Mutex::new(VecDeque::new()),
-            submit_calls: Mutex::new(Vec::new()),
-            status_calls: Mutex::new(Vec::new()),
-            current_sequence_calls: AtomicUsize::new(0),
-            default_current_sequence: AtomicU64::new(default_current_sequence),
-            default_submit_delay_ms: AtomicU64::new(0),
-            default_status_delay_ms: AtomicU64::new(0),
-            default_current_sequence_delay_ms: AtomicU64::new(0),
-        }
-    }
-
-    pub async fn push_submit_result(&self, result: TxSubmitResult<TxId>) {
-        self.submit_results.lock().await.push_back(result);
-    }
-
-    pub async fn push_status_batch(&self, statuses: HashMap<TxId, TxStatus>) {
-        self.status_batches.lock().await.push_back(statuses);
-    }
-
-    pub async fn push_current_sequence(&self, sequence: u64) {
-        self.current_sequences.lock().await.push_back(sequence);
-    }
-
-    pub async fn push_submit_delay(&self, delay: Duration) {
-        self.submit_delays.lock().await.push_back(delay);
-    }
-
-    pub async fn push_status_delay(&self, delay: Duration) {
-        self.status_delays.lock().await.push_back(delay);
-    }
-
-    pub async fn push_current_sequence_delay(&self, delay: Duration) {
-        self.current_sequence_delays.lock().await.push_back(delay);
-    }
-
-    pub fn set_default_current_sequence(&self, sequence: u64) {
-        self.default_current_sequence
-            .store(sequence, Ordering::SeqCst);
-    }
-
-    pub fn set_default_submit_delay(&self, delay: Duration) {
-        self.default_submit_delay_ms
-            .store(delay.as_millis() as u64, Ordering::SeqCst);
-    }
-
-    pub fn set_default_status_delay(&self, delay: Duration) {
-        self.default_status_delay_ms
-            .store(delay.as_millis() as u64, Ordering::SeqCst);
-    }
-
-    pub fn set_default_current_sequence_delay(&self, delay: Duration) {
-        self.default_current_sequence_delay_ms
-            .store(delay.as_millis() as u64, Ordering::SeqCst);
-    }
-
-    pub async fn take_submit_calls(&self) -> Vec<(Vec<u8>, u64)> {
-        self.submit_calls.lock().await.drain(..).collect()
-    }
-
-    pub async fn take_status_calls(&self) -> Vec<Vec<TxId>> {
-        self.status_calls.lock().await.drain(..).collect()
-    }
-
-    pub fn current_sequence_call_count(&self) -> usize {
-        self.current_sequence_calls.load(Ordering::SeqCst)
-    }
-
-    async fn pop_delay(queue: &Mutex<VecDeque<Duration>>, default_ms: &AtomicU64) -> Duration {
-        queue
-            .lock()
-            .await
-            .pop_front()
-            .unwrap_or_else(|| Duration::from_millis(default_ms.load(Ordering::SeqCst)))
-    }
-}
-
-#[async_trait]
-impl<TxId> TxServer for FakeTxServer<TxId>
-where
-    TxId: Clone + Eq + StdHash + Send + Sync + 'static,
-{
-    type TxId = TxId;
-
-    async fn submit(&self, tx_bytes: Vec<u8>, sequence: u64) -> TxSubmitResult<Self::TxId> {
-        let delay = Self::pop_delay(&self.submit_delays, &self.default_submit_delay_ms).await;
-        if !delay.is_zero() {
-            time::sleep(delay).await;
-        }
-        self.submit_calls.lock().await.push((tx_bytes, sequence));
-        let mut results = self.submit_results.lock().await;
-        results.pop_front().unwrap_or_else(|| {
-            Err(SubmitFailure::NetworkError {
-                err: Error::UnexpectedResponseType("fake submit result missing".to_string()),
-            })
-        })
-    }
-
-    async fn status_batch(
-        &self,
-        ids: Vec<Self::TxId>,
-    ) -> TxConfirmResult<HashMap<Self::TxId, TxStatus>> {
-        let delay = Self::pop_delay(&self.status_delays, &self.default_status_delay_ms).await;
-        if !delay.is_zero() {
-            time::sleep(delay).await;
-        }
-        self.status_calls.lock().await.push(ids);
-        let mut batches = self.status_batches.lock().await;
-        Ok(batches.pop_front().unwrap_or_default())
-    }
-
-    async fn current_sequence(&self) -> Result<u64> {
-        let delay = Self::pop_delay(
-            &self.current_sequence_delays,
-            &self.default_current_sequence_delay_ms,
-        )
-        .await;
-        if !delay.is_zero() {
-            time::sleep(delay).await;
-        }
-        self.current_sequence_calls.fetch_add(1, Ordering::SeqCst);
-        let mut sequences = self.current_sequences.lock().await;
-        Ok(sequences
-            .pop_front()
-            .unwrap_or_else(|| self.default_current_sequence.load(Ordering::SeqCst)))
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::time::{sleep, timeout};
+    use async_trait::async_trait;
+    use tokio::sync::mpsc;
+    use tokio::sync::mpsc::error::TryRecvError;
+    use tokio::task::JoinHandle;
 
-    async fn run_manager(
-        mut manager: TransactionManager<FakeTxServer<u64>>,
-        shutdown: Arc<Notify>,
-    ) -> tokio::task::JoinHandle<Result<()>> {
-        tokio::spawn(async move { manager.process(shutdown).await })
+    #[derive(Debug)]
+    enum ServerCall<TxId> {
+        Submit {
+            bytes: Vec<u8>,
+            sequence: u64,
+            reply: oneshot::Sender<TxSubmitResult<TxId>>,
+        },
+        StatusBatch {
+            ids: Vec<TxId>,
+            reply: oneshot::Sender<TxConfirmResult<HashMap<TxId, TxStatus>>>,
+        },
+        CurrentSequence {
+            reply: oneshot::Sender<Result<u64>>,
+        },
     }
 
-    async fn add_tx_and_drain(
-        manager: &mut TransactionManager<FakeTxServer<u64>>,
-        tx: Transaction,
-    ) {
-        manager.add_tx(tx).await.expect("add tx");
-        let _ = manager
-            .process_events(ProcessorState::Submitting)
-            .await
-            .expect("process events");
+    #[derive(Debug)]
+    struct MockTxServer<TxId> {
+        calls: mpsc::Sender<ServerCall<TxId>>,
     }
 
-    async fn wait_for_submit_calls(
-        server: &FakeTxServer<u64>,
-        expected_calls: usize,
-        timeout_duration: Duration,
-    ) -> Vec<(Vec<u8>, u64)> {
-        let mut collected = Vec::new();
-        let start = time::Instant::now();
-        while collected.len() < expected_calls {
-            let mut new_calls = server.take_submit_calls().await;
-            collected.append(&mut new_calls);
-            if collected.len() >= expected_calls {
-                break;
-            }
-            if start.elapsed() > timeout_duration {
-                break;
-            }
-            sleep(Duration::from_millis(5)).await;
+    impl<TxId> MockTxServer<TxId> {
+        fn new(calls: mpsc::Sender<ServerCall<TxId>>) -> Self {
+            Self { calls }
         }
-        collected
     }
 
-    #[tokio::test]
+    #[derive(Default)]
+    struct TestSigner;
+
+    impl SignFn for TestSigner {
+        fn sign(&self, sequence: u64, bytes: &[u8]) -> Result<Transaction> {
+            Ok(Transaction {
+                sequence,
+                bytes: bytes.to_vec(),
+                callbacks: TxCallbacks::default(),
+            })
+        }
+    }
+
+    #[async_trait]
+    impl<TxId> TxServer for MockTxServer<TxId>
+    where
+        TxId: Clone + Eq + StdHash + Send + Sync + 'static,
+    {
+        type TxId = TxId;
+
+        async fn submit(&self, tx_bytes: Vec<u8>, sequence: u64) -> TxSubmitResult<Self::TxId> {
+            let (reply, rx) = oneshot::channel();
+            self.calls
+                .send(ServerCall::Submit {
+                    bytes: tx_bytes,
+                    sequence,
+                    reply,
+                })
+                .await
+                .expect("submit call");
+            rx.await.expect("submit reply")
+        }
+
+        async fn status_batch(
+            &self,
+            ids: Vec<Self::TxId>,
+        ) -> TxConfirmResult<HashMap<Self::TxId, TxStatus>> {
+            let (reply, rx) = oneshot::channel();
+            self.calls
+                .send(ServerCall::StatusBatch { ids, reply })
+                .await
+                .expect("status batch call");
+            rx.await.expect("status batch reply")
+        }
+
+        async fn current_sequence(&self) -> Result<u64> {
+            let (reply, rx) = oneshot::channel();
+            self.calls
+                .send(ServerCall::CurrentSequence { reply })
+                .await
+                .expect("current sequence call");
+            rx.await.expect("current sequence reply")
+        }
+    }
+
+    struct Harness {
+        calls_rx: mpsc::Receiver<ServerCall<u64>>,
+        shutdown: Arc<Notify>,
+        handle: Option<JoinHandle<Result<()>>>,
+        confirm_interval: Duration,
+        manager: TransactionManager,
+    }
+
+    impl Harness {
+        const MAX_SPINS: usize = 100;
+
+        fn new(
+            confirm_interval: Duration,
+            max_status_batch: usize,
+            add_tx_capacity: usize,
+        ) -> (Self, TransactionManagerWorker<MockTxServer<u64>>) {
+            let (calls_tx, calls_rx) = mpsc::channel(64);
+            let server = Arc::new(MockTxServer::new(calls_tx));
+            let nodes = HashMap::from([(String::from("node-1"), server)]);
+            let signer = Arc::new(TestSigner::default());
+            let (manager, worker) = TransactionManagerWorker::new(
+                nodes,
+                confirm_interval,
+                max_status_batch,
+                signer,
+                1,
+                add_tx_capacity,
+            );
+            (
+                Self {
+                    calls_rx,
+                    shutdown: Arc::new(Notify::new()),
+                    handle: None,
+                    confirm_interval,
+                    manager,
+                },
+                worker,
+            )
+        }
+
+        fn start(&mut self, mut manager: TransactionManagerWorker<MockTxServer<u64>>) {
+            let shutdown = self.shutdown.clone();
+            self.handle = Some(tokio::spawn(async move { manager.process(shutdown).await }));
+        }
+
+        async fn pump(&self) {
+            tokio::task::yield_now().await;
+        }
+
+        async fn expect_call(&mut self) -> ServerCall<u64> {
+            for _ in 0..Self::MAX_SPINS {
+                match self.calls_rx.try_recv() {
+                    Ok(call) => return call,
+                    Err(TryRecvError::Empty) => self.pump().await,
+                    Err(TryRecvError::Disconnected) => panic!("server call channel closed"),
+                }
+            }
+            panic!("expected server call, got none");
+        }
+
+        async fn expect_submit(
+            &mut self,
+        ) -> (Vec<u8>, u64, oneshot::Sender<TxSubmitResult<u64>>) {
+            match self.expect_call().await {
+                ServerCall::Submit {
+                    bytes,
+                    sequence,
+                    reply,
+                } => (bytes, sequence, reply),
+                other => panic!("expected Submit, got {:?}", other),
+            }
+        }
+
+        async fn expect_status_batch(
+            &mut self,
+        ) -> (Vec<u64>, oneshot::Sender<TxConfirmResult<HashMap<u64, TxStatus>>>) {
+            match self.expect_call().await {
+                ServerCall::StatusBatch { ids, reply } => (ids, reply),
+                other => panic!("expected StatusBatch, got {:?}", other),
+            }
+        }
+
+        fn assert_no_calls(&mut self) {
+            match self.calls_rx.try_recv() {
+                Ok(call) => panic!("unexpected server call: {:?}", call),
+                Err(TryRecvError::Empty) => {}
+                Err(TryRecvError::Disconnected) => panic!("server call channel closed"),
+            }
+        }
+
+        fn assert_no_calls_or_closed(&mut self) {
+            match self.calls_rx.try_recv() {
+                Ok(call) => panic!("unexpected server call: {:?}", call),
+                Err(TryRecvError::Empty) | Err(TryRecvError::Disconnected) => {}
+            }
+        }
+
+        async fn tick_confirm(&self) {
+            time::advance(self.confirm_interval + Duration::from_nanos(1)).await;
+            self.pump().await;
+        }
+
+        async fn join(&mut self) -> Result<()> {
+            self.handle
+                .take()
+                .expect("manager started")
+                .await
+                .expect("manager join")
+        }
+
+        async fn shutdown(mut self) {
+            self.shutdown.notify_one();
+            let _ = self.join().await;
+        }
+    }
+
+    async fn add_tx(
+        manager: &TransactionManager,
+        bytes: Vec<u8>,
+    ) -> (u64, oneshot::Receiver<Result<()>>, oneshot::Receiver<Result<()>>) {
+        let handle = manager.add_tx(bytes).await.expect("add tx");
+        (handle.sequence, handle.on_submit, handle.on_confirm)
+    }
+
+    #[tokio::test(start_paused = true)]
     async fn submit_callback_after_submit_success() {
-        let server = Arc::new(FakeTxServer::<u64>::new(0));
-        server.push_submit_result(Ok(1)).await;
+        let (mut harness, manager_worker) = Harness::new(Duration::from_millis(200), 10, 64);
+        let manager = harness.manager.clone();
+        let (seq, submit_rx, _confirm_rx) = add_tx(&manager, vec![1, 2, 3]).await;
+        assert_eq!(seq, 1);
+        harness.start(manager_worker);
 
-        let nodes = HashMap::from([(String::from("node-1"), server.clone())]);
-        let mut manager = TransactionManager::new(nodes, Duration::from_millis(200), 10);
+        let (_bytes, sequence, reply) = harness.expect_submit().await;
+        assert_eq!(sequence, 1);
+        reply.send(Ok(1)).expect("submit reply send");
+        harness.pump().await;
 
-        let (submit_tx, submit_rx) = oneshot::channel();
-        let (confirm_tx, _confirm_rx) = oneshot::channel();
-        let tx = Transaction {
-            sequence: 1,
-            bytes: vec![1, 2, 3],
-            callbacks: TxCallbacks {
-                on_submit: Some(submit_tx),
-                on_confirm: Some(confirm_tx),
-            },
-        };
-        manager.add_tx(tx).await.expect("add tx");
-
-        let shutdown = Arc::new(Notify::new());
-        let handle = run_manager(manager, shutdown.clone()).await;
-
-        let submit_result = timeout(Duration::from_secs(1), submit_rx)
-            .await
-            .expect("submit timeout")
-            .expect("submit recv");
+        let submit_result = submit_rx.await.expect("submit recv");
         assert!(submit_result.is_ok());
 
-        shutdown.notify_one();
-        let _ = handle.await;
+        harness.assert_no_calls();
+        harness.shutdown().await;
     }
 
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn confirm_callback_after_status_confirmed() {
-        let server = Arc::new(FakeTxServer::<u64>::new(0));
-        server.push_submit_result(Ok(42)).await;
+        let (mut harness, manager_worker) = Harness::new(Duration::from_millis(10), 10, 64);
+        let manager = harness.manager.clone();
+        let (seq, _submit_rx, confirm_rx) = add_tx(&manager, vec![9, 9, 9]).await;
+        assert_eq!(seq, 1);
+        harness.start(manager_worker);
 
-        let mut statuses = HashMap::new();
-        statuses.insert(42, TxStatus::Confirmed);
-        server.push_status_batch(statuses).await;
+        let (_bytes, sequence, reply) = harness.expect_submit().await;
+        assert_eq!(sequence, 1);
+        reply.send(Ok(42)).expect("submit reply send");
+        harness.pump().await;
 
-        let nodes = HashMap::from([(String::from("node-1"), server.clone())]);
-        let mut manager = TransactionManager::new(nodes, Duration::from_millis(10), 10);
+        harness.tick_confirm().await;
+        let (ids, reply) = harness.expect_status_batch().await;
+        assert_eq!(ids, vec![42]);
+        reply
+            .send(Ok(HashMap::from([(42, TxStatus::Confirmed)])))
+            .expect("status reply send");
 
-        let (submit_tx, _submit_rx) = oneshot::channel();
-        let (confirm_tx, confirm_rx) = oneshot::channel();
-        let tx = Transaction {
-            sequence: 1,
-            bytes: vec![9, 9, 9],
-            callbacks: TxCallbacks {
-                on_submit: Some(submit_tx),
-                on_confirm: Some(confirm_tx),
-            },
-        };
-        manager.add_tx(tx).await.expect("add tx");
-
-        let shutdown = Arc::new(Notify::new());
-        let handle = run_manager(manager, shutdown.clone()).await;
-
-        let confirm_result = timeout(Duration::from_secs(1), confirm_rx)
-            .await
-            .expect("confirm timeout")
-            .expect("confirm recv");
+        let confirm_result = confirm_rx.await.expect("confirm recv");
         assert!(confirm_result.is_ok());
 
-        shutdown.notify_one();
-        let _ = handle.await;
+        harness.assert_no_calls();
+        harness.shutdown().await;
     }
 
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn submit_callback_waits_for_submit_delay() {
-        let server = Arc::new(FakeTxServer::<u64>::new(0));
-        server.set_default_submit_delay(Duration::from_millis(50));
-        server.push_submit_result(Ok(7)).await;
+        let (mut harness, manager_worker) = Harness::new(Duration::from_millis(10), 10, 64);
+        let manager = harness.manager.clone();
+        let (seq, mut submit_rx, _confirm_rx) = add_tx(&manager, vec![4, 5, 6]).await;
+        assert_eq!(seq, 1);
+        harness.start(manager_worker);
 
-        let nodes = HashMap::from([(String::from("node-1"), server.clone())]);
-        let mut manager = TransactionManager::new(nodes, Duration::from_millis(10), 10);
+        let (_bytes, sequence, reply) = harness.expect_submit().await;
+        assert_eq!(sequence, 1);
 
-        let (submit_tx, submit_rx) = oneshot::channel();
-        let (confirm_tx, _confirm_rx) = oneshot::channel();
-        let tx = Transaction {
-            sequence: 1,
-            bytes: vec![4, 5, 6],
-            callbacks: TxCallbacks {
-                on_submit: Some(submit_tx),
-                on_confirm: Some(confirm_tx),
-            },
-        };
-        manager.add_tx(tx).await.expect("add tx");
+        tokio::select! {
+            _ = &mut submit_rx => panic!("submit resolved before reply"),
+            _ = harness.pump() => {}
+        }
 
-        let shutdown = Arc::new(Notify::new());
-        let handle = run_manager(manager, shutdown.clone()).await;
-
-        let mut submit_rx = submit_rx;
-        let early = timeout(Duration::from_millis(10), &mut submit_rx).await;
-        assert!(early.is_err());
-
-        let submit_result = timeout(Duration::from_secs(1), &mut submit_rx)
-            .await
-            .expect("submit timeout")
-            .expect("submit recv");
+        reply.send(Ok(7)).expect("submit reply send");
+        harness.pump().await;
+        let submit_result = submit_rx.await.expect("submit recv");
         assert!(submit_result.is_ok());
 
-        shutdown.notify_one();
-        let _ = handle.await;
+        harness.assert_no_calls();
+        harness.shutdown().await;
     }
 
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn max_status_batch_is_capped() {
-        let server = Arc::new(FakeTxServer::<u64>::new(0));
-        server.push_submit_result(Ok(1)).await;
-        server.push_submit_result(Ok(2)).await;
-        server.push_submit_result(Ok(3)).await;
-
-        let mut batch_1 = HashMap::new();
-        batch_1.insert(1, TxStatus::Confirmed);
-        batch_1.insert(2, TxStatus::Confirmed);
-        server.push_status_batch(batch_1).await;
-
-        let mut batch_2 = HashMap::new();
-        batch_2.insert(3, TxStatus::Confirmed);
-        server.push_status_batch(batch_2).await;
-
-        let nodes = HashMap::from([(String::from("node-1"), server.clone())]);
-        let mut manager = TransactionManager::new(nodes, Duration::from_millis(10), 2);
-
+        let (mut harness, manager_worker) = Harness::new(Duration::from_millis(10), 2, 64);
+        let manager = harness.manager.clone();
         let mut submit_rxs = Vec::new();
         let mut confirm_rxs = Vec::new();
         for seq in 1..=3 {
-            let (submit_tx, submit_rx) = oneshot::channel();
-            let (confirm_tx, confirm_rx) = oneshot::channel();
-            let tx = Transaction {
-                sequence: seq,
-                bytes: vec![seq as u8],
-                callbacks: TxCallbacks {
-                    on_submit: Some(submit_tx),
-                    on_confirm: Some(confirm_tx),
-                },
-            };
-            add_tx_and_drain(&mut manager, tx).await;
+            let (added_seq, submit_rx, confirm_rx) = add_tx(&manager, vec![seq as u8]).await;
+            assert_eq!(added_seq, seq);
             submit_rxs.push(submit_rx);
             confirm_rxs.push(confirm_rx);
         }
+        harness.start(manager_worker);
 
-        let shutdown = Arc::new(Notify::new());
-        let handle = run_manager(manager, shutdown.clone()).await;
+        for seq in 1..=3 {
+            let (_bytes, sequence, reply) = harness.expect_submit().await;
+            assert_eq!(sequence, seq);
+            reply.send(Ok(seq)).expect("submit reply send");
+            harness.pump().await;
+        }
 
         for rx in submit_rxs {
-            let result = timeout(Duration::from_secs(1), rx)
-                .await
-                .expect("submit timeout")
-                .expect("submit recv");
-            assert!(result.is_ok());
+            let submit_result = rx.await.expect("submit recv");
+            assert!(submit_result.is_ok());
         }
+
+        harness.tick_confirm().await;
+        let (ids, reply) = harness.expect_status_batch().await;
+        assert!(ids.len() <= 2);
+        let mut statuses = HashMap::new();
+        for id in &ids {
+            statuses.insert(*id, TxStatus::Confirmed);
+        }
+        reply.send(Ok(statuses)).expect("status reply send");
+        harness.pump().await;
+
+        harness.tick_confirm().await;
+        let (ids, reply) = harness.expect_status_batch().await;
+        assert!(ids.len() <= 2);
+        let mut statuses = HashMap::new();
+        for id in ids {
+            statuses.insert(id, TxStatus::Confirmed);
+        }
+        reply.send(Ok(statuses)).expect("status reply send");
 
         for rx in confirm_rxs {
-            let result = timeout(Duration::from_secs(1), rx)
-                .await
-                .expect("confirm timeout")
-                .expect("confirm recv");
+            let result = rx.await.expect("confirm recv");
             assert!(result.is_ok());
         }
 
-        sleep(Duration::from_millis(20)).await;
-        let status_calls = server.take_status_calls().await;
-        assert!(!status_calls.is_empty());
-        for call in status_calls {
-            assert!(call.len() <= 2);
-        }
-
-        shutdown.notify_one();
-        let _ = handle.await;
+        harness.assert_no_calls();
+        harness.shutdown().await;
     }
 
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn recovery_stops_on_rejected_in_range() {
-        let server = Arc::new(FakeTxServer::<u64>::new(0));
-        server.push_submit_result(Ok(10)).await;
-        server
-            .push_submit_result(Err(SubmitFailure::SequenceMismatch { expected: 2 }))
-            .await;
+        let (mut harness, manager_worker) = Harness::new(Duration::from_millis(200), 10, 64);
+        let manager = harness.manager.clone();
+        let (seq1, submit_rx1, confirm_rx1) = add_tx(&manager, vec![1]).await;
+        let (seq2, _submit_rx2, _confirm_rx2) = add_tx(&manager, vec![2]).await;
+        assert_eq!(seq1, 1);
+        assert_eq!(seq2, 2);
+        harness.start(manager_worker);
 
-        let nodes = HashMap::from([(String::from("node-1"), server.clone())]);
-        let mut manager = TransactionManager::new(nodes, Duration::from_millis(10), 10);
+        let (_bytes, sequence, reply) = harness.expect_submit().await;
+        assert_eq!(sequence, 1);
+        reply.send(Ok(10)).expect("submit reply send");
 
-        let (submit_tx1, _submit_rx1) = oneshot::channel();
-        let (confirm_tx1, confirm_rx1) = oneshot::channel();
-        let tx1 = Transaction {
-            sequence: 1,
-            bytes: vec![1],
-            callbacks: TxCallbacks {
-                on_submit: Some(submit_tx1),
-                on_confirm: Some(confirm_tx1),
-            },
-        };
-        add_tx_and_drain(&mut manager, tx1).await;
+        let submit_result = submit_rx1.await.expect("submit recv");
+        assert!(submit_result.is_ok());
 
-        let (submit_tx2, _submit_rx2) = oneshot::channel();
-        let (confirm_tx2, _confirm_rx2) = oneshot::channel();
-        let tx2 = Transaction {
-            sequence: 2,
-            bytes: vec![2],
-            callbacks: TxCallbacks {
-                on_submit: Some(submit_tx2),
-                on_confirm: Some(confirm_tx2),
-            },
-        };
-        add_tx_and_drain(&mut manager, tx2).await;
+        let (_bytes, sequence, reply) = harness.expect_submit().await;
+        assert_eq!(sequence, 2);
+        reply
+            .send(Err(SubmitFailure::SequenceMismatch { expected: 2 }))
+            .expect("submit reply send");
+        harness.pump().await;
 
-        let shutdown = Arc::new(Notify::new());
-        let handle = run_manager(manager, shutdown.clone()).await;
+        harness.tick_confirm().await;
+        let (ids, reply) = harness.expect_status_batch().await;
+        assert_eq!(ids, vec![10]);
+        reply
+            .send(Ok(HashMap::from([(10, TxStatus::Rejected { expected: 2 })])))
+            .expect("status reply send");
 
-        let _calls = wait_for_submit_calls(&server, 2, Duration::from_secs(1)).await;
-        let mut rejected = HashMap::new();
-        rejected.insert(10, TxStatus::Rejected { expected: 2 });
-        server.push_status_batch(rejected).await;
-
-        let stopped = timeout(Duration::from_secs(2), handle)
-            .await
-            .expect("manager stop")
-            .expect("manager join");
+        let stopped = harness.join().await;
         assert!(stopped.is_ok());
 
-        let confirm_result = timeout(Duration::from_secs(1), confirm_rx1)
-            .await
-            .expect("confirm timeout");
+        let confirm_result = confirm_rx1.await;
         assert!(confirm_result.is_err());
 
-        shutdown.notify_one();
+        harness.assert_no_calls_or_closed();
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn recovery_evicted_then_confirmed() {
+        let (mut harness, manager_worker) = Harness::new(Duration::from_millis(200), 10, 64);
+        let manager = harness.manager.clone();
+        let (seq1, submit_rx1, confirm_rx1) = add_tx(&manager, vec![1]).await;
+        let (seq2, _submit_rx2, _confirm_rx2) = add_tx(&manager, vec![2]).await;
+        assert_eq!(seq1, 1);
+        assert_eq!(seq2, 2);
+        harness.start(manager_worker);
+
+        let (_bytes, sequence, reply) = harness.expect_submit().await;
+        assert_eq!(sequence, 1);
+        reply.send(Ok(11)).expect("submit reply send");
+
+        let submit_result = submit_rx1.await.expect("submit recv");
+        assert!(submit_result.is_ok());
+
+        let (_bytes, sequence, reply) = harness.expect_submit().await;
+        assert_eq!(sequence, 2);
+        reply
+            .send(Err(SubmitFailure::SequenceMismatch { expected: 2 }))
+            .expect("submit reply send");
+        harness.pump().await;
+
+        harness.tick_confirm().await;
+        let (ids, reply) = harness.expect_status_batch().await;
+        assert_eq!(ids, vec![11]);
+        reply
+            .send(Ok(HashMap::from([(11, TxStatus::Evicted)])))
+            .expect("status reply send");
+        harness.pump().await;
+
+        harness.tick_confirm().await;
+        let (ids, reply) = harness.expect_status_batch().await;
+        assert_eq!(ids, vec![11]);
+        reply
+            .send(Ok(HashMap::from([(11, TxStatus::Confirmed)])))
+            .expect("status reply send");
+
+        let confirm_result = confirm_rx1.await.expect("confirm recv");
+        assert!(confirm_result.is_ok());
+
+        harness.assert_no_calls();
+        harness.shutdown().await;
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn shutdown_completes_with_pending_submit() {
+        let (mut harness, manager_worker) = Harness::new(Duration::from_millis(200), 10, 64);
+        let manager = harness.manager.clone();
+        let (seq, _submit_rx, _confirm_rx) = add_tx(&manager, vec![1, 2, 3]).await;
+        assert_eq!(seq, 1);
+        harness.start(manager_worker);
+
+        let (_bytes, sequence, _reply) = harness.expect_submit().await;
+        assert_eq!(sequence, 1);
+
+        harness.shutdown().await;
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn add_tx_from_another_task() {
+        let (mut harness, manager_worker) = Harness::new(Duration::from_millis(200), 10, 64);
+        let manager = harness.manager.clone();
+
+        harness.start(manager_worker);
+
+        let handle = tokio::spawn(async move {
+            let tx_handle = manager.add_tx(vec![7, 8, 9]).await.expect("enqueue tx");
+            let _ = tx_handle.on_submit.await;
+            tx_handle.sequence
+        });
+
+        let (_bytes, seq, reply) = harness.expect_submit().await;
+        assert_eq!(seq, 1);
+        reply.send(Ok(99)).expect("submit reply send");
+        harness.pump().await;
+
+        let queued_sequence = handle.await.expect("enqueue task");
+        assert_eq!(queued_sequence, 1);
+        harness.shutdown().await;
     }
 
     #[tokio::test]
-    async fn recovery_evicted_then_confirmed() {
-        let server = Arc::new(FakeTxServer::<u64>::new(0));
-        server.push_submit_result(Ok(11)).await;
-        server
-            .push_submit_result(Err(SubmitFailure::SequenceMismatch { expected: 2 }))
-            .await;
+    async fn add_tx_queue_full_does_not_increment() {
+        let nodes = HashMap::<NodeId, Arc<MockTxServer<u64>>>::new();
+        let signer = Arc::new(TestSigner::default());
+        let (manager, mut worker) =
+            TransactionManagerWorker::new(nodes, Duration::from_millis(10), 10, signer, 1, 1);
 
-        let nodes = HashMap::from([(String::from("node-1"), server.clone())]);
-        let mut manager = TransactionManager::new(nodes, Duration::from_millis(200), 10);
+        let seq1 = manager.add_tx(vec![1]).await.expect("first add").sequence;
+        assert_eq!(seq1, 1);
 
-        let (submit_tx1, _submit_rx1) = oneshot::channel();
-        let (confirm_tx1, confirm_rx1) = oneshot::channel();
-        let tx1 = Transaction {
-            sequence: 1,
-            bytes: vec![1],
-            callbacks: TxCallbacks {
-                on_submit: Some(submit_tx1),
-                on_confirm: Some(confirm_tx1),
-            },
-        };
-        add_tx_and_drain(&mut manager, tx1).await;
-
-        let (submit_tx2, _submit_rx2) = oneshot::channel();
-        let (confirm_tx2, _confirm_rx2) = oneshot::channel();
-        let tx2 = Transaction {
-            sequence: 2,
-            bytes: vec![2],
-            callbacks: TxCallbacks {
-                on_submit: Some(submit_tx2),
-                on_confirm: Some(confirm_tx2),
-            },
-        };
-        add_tx_and_drain(&mut manager, tx2).await;
-
-        let shutdown = Arc::new(Notify::new());
-        let handle = run_manager(manager, shutdown.clone()).await;
-
-        let _calls = wait_for_submit_calls(&server, 2, Duration::from_secs(1)).await;
-        let mut evicted = HashMap::new();
-        evicted.insert(11, TxStatus::Evicted);
-        server.push_status_batch(evicted).await;
-
-        let mut confirmed = HashMap::new();
-        confirmed.insert(11, TxStatus::Confirmed);
-        server.push_status_batch(confirmed).await;
-
-        let confirm_result = timeout(Duration::from_secs(2), confirm_rx1)
+        let err = manager
+            .add_tx(vec![2])
             .await
-            .expect("confirm timeout")
-            .expect("confirm recv");
-        assert!(confirm_result.is_ok());
+            .expect_err("second add should fail");
+        assert!(matches!(err, Error::UnexpectedResponseType(_)));
+        assert_eq!(manager.max_sent(), 1);
 
-        shutdown.notify_one();
-        let _ = handle.await;
+        let _drained = worker.add_tx_rx.try_recv().expect("drain queued tx");
+        let seq2 = manager.add_tx(vec![3]).await.expect("third add").sequence;
+        assert_eq!(seq2, 2);
+        assert_eq!(manager.max_sent(), 2);
+    }
+
+    #[tokio::test]
+    async fn signer_sequence_mismatch_rejects_without_increment() {
+        struct BadSigner {
+            seen: Arc<AtomicU64>,
+        }
+
+        impl SignFn for BadSigner {
+            fn sign(&self, sequence: u64, bytes: &[u8]) -> Result<Transaction> {
+                self.seen.store(sequence, Ordering::SeqCst);
+                Ok(Transaction {
+                    sequence: sequence.saturating_add(1),
+                    bytes: bytes.to_vec(),
+                    callbacks: TxCallbacks::default(),
+                })
+            }
+        }
+
+        let seen = Arc::new(AtomicU64::new(0));
+        let signer = Arc::new(BadSigner { seen: seen.clone() });
+        let nodes = HashMap::<NodeId, Arc<MockTxServer<u64>>>::new();
+        let (manager, mut worker) =
+            TransactionManagerWorker::new(nodes, Duration::from_millis(10), 10, signer, 1, 4);
+
+        let err = manager
+            .add_tx(vec![1])
+            .await
+            .expect_err("bad signer");
+        assert!(matches!(err, Error::UnexpectedResponseType(_)));
+        assert_eq!(seen.load(Ordering::SeqCst), 1);
+        assert_eq!(manager.max_sent(), 0);
+        assert!(matches!(
+            worker.add_tx_rx.try_recv(),
+            Err(TryRecvError::Empty)
+        ));
+
+        let err = manager
+            .add_tx(vec![2])
+            .await
+            .expect_err("bad signer again");
+        assert!(matches!(err, Error::UnexpectedResponseType(_)));
+        assert_eq!(seen.load(Ordering::SeqCst), 1);
+        assert_eq!(manager.max_sent(), 0);
+    }
+
+    #[tokio::test]
+    async fn add_tx_closed_channel_returns_error() {
+        let nodes = HashMap::<NodeId, Arc<MockTxServer<u64>>>::new();
+        let signer = Arc::new(TestSigner::default());
+        let (manager, _worker) =
+            TransactionManagerWorker::new(nodes, Duration::from_millis(10), 10, signer, 1, 4);
+
+        drop(_worker);
+
+        let err = manager
+            .add_tx(vec![1])
+            .await
+            .expect_err("closed manager");
+        assert!(matches!(err, Error::UnexpectedResponseType(_)));
+        assert_eq!(manager.max_sent(), 0);
+    }
+
+    #[tokio::test]
+    async fn add_tx_concurrent_sequences_are_monotonic() {
+        let nodes = HashMap::<NodeId, Arc<MockTxServer<u64>>>::new();
+        let signer = Arc::new(TestSigner::default());
+        let (manager, _worker) =
+            TransactionManagerWorker::new(nodes, Duration::from_millis(10), 10, signer, 1, 128);
+
+        let mut handles = Vec::new();
+        for _ in 0..20 {
+            let manager = manager.clone();
+            handles.push(tokio::spawn(async move {
+                manager.add_tx(vec![1, 2, 3]).await.map(|handle| handle.sequence)
+            }));
+        }
+
+        let mut sequences = Vec::new();
+        for handle in handles {
+            sequences.push(handle.await.expect("task").expect("add tx"));
+        }
+        sequences.sort_unstable();
+        assert_eq!(sequences, (1..=20).collect::<Vec<u64>>());
+        assert_eq!(manager.max_sent(), 20);
     }
 }

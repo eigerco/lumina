@@ -29,7 +29,7 @@ celestia-types.workspace = true
 lumina-utils = { workspace = true, features = ["time"] }
 
 arc-swap = "1"
-async-trait = { workspace = true, optional = true }
+async-trait = { workspace = true }
 bytes.workspace = true
 dyn-clone = "1"
 futures.workspace = true
@@ -72,7 +72,7 @@ lumina-utils = { workspace = true, features = ["test-utils"] }
 rand.workspace = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
-tokio = { workspace = true, features = ["rt", "macros"] }
+tokio = { workspace = true, features = ["rt", "macros", "test-util"] }
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 celestia-rpc = { workspace = true, features = ["wasm-bindgen"] }
@@ -82,7 +82,7 @@ wasm-bindgen-test.workspace = true
 [features]
 default = ['tls-native-roots']
 wasm-bindgen = ["celestia-types/wasm-bindgen", "dep:js-sys", "dep:wasm-bindgen", "dep:wasm-bindgen-futures"]
-uniffi = ["dep:async-trait", "dep:uniffi", "dep:serde_json", "celestia-types/uniffi"]
+uniffi = ["dep:uniffi", "dep:serde_json", "celestia-types/uniffi"]
 # Add system trust roots to `rustls` in `tonic`.
 #
 # Selecting this feature enables TLS support in grpc client.
