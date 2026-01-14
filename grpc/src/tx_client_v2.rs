@@ -366,6 +366,7 @@ pub struct TransactionManagerWorker<S: TxServer> {
     events: VecDeque<TransactionEvent<S::TxId, S::ConfirmInfo>>,
     confirmed_info: HashMap<u64, S::ConfirmInfo>,
     confirmed_sequence: u64,
+    next_enqueue_sequence: u64,
     node_state: HashMap<NodeId, NodeSubmissionState>,
     add_tx_rx: mpsc::Receiver<Transaction<S::TxId, S::ConfirmInfo>>,
     new_event: Arc<Notify>,
@@ -414,6 +415,7 @@ impl<S: TxServer + 'static> TransactionManagerWorker<S> {
                 events: VecDeque::new(),
                 confirmed_info: HashMap::new(),
                 confirmed_sequence: start_sequence.saturating_sub(1),
+                next_enqueue_sequence: start_sequence,
                 node_state,
                 new_event: Arc::new(Notify::new()),
                 new_submit: Arc::new(Notify::new()),
@@ -427,17 +429,13 @@ impl<S: TxServer + 'static> TransactionManagerWorker<S> {
     }
 
     fn enqueue_tx(&mut self, tx: Transaction<S::TxId, S::ConfirmInfo>) -> Result<()> {
-        let expected = self
-            .confirmed_sequence
-            .saturating_add(self.txs.len() as u64)
-            .saturating_add(1);
-        if tx.sequence != expected {
-            // Invariant: add_tx sequences before enqueue, so mismatch is fatal.
+        if tx.sequence != self.next_enqueue_sequence {
             return Err(crate::Error::UnexpectedResponseType(format!(
-                "tx sequence gap: expected {expected}, got {}",
-                tx.sequence
+                "tx sequence gap: expected {}, got {}",
+                self.next_enqueue_sequence, tx.sequence
             )));
         }
+        self.next_enqueue_sequence += 1;
         self.txs.push_back(tx);
         self.new_submit.notify_one();
         Ok(())
