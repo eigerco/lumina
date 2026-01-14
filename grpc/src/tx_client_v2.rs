@@ -912,13 +912,11 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
         if let Some(max_confirm) = max_confirm {
             confirms.sort_by_key(|(seq, _, _)| *seq);
             for (seq, id, info) in confirms {
-                if seq <= max_confirm {
-                    new_events.push(TransactionEvent::Confirmed {
-                        sequence: seq,
-                        id,
-                        info,
-                    });
-                }
+                new_events.push(TransactionEvent::Confirmed {
+                    sequence: seq,
+                    id,
+                    info,
+                });
             }
         }
 
