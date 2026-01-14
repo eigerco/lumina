@@ -13,8 +13,10 @@ use celestia_types::state::RawTxBody;
 
 use crate::grpc::{GasEstimate, TxPriority};
 use crate::signer::{BoxedDocSigner, sign_tx};
+use celestia_types::hash::Hash;
+
 use crate::tx_client_v2::{SignFn, Transaction, TxCallbacks, TxRequest};
-use crate::{Error, Result, TxConfig};
+use crate::{Error, Result, TxConfig, TxInfo};
 
 const BLOB_TX_TYPE_ID: &str = "BLOB";
 
@@ -49,7 +51,7 @@ impl SignFnBuilder {
         }
     }
 
-    pub(crate) fn build(self) -> Arc<dyn SignFn> {
+    pub(crate) fn build(self) -> Arc<dyn SignFn<Hash, TxInfo>> {
         Arc::new(BuiltSignFn {
             context: self.context,
             pubkey: self.pubkey,
@@ -69,8 +71,13 @@ struct BuiltSignFn {
 }
 
 #[async_trait]
-impl SignFn for BuiltSignFn {
-    async fn sign(&self, sequence: u64, request: &TxRequest, cfg: &TxConfig) -> Result<Transaction> {
+impl SignFn<Hash, TxInfo> for BuiltSignFn {
+    async fn sign(
+        &self,
+        sequence: u64,
+        request: &TxRequest,
+        cfg: &TxConfig,
+    ) -> Result<Transaction<Hash, TxInfo>> {
         let chain_id = self
             .cached_chain_id
             .get_or_try_init(|| async { self.context.chain_id().await })

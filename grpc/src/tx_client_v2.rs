@@ -27,24 +27,25 @@
 //! # #[async_trait::async_trait]
 //! # impl TxServer for DummyServer {
 //! #     type TxId = u64;
+//! #     type ConfirmInfo = u64;
 //! #     async fn submit(&self, _b: Vec<u8>, _s: u64) -> Result<u64, _> { unimplemented!() }
 //! #     async fn status_batch(
 //! #         &self,
 //! #         _ids: Vec<u64>,
-//! #     ) -> Result<std::collections::HashMap<u64, celestia_grpc::tx_client_v2::TxStatus>> {
+//! #     ) -> Result<std::collections::HashMap<u64, celestia_grpc::tx_client_v2::TxStatus<u64>>> {
 //! #         unimplemented!()
 //! #     }
 //! #     async fn current_sequence(&self) -> Result<u64> { unimplemented!() }
 //! # }
 //! # struct DummySigner;
 //! # #[async_trait::async_trait]
-//! # impl SignFn for DummySigner {
+//! # impl SignFn<u64, u64> for DummySigner {
 //! #     async fn sign(
 //! #         &self,
 //! #         _sequence: u64,
 //! #         _request: &TxRequest,
 //! #         _cfg: &TxConfig,
-//! #     ) -> Result<celestia_grpc::tx_client_v2::Transaction> {
+//! #     ) -> Result<celestia_grpc::tx_client_v2::Transaction<u64, u64>> {
 //! #         unimplemented!()
 //! #     }
 //! # }
@@ -96,53 +97,62 @@ pub enum TxRequest {
 }
 
 #[derive(Debug)]
-pub struct Transaction {
+pub struct Transaction<TxId, ConfirmInfo> {
     /// Transaction sequence for the signer.
     pub sequence: u64,
     /// Signed transaction bytes ready for broadcast.
     pub bytes: Vec<u8>,
     /// One-shot callbacks for submit/confirm acknowledgements.
-    pub callbacks: TxCallbacks,
-}
-
-#[derive(Debug, Default)]
-pub struct TxCallbacks {
-    /// Resolves when submission succeeds or fails.
-    pub on_submit: Option<oneshot::Sender<Result<()>>>,
-    /// Resolves when the transaction is confirmed or rejected.
-    pub on_confirm: Option<oneshot::Sender<Result<()>>>,
+    pub callbacks: TxCallbacks<TxId, ConfirmInfo>,
 }
 
 #[derive(Debug)]
-pub struct TxHandle {
+pub struct TxCallbacks<TxId, ConfirmInfo> {
+    /// Resolves when submission succeeds or fails.
+    pub on_submit: Option<oneshot::Sender<Result<TxId>>>,
+    /// Resolves when the transaction is confirmed or rejected.
+    pub on_confirm: Option<oneshot::Sender<Result<ConfirmInfo>>>,
+}
+
+impl<TxId, ConfirmInfo> Default for TxCallbacks<TxId, ConfirmInfo> {
+    fn default() -> Self {
+        Self {
+            on_submit: None,
+            on_confirm: None,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct TxHandle<TxId, ConfirmInfo> {
     /// Sequence reserved for this transaction.
     pub sequence: u64,
     /// Receives submit result.
-    pub on_submit: oneshot::Receiver<Result<()>>,
+    pub on_submit: oneshot::Receiver<Result<TxId>>,
     /// Receives confirm result.
-    pub on_confirm: oneshot::Receiver<Result<()>>,
+    pub on_confirm: oneshot::Receiver<Result<ConfirmInfo>>,
 }
 
 #[async_trait]
-pub trait SignFn: Send + Sync {
+pub trait SignFn<TxId, ConfirmInfo>: Send + Sync {
     /// Produce a signed `Transaction` for the provided request and sequence.
     ///
     /// # Notes
     /// - The returned `Transaction.sequence` must match the input `sequence`.
     /// - Returning a mismatched sequence causes the caller to fail the enqueue.
     async fn sign(&self, sequence: u64, request: &TxRequest, cfg: &TxConfig)
-        -> Result<Transaction>;
+        -> Result<Transaction<TxId, ConfirmInfo>>;
 }
 
 #[derive(Clone)]
-pub struct TransactionManager {
-    add_tx: mpsc::Sender<Transaction>,
+pub struct TransactionManager<TxId, ConfirmInfo> {
+    add_tx: mpsc::Sender<Transaction<TxId, ConfirmInfo>>,
     next_sequence: Arc<Mutex<u64>>,
     max_sent: Arc<AtomicU64>,
-    signer: Arc<dyn SignFn>,
+    signer: Arc<dyn SignFn<TxId, ConfirmInfo>>,
 }
 
-impl TransactionManager {
+impl<TxId, ConfirmInfo> TransactionManager<TxId, ConfirmInfo> {
     /// Sign and enqueue a transaction, returning a handle for submit/confirm.
     ///
     /// # Notes
@@ -153,7 +163,7 @@ impl TransactionManager {
     /// ```no_run
     /// # use celestia_grpc::{TxConfig, Result};
     /// # use celestia_grpc::tx_client_v2::{TransactionManager, TxRequest};
-    /// # async fn docs(manager: TransactionManager) -> Result<()> {
+    /// # async fn docs(manager: TransactionManager<u64, u64>) -> Result<()> {
     /// let handle = manager
     ///     .add_tx(TxRequest::RawPayload(vec![1, 2, 3]), TxConfig::default())
     ///     .await?;
@@ -162,7 +172,11 @@ impl TransactionManager {
     /// # Ok(())
     /// # }
     /// ```
-    pub async fn add_tx(&self, request: TxRequest, cfg: TxConfig) -> Result<TxHandle> {
+    pub async fn add_tx(
+        &self,
+        request: TxRequest,
+        cfg: TxConfig,
+    ) -> Result<TxHandle<TxId, ConfirmInfo>> {
         let mut sequence = self.next_sequence.lock().await;
         let current = *sequence;
         let mut tx = self.signer.sign(current, &request, &cfg).await?;
@@ -216,12 +230,12 @@ struct NodeSubmissionState {
     submit_delay_until: Option<time::Instant>,
 }
 
-#[derive(Debug, Clone, Copy)]
-pub enum TxStatus {
+#[derive(Debug)]
+pub enum TxStatus<ConfirmInfo> {
     /// Submitted, but not yet committed.
     Pending,
-    /// Included in a block successfully.
-    Confirmed,
+    /// Included in a block successfully with confirmation info.
+    Confirmed { info: ConfirmInfo },
     /// Rejected by the node (with an expected sequence hint).
     Rejected { expected: u64 },
     /// Removed from mempool; may need resubmission.
@@ -257,6 +271,7 @@ pub enum ConfirmFailure {
 #[async_trait]
 pub trait TxServer: Send + Sync {
     type TxId: Clone + Eq + StdHash + Send + Sync + 'static;
+    type ConfirmInfo: Send + Sync + 'static;
 
     /// Submit signed bytes with the given sequence, returning a server TxId.
     async fn submit(&self, tx_bytes: Vec<u8>, sequence: u64) -> TxSubmitResult<Self::TxId>;
@@ -264,14 +279,14 @@ pub trait TxServer: Send + Sync {
     async fn status_batch(
         &self,
         ids: Vec<Self::TxId>,
-    ) -> TxConfirmResult<HashMap<Self::TxId, TxStatus>>;
+    ) -> TxConfirmResult<HashMap<Self::TxId, TxStatus<Self::ConfirmInfo>>>;
     /// Fetch current sequence for the account (used by some implementations).
     async fn current_sequence(&self) -> Result<u64>;
 }
 
 #[derive(Debug)]
-enum TransactionEvent<TxId> {
-    Added(Transaction),
+enum TransactionEvent<TxId, ConfirmInfo> {
+    Added(Transaction<TxId, ConfirmInfo>),
     Submitted {
         node_id: NodeId,
         sequence: u64,
@@ -279,6 +294,7 @@ enum TransactionEvent<TxId> {
     },
     Confirmed {
         sequence: u64,
+        info: ConfirmInfo,
         id: TxId,
     },
     Rejected {
@@ -298,7 +314,7 @@ enum TransactionEvent<TxId> {
     },
     StatusBatch {
         node_id: NodeId,
-        statuses: HashMap<TxId, TxStatus>,
+        statuses: HashMap<TxId, TxStatus<ConfirmInfo>>,
     },
 }
 
@@ -334,23 +350,24 @@ struct SubmissionResult<TxId> {
     result: TxSubmitResult<TxId>,
 }
 
-struct ConfirmationResult<TxId> {
+struct ConfirmationResult<TxId, ConfirmInfo> {
     node_id: NodeId,
-    statuses: HashMap<TxId, TxStatus>,
+    statuses: HashMap<TxId, TxStatus<ConfirmInfo>>,
 }
 
 pub struct TransactionManagerWorker<S: TxServer> {
     nodes: HashMap<NodeId, Arc<S>>,
-    txs: VecDeque<Transaction>,
+    txs: VecDeque<Transaction<S::TxId, S::ConfirmInfo>>,
     tx_index: HashMap<S::TxId, TxIndexEntry<S::TxId>>,
-    events: VecDeque<TransactionEvent<S::TxId>>,
+    events: VecDeque<TransactionEvent<S::TxId, S::ConfirmInfo>>,
+    confirmed_info: HashMap<u64, S::ConfirmInfo>,
     confirmed_sequence: u64,
     node_state: HashMap<NodeId, NodeSubmissionState>,
-    add_tx_rx: mpsc::Receiver<Transaction>,
+    add_tx_rx: mpsc::Receiver<Transaction<S::TxId, S::ConfirmInfo>>,
     new_event: Arc<Notify>,
     new_submit: Arc<Notify>,
     submissions: JoinSet<SubmissionResult<S::TxId>>,
-    confirmations: JoinSet<ConfirmationResult<S::TxId>>,
+    confirmations: JoinSet<ConfirmationResult<S::TxId, S::ConfirmInfo>>,
     confirm_ticker: time::Interval,
     confirm_interval: Duration,
     max_status_batch: usize,
@@ -366,10 +383,10 @@ impl<S: TxServer + 'static> TransactionManagerWorker<S> {
         nodes: HashMap<NodeId, Arc<S>>,
         confirm_interval: Duration,
         max_status_batch: usize,
-        signer: Arc<dyn SignFn>,
+        signer: Arc<dyn SignFn<S::TxId, S::ConfirmInfo>>,
         start_sequence: u64,
         add_tx_capacity: usize,
-    ) -> (TransactionManager, Self) {
+    ) -> (TransactionManager<S::TxId, S::ConfirmInfo>, Self) {
         let (add_tx_tx, add_tx_rx) = mpsc::channel(add_tx_capacity);
         let next_sequence = Arc::new(Mutex::new(start_sequence));
         let max_sent = Arc::new(AtomicU64::new(0));
@@ -391,6 +408,7 @@ impl<S: TxServer + 'static> TransactionManagerWorker<S> {
                 txs: VecDeque::new(),
                 tx_index: HashMap::new(),
                 events: VecDeque::new(),
+                confirmed_info: HashMap::new(),
                 confirmed_sequence: start_sequence.saturating_sub(1),
                 node_state,
                 new_event: Arc::new(Notify::new()),
@@ -404,7 +422,7 @@ impl<S: TxServer + 'static> TransactionManagerWorker<S> {
         )
     }
 
-    fn enqueue_tx(&mut self, tx: Transaction) -> Result<()> {
+    fn enqueue_tx(&mut self, tx: Transaction<S::TxId, S::ConfirmInfo>) -> Result<()> {
         let expected = self
             .confirmed_sequence
             .saturating_add(self.txs.len() as u64)
@@ -558,8 +576,8 @@ impl<S: TxServer + 'static> TransactionManagerWorker<S> {
                     self.txs.push_back(tx);
                     self.new_submit.notify_one();
                 }
-                TransactionEvent::Confirmed { sequence, id } => {
-                    self.apply_confirmed(sequence, id);
+                TransactionEvent::Confirmed { sequence, info, id } => {
+                    self.apply_confirmed(sequence, info, id);
                 }
                 TransactionEvent::Rejected {
                     node_id,
@@ -632,6 +650,7 @@ impl<S: TxServer + 'static> TransactionManagerWorker<S> {
                     id,
                 } => {
                     let state_node_id = node_id.clone();
+                    let submit_id = id.clone();
                     self.tx_index.insert(
                         id.clone(),
                         TxIndexEntry {
@@ -641,7 +660,7 @@ impl<S: TxServer + 'static> TransactionManagerWorker<S> {
                         },
                     );
                     if let Some(on_submit) = self.take_on_submit(sequence) {
-                        let _ = on_submit.send(Ok(()));
+                        let _ = on_submit.send(Ok(submit_id));
                     }
                     if let Some(state) = self.node_state.get_mut(&state_node_id) {
                         state.inflight = false;
@@ -724,7 +743,7 @@ impl<S: TxServer + 'static> TransactionManagerWorker<S> {
         }
     }
 
-    fn apply_confirmed(&mut self, sequence: u64, id: S::TxId) {
+    fn apply_confirmed(&mut self, sequence: u64, info: S::ConfirmInfo, id: S::TxId) {
         let node_id = self.tx_index.get(&id).map(|entry| entry.node_id.clone());
         if self.tx_index.remove(&id).is_some() {
         }
@@ -733,15 +752,18 @@ impl<S: TxServer + 'static> TransactionManagerWorker<S> {
                 state.submitted_seq = state.submitted_seq.max(sequence);
             }
         }
-        while self.confirmed_sequence < sequence {
+        self.confirmed_info.insert(sequence, info);
+        loop {
             let next_sequence = self.confirmed_sequence.saturating_add(1);
+            let Some(info) = self.confirmed_info.remove(&next_sequence) else {
+                break;
+            };
             if let Some(tx) = self.take_on_confirm(next_sequence) {
-                let _ = tx.send(Ok(()));
+                let _ = tx.send(Ok(info));
             }
             self.txs.pop_front();
             self.confirmed_sequence = self.confirmed_sequence.saturating_add(1);
         }
-        self.confirmed_sequence = self.confirmed_sequence.max(sequence);
     }
 
     fn spawn_confirmations(&mut self, range: Option<(u64, u64)>, node_filter: Option<&NodeId>) {
@@ -795,7 +817,7 @@ impl<S: TxServer + 'static> TransactionManagerWorker<S> {
         &mut self,
         recovering_node_id: &NodeId,
         expected: u64,
-        result: ConfirmationResult<S::TxId>,
+        result: ConfirmationResult<S::TxId, S::ConfirmInfo>,
     ) -> Option<ProcessorState> {
         if let Some(state) = self.node_state.get_mut(&result.node_id) {
             state.confirm_inflight = false;
@@ -812,8 +834,8 @@ impl<S: TxServer + 'static> TransactionManagerWorker<S> {
         let new_events = self.prepare_status_batch(result.node_id, result.statuses);
         for event in new_events {
             match event {
-                TransactionEvent::Confirmed { sequence, id } => {
-                    self.apply_confirmed(sequence, id);
+                TransactionEvent::Confirmed { sequence, info, id } => {
+                    self.apply_confirmed(sequence, info, id);
                     if sequence >= expected {
                         return Some(ProcessorState::Submitting);
                     }
@@ -839,9 +861,10 @@ impl<S: TxServer + 'static> TransactionManagerWorker<S> {
     fn prepare_status_batch(
         &mut self,
         node_id: NodeId,
-        statuses: HashMap<S::TxId, TxStatus>,
-    ) -> Vec<TransactionEvent<S::TxId>> {
-        let mut max_confirm: Option<(u64, S::TxId)> = None;
+        statuses: HashMap<S::TxId, TxStatus<S::ConfirmInfo>>,
+    ) -> Vec<TransactionEvent<S::TxId, S::ConfirmInfo>> {
+        let mut max_confirm: Option<u64> = None;
+        let mut confirms: Vec<(u64, S::TxId, S::ConfirmInfo)> = Vec::new();
         let mut min_reject: Option<(u64, u64)> = None;
         let mut min_evict: Option<(u64, S::TxId)> = None;
 
@@ -851,13 +874,14 @@ impl<S: TxServer + 'static> TransactionManagerWorker<S> {
             };
             let seq = entry.sequence;
             match status {
-                TxStatus::Confirmed => {
-                    let update = match &max_confirm {
-                        Some((max, _)) => seq > *max,
+                TxStatus::Confirmed { info } => {
+                    confirms.push((seq, id, info));
+                    let update = match max_confirm {
+                        Some(max) => seq > max,
                         None => true,
                     };
                     if update {
-                        max_confirm = Some((seq, id));
+                        max_confirm = Some(seq);
                     }
                 }
                 TxStatus::Rejected { expected } => {
@@ -882,10 +906,19 @@ impl<S: TxServer + 'static> TransactionManagerWorker<S> {
             }
         }
 
-        let confirmed = max_confirm.as_ref().map(|(seq, _)| *seq);
+        let confirmed = max_confirm;
         let mut new_events = Vec::new();
-        if let Some((seq, id)) = max_confirm {
-            new_events.push(TransactionEvent::Confirmed { sequence: seq, id });
+        if let Some(max_confirm) = max_confirm {
+            confirms.sort_by_key(|(seq, _, _)| *seq);
+            for (seq, id, info) in confirms {
+                if seq <= max_confirm {
+                    new_events.push(TransactionEvent::Confirmed {
+                        sequence: seq,
+                        id,
+                        info,
+                    });
+                }
+            }
         }
 
         if let Some((seq, expected)) = min_reject {
@@ -928,13 +961,16 @@ impl<S: TxServer + 'static> TransactionManagerWorker<S> {
         Some(tx.bytes.clone())
     }
 
-    fn take_on_submit(&mut self, sequence: u64) -> Option<oneshot::Sender<Result<()>>> {
+    fn take_on_submit(&mut self, sequence: u64) -> Option<oneshot::Sender<Result<S::TxId>>> {
         let idx = self.index_for_sequence(sequence)?;
         let tx = self.txs.get_mut(idx)?;
         tx.callbacks.on_submit.take()
     }
 
-    fn take_on_confirm(&mut self, sequence: u64) -> Option<oneshot::Sender<Result<()>>> {
+    fn take_on_confirm(
+        &mut self,
+        sequence: u64,
+    ) -> Option<oneshot::Sender<Result<S::ConfirmInfo>>> {
         let idx = self.index_for_sequence(sequence)?;
         let tx = self.txs.get_mut(idx)?;
         tx.callbacks.on_confirm.take()
@@ -949,16 +985,21 @@ mod tests {
     use tokio::sync::mpsc::error::TryRecvError;
     use tokio::task::JoinHandle;
 
+    type TestTxId = u64;
+    type TestConfirmInfo = u64;
+
     #[derive(Debug)]
-    enum ServerCall<TxId> {
+    enum ServerCall {
         Submit {
             bytes: Vec<u8>,
             sequence: u64,
-            reply: oneshot::Sender<TxSubmitResult<TxId>>,
+            reply: oneshot::Sender<TxSubmitResult<TestTxId>>,
         },
         StatusBatch {
-            ids: Vec<TxId>,
-            reply: oneshot::Sender<TxConfirmResult<HashMap<TxId, TxStatus>>>,
+            ids: Vec<TestTxId>,
+            reply: oneshot::Sender<
+                TxConfirmResult<HashMap<TestTxId, TxStatus<TestConfirmInfo>>>,
+            >,
         },
         CurrentSequence {
             reply: oneshot::Sender<Result<u64>>,
@@ -966,12 +1007,12 @@ mod tests {
     }
 
     #[derive(Debug)]
-    struct MockTxServer<TxId> {
-        calls: mpsc::Sender<ServerCall<TxId>>,
+    struct MockTxServer {
+        calls: mpsc::Sender<ServerCall>,
     }
 
-    impl<TxId> MockTxServer<TxId> {
-        fn new(calls: mpsc::Sender<ServerCall<TxId>>) -> Self {
+    impl MockTxServer {
+        fn new(calls: mpsc::Sender<ServerCall>) -> Self {
             Self { calls }
         }
     }
@@ -980,13 +1021,13 @@ mod tests {
     struct TestSigner;
 
     #[async_trait]
-    impl SignFn for TestSigner {
+    impl SignFn<TestTxId, TestConfirmInfo> for TestSigner {
         async fn sign(
             &self,
             sequence: u64,
             request: &TxRequest,
             _cfg: &TxConfig,
-        ) -> Result<Transaction> {
+        ) -> Result<Transaction<TestTxId, TestConfirmInfo>> {
             let bytes = match request {
                 TxRequest::RawPayload(bytes) => bytes.clone(),
                 TxRequest::Message(_) | TxRequest::Blobs(_) => Vec::new(),
@@ -1000,13 +1041,11 @@ mod tests {
     }
 
     #[async_trait]
-    impl<TxId> TxServer for MockTxServer<TxId>
-    where
-        TxId: Clone + Eq + StdHash + Send + Sync + 'static,
-    {
-        type TxId = TxId;
+    impl TxServer for MockTxServer {
+        type TxId = TestTxId;
+        type ConfirmInfo = TestConfirmInfo;
 
-        async fn submit(&self, tx_bytes: Vec<u8>, sequence: u64) -> TxSubmitResult<Self::TxId> {
+        async fn submit(&self, tx_bytes: Vec<u8>, sequence: u64) -> TxSubmitResult<TestTxId> {
             let (reply, rx) = oneshot::channel();
             self.calls
                 .send(ServerCall::Submit {
@@ -1021,8 +1060,8 @@ mod tests {
 
         async fn status_batch(
             &self,
-            ids: Vec<Self::TxId>,
-        ) -> TxConfirmResult<HashMap<Self::TxId, TxStatus>> {
+            ids: Vec<TestTxId>,
+        ) -> TxConfirmResult<HashMap<TestTxId, TxStatus<TestConfirmInfo>>> {
             let (reply, rx) = oneshot::channel();
             self.calls
                 .send(ServerCall::StatusBatch { ids, reply })
@@ -1042,11 +1081,11 @@ mod tests {
     }
 
     struct Harness {
-        calls_rx: mpsc::Receiver<ServerCall<u64>>,
+        calls_rx: mpsc::Receiver<ServerCall>,
         shutdown: Arc<Notify>,
         handle: Option<JoinHandle<Result<()>>>,
         confirm_interval: Duration,
-        manager: TransactionManager,
+        manager: TransactionManager<TestTxId, TestConfirmInfo>,
     }
 
     impl Harness {
@@ -1056,7 +1095,7 @@ mod tests {
             confirm_interval: Duration,
             max_status_batch: usize,
             add_tx_capacity: usize,
-        ) -> (Self, TransactionManagerWorker<MockTxServer<u64>>) {
+        ) -> (Self, TransactionManagerWorker<MockTxServer>) {
             let (calls_tx, calls_rx) = mpsc::channel(64);
             let server = Arc::new(MockTxServer::new(calls_tx));
             let nodes = HashMap::from([(String::from("node-1"), server)]);
@@ -1081,7 +1120,7 @@ mod tests {
             )
         }
 
-        fn start(&mut self, mut manager: TransactionManagerWorker<MockTxServer<u64>>) {
+        fn start(&mut self, mut manager: TransactionManagerWorker<MockTxServer>) {
             let shutdown = self.shutdown.clone();
             self.handle = Some(tokio::spawn(async move { manager.process(shutdown).await }));
         }
@@ -1090,7 +1129,7 @@ mod tests {
             tokio::task::yield_now().await;
         }
 
-        async fn expect_call(&mut self) -> ServerCall<u64> {
+        async fn expect_call(&mut self) -> ServerCall {
             for _ in 0..Self::MAX_SPINS {
                 match self.calls_rx.try_recv() {
                     Ok(call) => return call,
@@ -1103,7 +1142,7 @@ mod tests {
 
         async fn expect_submit(
             &mut self,
-        ) -> (Vec<u8>, u64, oneshot::Sender<TxSubmitResult<u64>>) {
+        ) -> (Vec<u8>, u64, oneshot::Sender<TxSubmitResult<TestTxId>>) {
             match self.expect_call().await {
                 ServerCall::Submit {
                     bytes,
@@ -1116,7 +1155,10 @@ mod tests {
 
         async fn expect_status_batch(
             &mut self,
-        ) -> (Vec<u64>, oneshot::Sender<TxConfirmResult<HashMap<u64, TxStatus>>>) {
+        ) -> (
+            Vec<TestTxId>,
+            oneshot::Sender<TxConfirmResult<HashMap<TestTxId, TxStatus<TestConfirmInfo>>>>,
+        ) {
             match self.expect_call().await {
                 ServerCall::StatusBatch { ids, reply } => (ids, reply),
                 other => panic!("expected StatusBatch, got {:?}", other),
@@ -1158,9 +1200,13 @@ mod tests {
     }
 
     async fn add_tx(
-        manager: &TransactionManager,
+        manager: &TransactionManager<TestTxId, TestConfirmInfo>,
         bytes: Vec<u8>,
-    ) -> (u64, oneshot::Receiver<Result<()>>, oneshot::Receiver<Result<()>>) {
+    ) -> (
+        u64,
+        oneshot::Receiver<Result<TestTxId>>,
+        oneshot::Receiver<Result<TestConfirmInfo>>,
+    ) {
         let handle = manager
             .add_tx(TxRequest::RawPayload(bytes), TxConfig::default())
             .await
@@ -1182,7 +1228,7 @@ mod tests {
         harness.pump().await;
 
         let submit_result = submit_rx.await.expect("submit recv");
-        assert!(submit_result.is_ok());
+        assert_eq!(submit_result.expect("submit ok"), 1);
 
         harness.assert_no_calls();
         harness.shutdown().await;
@@ -1205,11 +1251,12 @@ mod tests {
         let (ids, reply) = harness.expect_status_batch().await;
         assert_eq!(ids, vec![42]);
         reply
-            .send(Ok(HashMap::from([(42, TxStatus::Confirmed)])))
+            .send(Ok(HashMap::from([(42, TxStatus::Confirmed { info: 123 })])))
             .expect("status reply send");
 
         let confirm_result = confirm_rx.await.expect("confirm recv");
-        assert!(confirm_result.is_ok());
+        let info = confirm_result.expect("confirm ok");
+        assert_eq!(info, 123);
 
         harness.assert_no_calls();
         harness.shutdown().await;
@@ -1234,7 +1281,7 @@ mod tests {
         reply.send(Ok(7)).expect("submit reply send");
         harness.pump().await;
         let submit_result = submit_rx.await.expect("submit recv");
-        assert!(submit_result.is_ok());
+        assert_eq!(submit_result.expect("submit ok"), 7);
 
         harness.assert_no_calls();
         harness.shutdown().await;
@@ -1270,8 +1317,8 @@ mod tests {
         let (ids, reply) = harness.expect_status_batch().await;
         assert!(ids.len() <= 2);
         let mut statuses = HashMap::new();
-        for id in &ids {
-            statuses.insert(*id, TxStatus::Confirmed);
+        for (idx, id) in ids.iter().enumerate() {
+            statuses.insert(*id, TxStatus::Confirmed { info: 100 + idx as u64 });
         }
         reply.send(Ok(statuses)).expect("status reply send");
         harness.pump().await;
@@ -1280,8 +1327,8 @@ mod tests {
         let (ids, reply) = harness.expect_status_batch().await;
         assert!(ids.len() <= 2);
         let mut statuses = HashMap::new();
-        for id in ids {
-            statuses.insert(id, TxStatus::Confirmed);
+        for (idx, id) in ids.into_iter().enumerate() {
+            statuses.insert(id, TxStatus::Confirmed { info: 200 + idx as u64 });
         }
         reply.send(Ok(statuses)).expect("status reply send");
 
@@ -1309,7 +1356,7 @@ mod tests {
         reply.send(Ok(10)).expect("submit reply send");
 
         let submit_result = submit_rx1.await.expect("submit recv");
-        assert!(submit_result.is_ok());
+        assert_eq!(submit_result.expect("submit ok"), 10);
 
         let (_bytes, sequence, reply) = harness.expect_submit().await;
         assert_eq!(sequence, 2);
@@ -1349,7 +1396,7 @@ mod tests {
         reply.send(Ok(11)).expect("submit reply send");
 
         let submit_result = submit_rx1.await.expect("submit recv");
-        assert!(submit_result.is_ok());
+        assert_eq!(submit_result.expect("submit ok"), 11);
 
         let (_bytes, sequence, reply) = harness.expect_submit().await;
         assert_eq!(sequence, 2);
@@ -1370,11 +1417,12 @@ mod tests {
         let (ids, reply) = harness.expect_status_batch().await;
         assert_eq!(ids, vec![11]);
         reply
-            .send(Ok(HashMap::from([(11, TxStatus::Confirmed)])))
+            .send(Ok(HashMap::from([(11, TxStatus::Confirmed { info: 456 })])))
             .expect("status reply send");
 
         let confirm_result = confirm_rx1.await.expect("confirm recv");
-        assert!(confirm_result.is_ok());
+        let info = confirm_result.expect("confirm ok");
+        assert_eq!(info, 456);
 
         harness.assert_no_calls();
         harness.shutdown().await;
@@ -1422,7 +1470,7 @@ mod tests {
 
     #[tokio::test]
     async fn add_tx_queue_full_does_not_increment() {
-        let nodes = HashMap::<NodeId, Arc<MockTxServer<u64>>>::new();
+        let nodes = HashMap::<NodeId, Arc<MockTxServer>>::new();
         let signer = Arc::new(TestSigner::default());
         let (manager, mut worker) =
             TransactionManagerWorker::new(nodes, Duration::from_millis(10), 10, signer, 1, 1);
@@ -1458,13 +1506,13 @@ mod tests {
         }
 
         #[async_trait]
-        impl SignFn for BadSigner {
+        impl SignFn<TestTxId, TestConfirmInfo> for BadSigner {
             async fn sign(
                 &self,
                 sequence: u64,
                 request: &TxRequest,
                 _cfg: &TxConfig,
-            ) -> Result<Transaction> {
+            ) -> Result<Transaction<TestTxId, TestConfirmInfo>> {
                 self.seen.store(sequence, Ordering::SeqCst);
                 let bytes = match request {
                     TxRequest::RawPayload(bytes) => bytes.clone(),
@@ -1480,7 +1528,7 @@ mod tests {
 
         let seen = Arc::new(AtomicU64::new(0));
         let signer = Arc::new(BadSigner { seen: seen.clone() });
-        let nodes = HashMap::<NodeId, Arc<MockTxServer<u64>>>::new();
+        let nodes = HashMap::<NodeId, Arc<MockTxServer>>::new();
         let (manager, mut worker) =
             TransactionManagerWorker::new(nodes, Duration::from_millis(10), 10, signer, 1, 4);
 
@@ -1507,7 +1555,7 @@ mod tests {
 
     #[tokio::test]
     async fn add_tx_closed_channel_returns_error() {
-        let nodes = HashMap::<NodeId, Arc<MockTxServer<u64>>>::new();
+        let nodes = HashMap::<NodeId, Arc<MockTxServer>>::new();
         let signer = Arc::new(TestSigner::default());
         let (manager, _worker) =
             TransactionManagerWorker::new(nodes, Duration::from_millis(10), 10, signer, 1, 4);
@@ -1524,7 +1572,7 @@ mod tests {
 
     #[tokio::test]
     async fn add_tx_concurrent_sequences_are_monotonic() {
-        let nodes = HashMap::<NodeId, Arc<MockTxServer<u64>>>::new();
+        let nodes = HashMap::<NodeId, Arc<MockTxServer>>::new();
         let signer = Arc::new(TestSigner::default());
         let (manager, _worker) =
             TransactionManagerWorker::new(nodes, Duration::from_millis(10), 10, signer, 1, 128);
