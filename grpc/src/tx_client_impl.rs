@@ -10,11 +10,13 @@ use tokio::sync::OnceCell;
 use celestia_types::any::IntoProtobufAny;
 use celestia_types::blob::{MsgPayForBlobs, RawBlobTx, RawMsgPayForBlobs};
 use celestia_types::hash::Hash;
-use celestia_types::state::auth::BaseAccount;
 use celestia_types::state::ErrorCode;
 use celestia_types::state::RawTxBody;
+use celestia_types::state::auth::BaseAccount;
 
-use crate::grpc::{BroadcastMode, GasEstimate, TxPriority, TxStatus as GrpcTxStatus, TxStatusResponse};
+use crate::grpc::{
+    BroadcastMode, GasEstimate, TxPriority, TxStatus as GrpcTxStatus, TxStatusResponse,
+};
 use crate::signer::{BoxedDocSigner, sign_tx};
 
 use crate::tx_client_v2::{
@@ -42,6 +44,46 @@ pub(crate) struct SignFnBuilder {
     context: Arc<dyn SignContext>,
     pubkey: VerifyingKey,
     signer: Arc<BoxedDocSigner>,
+}
+
+pub(crate) struct GrpcSignContext {
+    client: GrpcClient,
+}
+
+impl GrpcSignContext {
+    pub(crate) fn new(client: GrpcClient) -> Self {
+        Self { client }
+    }
+}
+
+#[async_trait]
+impl SignContext for GrpcSignContext {
+    async fn get_account(&self) -> Result<BaseAccount> {
+        let address = self
+            .client
+            .get_account_address()
+            .ok_or(Error::MissingSigner)?;
+        let account = self.client.get_account(&address).await?;
+        Ok(account.into())
+    }
+
+    async fn chain_id(&self) -> Result<Id> {
+        self.client.chain_id().await
+    }
+
+    async fn estimate_gas_price(&self, priority: TxPriority) -> Result<f64> {
+        self.client.estimate_gas_price(priority).await
+    }
+
+    async fn estimate_gas_price_and_usage(
+        &self,
+        priority: TxPriority,
+        tx_bytes: Vec<u8>,
+    ) -> Result<GasEstimate> {
+        self.client
+            .estimate_gas_price_and_usage(priority, tx_bytes)
+            .await
+    }
 }
 
 impl SignFnBuilder {
@@ -203,13 +245,26 @@ impl TxServer for GrpcClient {
         &self,
         ids: Vec<Self::TxId>,
     ) -> TxConfirmResult<HashMap<Self::TxId, TxStatus<Self::ConfirmInfo>>> {
+        let response = self.tx_status_batch(ids.clone()).await?;
+        let mut response_map = HashMap::new();
+        for result in response.statuses {
+            response_map.insert(result.hash, result.status);
+        }
+
         let mut statuses = HashMap::new();
         let mut expected_sequence: Option<u64> = None;
 
         for hash in ids {
-            let response = self.tx_status(hash).await?;
-            let status = map_status_response(hash, response, &mut expected_sequence, self).await?;
-            statuses.insert(hash, status);
+            match response_map.remove(&hash) {
+                Some(status) => {
+                    let mapped =
+                        map_status_response(hash, status, &mut expected_sequence, self).await?;
+                    statuses.insert(hash, mapped);
+                }
+                None => {
+                    statuses.insert(hash, TxStatus::Unknown);
+                }
+            }
         }
 
         Ok(statuses)
@@ -287,7 +342,8 @@ fn is_wrong_sequence(code: ErrorCode) -> bool {
 }
 
 fn extract_sequence_on_mismatch(msg: &str) -> Option<Result<u64>> {
-    msg.contains(SEQUENCE_ERROR_PAT).then(|| extract_sequence(msg))
+    msg.contains(SEQUENCE_ERROR_PAT)
+        .then(|| extract_sequence(msg))
 }
 
 fn extract_sequence(msg: &str) -> Result<u64> {
@@ -304,14 +360,27 @@ fn extract_sequence(msg: &str) -> Result<u64> {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+    use std::ops::RangeInclusive;
+    use std::sync::Arc;
+    use std::time::Duration;
+
     use super::*;
     use async_trait::async_trait;
     use k256::ecdsa::SigningKey;
+    use lumina_utils::test_utils::async_test;
     use rand::rngs::OsRng;
+    use rand::{Rng, RngCore};
     use tendermint::chain::Id;
     use tendermint_proto::google::protobuf::Any;
+    use tokio::sync::Notify;
 
+    use crate::GrpcClient;
+    use crate::test_utils::{CELESTIA_GRPC_URL, new_tx_client};
+    use crate::tx_client_v2::TransactionManagerWorker;
+    use celestia_types::nmt::Namespace;
     use celestia_types::state::{AccAddress, RawTxBody};
+    use celestia_types::{AppVersion, Blob};
 
     struct MockContext {
         account: BaseAccount,
@@ -349,7 +418,7 @@ mod tests {
     async fn signfn_builder_signs_message() {
         let signing_key = SigningKey::random(&mut OsRng);
         let pubkey = signing_key.verifying_key().clone();
-        let signer = Arc::new(BoxedDocSigner::new(signing_key));
+        let signer = Arc::new(BoxedDocSigner::new(signing_key.clone()));
         let address = AccAddress::from(pubkey);
         let account = BaseAccount {
             address,
@@ -384,7 +453,7 @@ mod tests {
     async fn signfn_builder_rejects_raw_payload() {
         let signing_key = SigningKey::random(&mut OsRng);
         let pubkey = signing_key.verifying_key().clone();
-        let signer = Arc::new(BoxedDocSigner::new(signing_key));
+        let signer = Arc::new(BoxedDocSigner::new(signing_key.clone()));
         let address = AccAddress::from(pubkey);
         let account = BaseAccount {
             address,
@@ -409,5 +478,76 @@ mod tests {
             .expect_err("raw payload");
 
         assert!(matches!(err, Error::UnexpectedResponseType(_)));
+    }
+
+    #[test]
+    fn txserver_impl_compiles_with_grpc_client() {
+        fn assert_txserver<T: TxServer<TxId = Hash, ConfirmInfo = TxInfo>>() {}
+        assert_txserver::<GrpcClient>();
+    }
+
+    #[async_test]
+    async fn submit_with_worker_and_confirm() {
+        let (_lock, _client) = new_tx_client().await;
+        let hex_key = include_str!("../../ci/credentials/node-0.plaintext-key").trim();
+        let key_bytes = hex::decode(hex_key).expect("valid hex representation");
+        let signing_key = SigningKey::from_slice(&key_bytes).expect("valid signing key");
+        let pubkey = signing_key.verifying_key().clone();
+        let signer = Arc::new(BoxedDocSigner::new(signing_key.clone()));
+        let client = GrpcClient::builder()
+            .url(CELESTIA_GRPC_URL)
+            .signer_keypair(signing_key)
+            .build()
+            .unwrap();
+
+        let context = Arc::new(GrpcSignContext::new(client.clone()));
+        let sign_fn = SignFnBuilder::new(context, pubkey, signer).build();
+        let address = client.get_account_address().expect("signer address");
+        let account = client.get_account(&address).await.unwrap();
+        let start_sequence = account.sequence;
+        let nodes = HashMap::from([(String::from("node-1"), Arc::new(client.clone()))]);
+        let (manager, mut worker) = TransactionManagerWorker::new(
+            nodes,
+            Duration::from_millis(250),
+            16,
+            sign_fn,
+            start_sequence,
+            16,
+        );
+
+        let shutdown = Arc::new(Notify::new());
+        let worker_shutdown = shutdown.clone();
+        let worker_handle = tokio::spawn(async move { worker.process(worker_shutdown).await });
+
+        let handle = manager
+            .add_tx(
+                TxRequest::Blobs(vec![random_blob(10..=1000)]),
+                TxConfig::default(),
+            )
+            .await
+            .unwrap();
+        let submit_hash = handle.on_submit.await.unwrap().unwrap();
+        let confirm_info = handle.on_confirm.await.unwrap().unwrap();
+
+        assert_eq!(submit_hash, confirm_info.hash);
+        assert!(confirm_info.height > 0);
+
+        shutdown.notify_one();
+        worker_handle.await.unwrap().unwrap();
+    }
+
+    fn random_blob(size: RangeInclusive<usize>) -> Blob {
+        let rng = &mut rand::thread_rng();
+
+        let mut ns_bytes = vec![0u8; 10];
+        rng.fill_bytes(&mut ns_bytes);
+        let namespace = Namespace::new_v0(&ns_bytes).unwrap();
+
+        let len = rng.gen_range(size);
+        let mut blob = vec![0; len];
+        rng.fill_bytes(&mut blob);
+        blob.resize(len, 1);
+
+        Blob::new(namespace, blob, None, AppVersion::latest()).unwrap()
     }
 }

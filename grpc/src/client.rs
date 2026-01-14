@@ -39,7 +39,7 @@ use crate::boxed::BoxedTransport;
 use crate::builder::GrpcClientBuilder;
 use crate::grpc::{
     AsyncGrpcCall, BroadcastMode, ConfigResponse, Context, GasEstimate, GasInfo, GetTxResponse,
-    TxPriority, TxStatus, TxStatusResponse,
+    TxPriority, TxStatus, TxStatusBatchResponse, TxStatusResponse,
 };
 use crate::signer::{BoxedDocSigner, sign_tx};
 use crate::tx::{BroadcastedTx, SubmittedTx, TxInfo};
@@ -255,6 +255,10 @@ impl GrpcClient {
     /// Get status of the transaction
     #[grpc_method(TxStatusClient::tx_status)]
     fn tx_status(&self, hash: Hash) -> AsyncGrpcCall<TxStatusResponse>;
+
+    /// Get status of transactions in batch.
+    #[grpc_method(TxStatusClient::tx_status_batch)]
+    fn tx_status_batch(&self, hashes: Vec<Hash>) -> AsyncGrpcCall<TxStatusBatchResponse>;
 
     // celestia.core.gas_estimation
 

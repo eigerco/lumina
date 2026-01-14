@@ -67,14 +67,14 @@
 //! ```
 use std::collections::{HashMap, VecDeque};
 use std::hash::Hash as StdHash;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use async_trait::async_trait;
 use celestia_types::state::ErrorCode;
 use tendermint_proto::google::protobuf::Any;
-use tokio::sync::{mpsc, Mutex, Notify, oneshot};
+use tokio::sync::{Mutex, Notify, mpsc, oneshot};
 use tokio::task::JoinSet;
 use tokio::time;
 
@@ -140,8 +140,12 @@ pub trait SignFn<TxId, ConfirmInfo>: Send + Sync {
     /// # Notes
     /// - The returned `Transaction.sequence` must match the input `sequence`.
     /// - Returning a mismatched sequence causes the caller to fail the enqueue.
-    async fn sign(&self, sequence: u64, request: &TxRequest, cfg: &TxConfig)
-        -> Result<Transaction<TxId, ConfirmInfo>>;
+    async fn sign(
+        &self,
+        sequence: u64,
+        request: &TxRequest,
+        cfg: &TxConfig,
+    ) -> Result<Transaction<TxId, ConfirmInfo>>;
 }
 
 #[derive(Clone)]
@@ -745,8 +749,7 @@ impl<S: TxServer + 'static> TransactionManagerWorker<S> {
 
     fn apply_confirmed(&mut self, sequence: u64, info: S::ConfirmInfo, id: S::TxId) {
         let node_id = self.tx_index.get(&id).map(|entry| entry.node_id.clone());
-        if self.tx_index.remove(&id).is_some() {
-        }
+        if self.tx_index.remove(&id).is_some() {}
         if let Some(node_id) = node_id {
             if let Some(state) = self.node_state.get_mut(&node_id) {
                 state.submitted_seq = state.submitted_seq.max(sequence);
@@ -997,9 +1000,7 @@ mod tests {
         },
         StatusBatch {
             ids: Vec<TestTxId>,
-            reply: oneshot::Sender<
-                TxConfirmResult<HashMap<TestTxId, TxStatus<TestConfirmInfo>>>,
-            >,
+            reply: oneshot::Sender<TxConfirmResult<HashMap<TestTxId, TxStatus<TestConfirmInfo>>>>,
         },
         CurrentSequence {
             reply: oneshot::Sender<Result<u64>>,
@@ -1318,7 +1319,12 @@ mod tests {
         assert!(ids.len() <= 2);
         let mut statuses = HashMap::new();
         for (idx, id) in ids.iter().enumerate() {
-            statuses.insert(*id, TxStatus::Confirmed { info: 100 + idx as u64 });
+            statuses.insert(
+                *id,
+                TxStatus::Confirmed {
+                    info: 100 + idx as u64,
+                },
+            );
         }
         reply.send(Ok(statuses)).expect("status reply send");
         harness.pump().await;
@@ -1328,7 +1334,12 @@ mod tests {
         assert!(ids.len() <= 2);
         let mut statuses = HashMap::new();
         for (idx, id) in ids.into_iter().enumerate() {
-            statuses.insert(id, TxStatus::Confirmed { info: 200 + idx as u64 });
+            statuses.insert(
+                id,
+                TxStatus::Confirmed {
+                    info: 200 + idx as u64,
+                },
+            );
         }
         reply.send(Ok(statuses)).expect("status reply send");
 
@@ -1369,7 +1380,10 @@ mod tests {
         let (ids, reply) = harness.expect_status_batch().await;
         assert_eq!(ids, vec![10]);
         reply
-            .send(Ok(HashMap::from([(10, TxStatus::Rejected { expected: 2 })])))
+            .send(Ok(HashMap::from([(
+                10,
+                TxStatus::Rejected { expected: 2 },
+            )])))
             .expect("status reply send");
 
         let stopped = harness.join().await;
