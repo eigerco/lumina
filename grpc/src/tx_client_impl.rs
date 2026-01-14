@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -8,17 +9,22 @@ use tokio::sync::OnceCell;
 
 use celestia_types::any::IntoProtobufAny;
 use celestia_types::blob::{MsgPayForBlobs, RawBlobTx, RawMsgPayForBlobs};
+use celestia_types::hash::Hash;
 use celestia_types::state::auth::BaseAccount;
+use celestia_types::state::ErrorCode;
 use celestia_types::state::RawTxBody;
 
-use crate::grpc::{GasEstimate, TxPriority};
+use crate::grpc::{BroadcastMode, GasEstimate, TxPriority, TxStatus as GrpcTxStatus, TxStatusResponse};
 use crate::signer::{BoxedDocSigner, sign_tx};
-use celestia_types::hash::Hash;
 
-use crate::tx_client_v2::{SignFn, Transaction, TxCallbacks, TxRequest};
-use crate::{Error, Result, TxConfig, TxInfo};
+use crate::tx_client_v2::{
+    SignFn, SubmitFailure, Transaction, TxCallbacks, TxConfirmResult, TxRequest, TxServer,
+    TxStatus, TxSubmitResult,
+};
+use crate::{Error, GrpcClient, Result, TxConfig, TxInfo};
 
 const BLOB_TX_TYPE_ID: &str = "BLOB";
+const SEQUENCE_ERROR_PAT: &str = "account sequence mismatch, expected ";
 
 #[async_trait]
 pub(crate) trait SignContext: Send + Sync {
@@ -173,6 +179,127 @@ impl SignFn<Hash, TxInfo> for BuiltSignFn {
             callbacks: TxCallbacks::default(),
         })
     }
+}
+
+#[async_trait]
+impl TxServer for GrpcClient {
+    type TxId = Hash;
+    type ConfirmInfo = TxInfo;
+
+    async fn submit(&self, tx_bytes: Vec<u8>, _sequence: u64) -> TxSubmitResult<Self::TxId> {
+        let resp = self
+            .broadcast_tx(tx_bytes, BroadcastMode::Sync)
+            .await
+            .map_err(|err| SubmitFailure::NetworkError { err })?;
+
+        if resp.code == ErrorCode::Success {
+            return Ok(resp.txhash);
+        }
+
+        Err(map_submit_failure(resp.code, &resp.raw_log))
+    }
+
+    async fn status_batch(
+        &self,
+        ids: Vec<Self::TxId>,
+    ) -> TxConfirmResult<HashMap<Self::TxId, TxStatus<Self::ConfirmInfo>>> {
+        let mut statuses = HashMap::new();
+        let mut expected_sequence: Option<u64> = None;
+
+        for hash in ids {
+            let response = self.tx_status(hash).await?;
+            let status = map_status_response(hash, response, &mut expected_sequence, self).await?;
+            statuses.insert(hash, status);
+        }
+
+        Ok(statuses)
+    }
+
+    async fn current_sequence(&self) -> Result<u64> {
+        let address = self.get_account_address().ok_or(Error::MissingSigner)?;
+        let account = self.get_account(&address).await?;
+        Ok(account.sequence)
+    }
+}
+
+async fn map_status_response(
+    hash: Hash,
+    response: TxStatusResponse,
+    expected_sequence: &mut Option<u64>,
+    client: &GrpcClient,
+) -> Result<TxStatus<TxInfo>> {
+    match response.status {
+        GrpcTxStatus::Committed => {
+            if response.execution_code == ErrorCode::Success {
+                Ok(TxStatus::Confirmed {
+                    info: TxInfo {
+                        hash,
+                        height: response.height.value(),
+                    },
+                })
+            } else {
+                let expected = ensure_expected_sequence(expected_sequence, client).await?;
+                Ok(TxStatus::Rejected { expected })
+            }
+        }
+        GrpcTxStatus::Rejected => {
+            let expected = ensure_expected_sequence(expected_sequence, client).await?;
+            Ok(TxStatus::Rejected { expected })
+        }
+        GrpcTxStatus::Evicted => Ok(TxStatus::Evicted),
+        GrpcTxStatus::Pending => Ok(TxStatus::Pending),
+        GrpcTxStatus::Unknown => Ok(TxStatus::Unknown),
+    }
+}
+
+async fn ensure_expected_sequence(
+    expected_sequence: &mut Option<u64>,
+    client: &GrpcClient,
+) -> Result<u64> {
+    if let Some(expected) = expected_sequence {
+        return Ok(*expected);
+    }
+    let expected = client.current_sequence().await?;
+    *expected_sequence = Some(expected);
+    Ok(expected)
+}
+
+fn map_submit_failure(code: ErrorCode, message: &str) -> SubmitFailure {
+    if is_wrong_sequence(code) {
+        if let Some(parsed) = extract_sequence_on_mismatch(message) {
+            return match parsed {
+                Ok(expected) => SubmitFailure::SequenceMismatch { expected },
+                Err(err) => SubmitFailure::NetworkError { err },
+            };
+        }
+    }
+
+    match code {
+        ErrorCode::InsufficientFunds => SubmitFailure::InsufficientFunds,
+        ErrorCode::InsufficientFee => SubmitFailure::InsufficientFee { expected_fee: 0 },
+        ErrorCode::MempoolIsFull => SubmitFailure::MempoolIsFull,
+        _ => SubmitFailure::InvalidTx { error_code: code },
+    }
+}
+
+fn is_wrong_sequence(code: ErrorCode) -> bool {
+    code == ErrorCode::InvalidSequence || code == ErrorCode::WrongSequence
+}
+
+fn extract_sequence_on_mismatch(msg: &str) -> Option<Result<u64>> {
+    msg.contains(SEQUENCE_ERROR_PAT).then(|| extract_sequence(msg))
+}
+
+fn extract_sequence(msg: &str) -> Result<u64> {
+    let (_, msg_with_sequence) = msg
+        .split_once(SEQUENCE_ERROR_PAT)
+        .ok_or_else(|| Error::SequenceParsingFailed(msg.into()))?;
+    let (sequence, _) = msg_with_sequence
+        .split_once(',')
+        .ok_or_else(|| Error::SequenceParsingFailed(msg.into()))?;
+    sequence
+        .parse()
+        .map_err(|_| Error::SequenceParsingFailed(msg.into()))
 }
 
 #[cfg(test)]
