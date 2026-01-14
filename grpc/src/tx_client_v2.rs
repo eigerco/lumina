@@ -2,7 +2,7 @@
 //!
 //! # Overview
 //! - `TransactionManager` is a front-end that signs and enqueues transactions.
-//! - `TransactionManagerWorker` is a background event loop that submits and confirms.
+//! - `TransactionWorker` is a background event loop that submits and confirms.
 //! - `TxServer` abstracts the submission/confirmation backend (one or more nodes).
 //!
 //! The worker maintains a contiguous in-order queue keyed by sequence and resolves
@@ -21,7 +21,7 @@
 //! # use std::time::Duration;
 //! # use celestia_grpc::{Result, TxConfig};
 //! # use celestia_grpc::tx_client_v2::{
-//! #     TransactionManagerWorker, TxRequest, TxServer, SignFn,
+//! #     TransactionWorker, TxRequest, TxServer, SignFn,
 //! # };
 //! # struct DummyServer;
 //! # #[async_trait::async_trait]
@@ -52,7 +52,7 @@
 //! # async fn docs() -> Result<()> {
 //! let nodes = HashMap::from([(String::from("node-1"), Arc::new(DummyServer))]);
 //! let signer = Arc::new(DummySigner);
-//! let (manager, mut worker) = TransactionManagerWorker::new(
+//! let (manager, mut worker) = TransactionWorker::new(
 //!     nodes,
 //!     Duration::from_secs(1),
 //!     16,
@@ -359,7 +359,7 @@ struct ConfirmationResult<TxId, ConfirmInfo> {
     statuses: HashMap<TxId, TxStatus<ConfirmInfo>>,
 }
 
-pub struct TransactionManagerWorker<S: TxServer> {
+pub struct TransactionWorker<S: TxServer> {
     nodes: HashMap<NodeId, Arc<S>>,
     txs: VecDeque<Transaction<S::TxId, S::ConfirmInfo>>,
     tx_index: HashMap<S::TxId, TxIndexEntry<S::TxId>>,
@@ -378,7 +378,7 @@ pub struct TransactionManagerWorker<S: TxServer> {
     max_status_batch: usize,
 }
 
-impl<S: TxServer + 'static> TransactionManagerWorker<S> {
+impl<S: TxServer + 'static> TransactionWorker<S> {
     /// Create a manager/worker pair with initial sequence and queue capacity.
     ///
     /// # Notes
@@ -407,7 +407,7 @@ impl<S: TxServer + 'static> TransactionManagerWorker<S> {
             .collect();
         (
             manager,
-            TransactionManagerWorker {
+            TransactionWorker {
                 add_tx_rx,
                 nodes,
                 txs: VecDeque::new(),
@@ -1094,12 +1094,12 @@ mod tests {
             confirm_interval: Duration,
             max_status_batch: usize,
             add_tx_capacity: usize,
-        ) -> (Self, TransactionManagerWorker<MockTxServer>) {
+        ) -> (Self, TransactionWorker<MockTxServer>) {
             let (calls_tx, calls_rx) = mpsc::channel(64);
             let server = Arc::new(MockTxServer::new(calls_tx));
             let nodes = HashMap::from([(String::from("node-1"), server)]);
             let signer = Arc::new(TestSigner::default());
-            let (manager, worker) = TransactionManagerWorker::new(
+            let (manager, worker) = TransactionWorker::new(
                 nodes,
                 confirm_interval,
                 max_status_batch,
@@ -1119,7 +1119,7 @@ mod tests {
             )
         }
 
-        fn start(&mut self, mut manager: TransactionManagerWorker<MockTxServer>) {
+        fn start(&mut self, mut manager: TransactionWorker<MockTxServer>) {
             let shutdown = self.shutdown.clone();
             self.handle = Some(tokio::spawn(async move { manager.process(shutdown).await }));
         }
@@ -1485,7 +1485,7 @@ mod tests {
         let nodes = HashMap::<NodeId, Arc<MockTxServer>>::new();
         let signer = Arc::new(TestSigner::default());
         let (manager, mut worker) =
-            TransactionManagerWorker::new(nodes, Duration::from_millis(10), 10, signer, 1, 1);
+            TransactionWorker::new(nodes, Duration::from_millis(10), 10, signer, 1, 1);
 
         let seq1 = manager
             .add_tx(TxRequest::RawPayload(vec![1]), TxConfig::default())
@@ -1542,7 +1542,7 @@ mod tests {
         let signer = Arc::new(BadSigner { seen: seen.clone() });
         let nodes = HashMap::<NodeId, Arc<MockTxServer>>::new();
         let (manager, mut worker) =
-            TransactionManagerWorker::new(nodes, Duration::from_millis(10), 10, signer, 1, 4);
+            TransactionWorker::new(nodes, Duration::from_millis(10), 10, signer, 1, 4);
 
         let err = manager
             .add_tx(TxRequest::RawPayload(vec![1]), TxConfig::default())
@@ -1570,7 +1570,7 @@ mod tests {
         let nodes = HashMap::<NodeId, Arc<MockTxServer>>::new();
         let signer = Arc::new(TestSigner::default());
         let (manager, _worker) =
-            TransactionManagerWorker::new(nodes, Duration::from_millis(10), 10, signer, 1, 4);
+            TransactionWorker::new(nodes, Duration::from_millis(10), 10, signer, 1, 4);
 
         drop(_worker);
 
@@ -1587,7 +1587,7 @@ mod tests {
         let nodes = HashMap::<NodeId, Arc<MockTxServer>>::new();
         let signer = Arc::new(TestSigner::default());
         let (manager, _worker) =
-            TransactionManagerWorker::new(nodes, Duration::from_millis(10), 10, signer, 1, 128);
+            TransactionWorker::new(nodes, Duration::from_millis(10), 10, signer, 1, 128);
 
         let mut handles = Vec::new();
         for _ in 0..20 {
