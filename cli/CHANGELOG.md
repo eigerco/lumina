@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.1](https://github.com/eigerco/lumina/compare/lumina-cli-v0.12.0...lumina-cli-v0.12.1) - 2026-01-08
+
+### Other
+
+- updated the following local packages: celestia-types, celestia-rpc, lumina-node
+
 ## [0.12.0](https://github.com/eigerco/lumina/compare/lumina-cli-v0.11.0...lumina-cli-v0.12.0) - 2026-01-05
 
 ### Added
