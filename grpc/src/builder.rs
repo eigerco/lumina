@@ -21,8 +21,89 @@ use crate::{DocSigner, GrpcClient, GrpcClientBuilderError};
 
 use imp::build_transport;
 
+/// Configuration specific to a single URL endpoint.
+///
+/// This includes HTTP/2 headers (metadata) and timeout that will be applied
+/// to all requests made to this endpoint.
+///
+/// # Example
+///
+/// ```
+/// use std::time::Duration;
+/// use celestia_grpc::{GrpcClient, EndpointConfig};
+///
+/// let client = GrpcClient::builder()
+///     .url("http://localhost:9090", EndpointConfig::new()
+///         .metadata("authorization", "Bearer token")
+///         .timeout(Duration::from_secs(30)))
+///     .build();
+/// ```
+#[derive(Debug, Default, Clone)]
+pub struct EndpointConfig {
+    ascii_metadata: Vec<(String, String)>,
+    binary_metadata: Vec<(String, Vec<u8>)>,
+    metadata_map: Option<MetadataMap>,
+    timeout: Option<Duration>,
+}
+
+impl EndpointConfig {
+    /// Create a new, empty endpoint configuration.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Appends ASCII metadata (HTTP/2 header) to requests made to this endpoint.
+    ///
+    /// Use this for auth tokens, request IDs, and other text headers.
+    pub fn metadata(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        self.ascii_metadata.push((key.into(), value.into()));
+        self
+    }
+
+    /// Appends binary metadata to requests made to this endpoint.
+    ///
+    /// Keys must have `-bin` suffix. Values are base64-encoded on the wire.
+    /// Use this for signatures, serialized protos, and other binary data.
+    pub fn metadata_bin(mut self, key: impl Into<String>, value: impl Into<Vec<u8>>) -> Self {
+        self.binary_metadata.push((key.into(), value.into()));
+        self
+    }
+
+    /// Sets a metadata map for this endpoint.
+    ///
+    /// Use this when you have a pre-built MetadataMap to attach.
+    pub fn metadata_map(mut self, metadata: MetadataMap) -> Self {
+        self.metadata_map = Some(metadata);
+        self
+    }
+
+    /// Sets the request timeout for this endpoint.
+    pub fn timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = Some(timeout);
+        self
+    }
+
+    /// Convert to Context (internal use)
+    pub(crate) fn into_context(self) -> Result<Context, GrpcClientBuilderError> {
+        let mut context = Context {
+            timeout: self.timeout,
+            ..Default::default()
+        };
+        for (key, value) in self.ascii_metadata {
+            context.append_metadata(&key, &value)?;
+        }
+        for (key, value) in self.binary_metadata {
+            context.append_metadata_bin(&key, &value)?;
+        }
+        if let Some(metadata) = self.metadata_map {
+            context.append_metadata_map(&metadata);
+        }
+        Ok(context)
+    }
+}
+
 enum TransportEntry {
-    EndpointUrl(String),
+    EndpointUrl(String, EndpointConfig),
     BoxedTransport(BoxedTransport),
 }
 
@@ -32,11 +113,7 @@ enum TransportEntry {
 #[derive(Default)]
 pub struct GrpcClientBuilder {
     transports: Vec<TransportEntry>,
-    timeout: Option<Duration>,
     signer_kind: Option<SignerKind>,
-    ascii_metadata: Vec<(String, String)>,
-    binary_metadata: Vec<(String, Vec<u8>)>,
-    metadata_map: Option<MetadataMap>,
 }
 
 enum SignerKind {
@@ -51,32 +128,68 @@ impl GrpcClientBuilder {
         GrpcClientBuilder::default()
     }
 
-    /// Add multiple URL endpoints.
+    /// Add multiple URL endpoints with their configurations.
     ///
     /// When multiple endpoints are configured, the client will automatically
     /// fall back to the next endpoint if a network-related error occurs.
-    pub fn urls(mut self, urls: impl IntoIterator<Item = impl AsRef<str>>) -> Self {
-        for url in urls {
-            self = self.url(url.as_ref());
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use std::time::Duration;
+    /// use celestia_grpc::{GrpcClient, EndpointConfig};
+    ///
+    /// let client = GrpcClient::builder()
+    ///     .urls([
+    ///         ("http://primary:9090", EndpointConfig::new()
+    ///             .metadata("auth", "token1")
+    ///             .timeout(Duration::from_secs(5))),
+    ///         ("http://fallback:9090", EndpointConfig::new()
+    ///             .metadata("auth", "token2")),
+    ///     ])
+    ///     .build();
+    /// ```
+    pub fn urls<S: AsRef<str>>(
+        mut self,
+        urls: impl IntoIterator<Item = (S, EndpointConfig)>,
+    ) -> Self {
+        for (url, config) in urls {
+            self = self.url(url.as_ref(), config);
         }
         self
     }
 
-    /// Add a URL endpoint. Multiple calls add multiple fallback endpoints.
+    /// Add a URL endpoint with specific configuration. Multiple calls add multiple fallback endpoints.
     ///
     /// When multiple endpoints are configured, the client will automatically
     /// fall back to the next endpoint if a network-related error occurs.
-    pub fn url(mut self, url: impl Into<String>) -> Self {
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use std::time::Duration;
+    /// use celestia_grpc::{GrpcClient, EndpointConfig};
+    ///
+    /// let client = GrpcClient::builder()
+    ///     .url("http://primary:9090", EndpointConfig::new()
+    ///         .metadata("authorization", "Bearer token1")
+    ///         .timeout(Duration::from_secs(5)))
+    ///     .url("http://fallback:9090", EndpointConfig::new()
+    ///         .metadata("authorization", "Bearer token2")
+    ///         .timeout(Duration::from_secs(10)))
+    ///     .build();
+    /// ```
+    pub fn url(mut self, url: impl Into<String>, config: EndpointConfig) -> Self {
         self.transports
-            .push(TransportEntry::EndpointUrl(url.into()));
+            .push(TransportEntry::EndpointUrl(url.into(), config));
         self
     }
 
-    /// Add a transport endpoint. Multiple calls add multiple fallback endpoints.
+    /// Add a transport endpoint with specific configuration. Multiple calls add multiple fallback endpoints.
     ///
     /// When multiple endpoints are configured, the client will automatically
     /// fall back to the next endpoint if a network-related error occurs.
-    pub fn transport<B, T>(mut self, transport: T) -> Self
+    pub fn transport<B, T>(mut self, transport: T, config: EndpointConfig) -> Self
     where
         B: http_body::Body<Data = Bytes> + Send + Unpin + 'static,
         <B as http_body::Body>::Error: StdError + Send + Sync,
@@ -88,9 +201,11 @@ impl GrpcClientBuilder {
         <T as Service<http::Request<TonicBody>>>::Error: StdError + Send + Sync + 'static,
         <T as Service<http::Request<TonicBody>>>::Future: CondSend + 'static,
     {
+        // Note: config will be converted to context in build()
+        // For now, store as BoxedTransport with empty metadata, context applied later
         self.transports.push(TransportEntry::BoxedTransport(boxed(
             transport,
-            TransportMetadata::new(),
+            TransportMetadata::with_context(config.into_context().unwrap_or_default()),
         )));
         self
     }
@@ -130,32 +245,6 @@ impl GrpcClientBuilder {
         self
     }
 
-    /// Appends ascii metadata to all requests made by the client.
-    pub fn metadata(mut self, key: &str, value: &str) -> GrpcClientBuilder {
-        self.ascii_metadata.push((key.into(), value.into()));
-        self
-    }
-
-    /// Appends binary metadata to all requests made by the client.
-    ///
-    /// Keys for binary metadata must have `-bin` suffix.
-    pub fn metadata_bin(mut self, key: &str, value: &[u8]) -> GrpcClientBuilder {
-        self.binary_metadata.push((key.into(), value.into()));
-        self
-    }
-
-    /// Sets the initial metadata map that will be attached to all the requests made by the client.
-    pub fn metadata_map(mut self, metadata: MetadataMap) -> GrpcClientBuilder {
-        self.metadata_map = Some(metadata);
-        self
-    }
-
-    /// Sets the request timeout, overriding default one from the transport
-    pub fn timeout(mut self, timeout: Duration) -> GrpcClientBuilder {
-        self.timeout = Some(timeout);
-        self
-    }
-
     /// Build [`GrpcClient`]
     ///
     /// Returns error if no transports were configured.
@@ -168,7 +257,10 @@ impl GrpcClientBuilder {
             .transports
             .into_iter()
             .map(|entry| match entry {
-                TransportEntry::EndpointUrl(url) => build_transport(url),
+                TransportEntry::EndpointUrl(url, config) => {
+                    let context = config.into_context()?;
+                    build_transport(url, context)
+                }
                 TransportEntry::BoxedTransport(t) => Ok(t),
             })
             .collect::<Result<Vec<_>, _>>()?;
@@ -177,21 +269,7 @@ impl GrpcClientBuilder {
 
         let signer_config = self.signer_kind.map(TryInto::try_into).transpose()?;
 
-        let mut context = Context {
-            timeout: self.timeout,
-            ..Default::default()
-        };
-        for (key, value) in self.ascii_metadata {
-            context.append_metadata(&key, &value)?;
-        }
-        for (key, value) in self.binary_metadata {
-            context.append_metadata_bin(&key, &value)?;
-        }
-        if let Some(metadata) = self.metadata_map {
-            context.append_metadata_map(&metadata);
-        }
-
-        Ok(GrpcClient::new(transports, signer_config, context))
+        Ok(GrpcClient::new(transports, signer_config))
     }
 }
 
@@ -245,7 +323,10 @@ mod imp {
 
     use tonic::transport::{ClientTlsConfig, Endpoint};
 
-    pub(super) fn build_transport(url: String) -> Result<BoxedTransport, GrpcClientBuilderError> {
+    pub(super) fn build_transport(
+        url: String,
+        context: Context,
+    ) -> Result<BoxedTransport, GrpcClientBuilderError> {
         let tls_config = ClientTlsConfig::new().with_enabled_roots();
 
         let channel = Endpoint::from_shared(url.clone())?
@@ -253,7 +334,7 @@ mod imp {
             .tls_config(tls_config)?
             .connect_lazy();
 
-        Ok(boxed(channel, TransportMetadata::with_url(url)))
+        Ok(boxed(channel, TransportMetadata::with_url_and_context(url, context)))
     }
 }
 
@@ -264,7 +345,10 @@ mod imp {
 
     use tonic::transport::Endpoint;
 
-    pub(super) fn build_transport(url: String) -> Result<BoxedTransport, GrpcClientBuilderError> {
+    pub(super) fn build_transport(
+        url: String,
+        context: Context,
+    ) -> Result<BoxedTransport, GrpcClientBuilderError> {
         if url
             .split_once(':')
             .is_some_and(|(scheme, _)| scheme == "https")
@@ -276,16 +360,19 @@ mod imp {
             .user_agent("celestia-grpc")?
             .connect_lazy();
 
-        Ok(boxed(channel, TransportMetadata::with_url(url)))
+        Ok(boxed(channel, TransportMetadata::with_url_and_context(url, context)))
     }
 }
 
 #[cfg(target_arch = "wasm32")]
 mod imp {
     use super::*;
-    pub(super) fn build_transport(url: String) -> Result<BoxedTransport, GrpcClientBuilderError> {
+    pub(super) fn build_transport(
+        url: String,
+        context: Context,
+    ) -> Result<BoxedTransport, GrpcClientBuilderError> {
         let client = tonic_web_wasm_client::Client::new(url.clone());
-        Ok(boxed(client, TransportMetadata::with_url(url)))
+        Ok(boxed(client, TransportMetadata::with_url_and_context(url, context)))
     }
 }
 
@@ -307,7 +394,7 @@ mod tests {
     #[async_test]
     async fn single_url_builds_successfully() {
         let result = GrpcClientBuilder::new()
-            .url("http://localhost:9090")
+            .url("http://localhost:9090", EndpointConfig::default())
             .build();
 
         assert!(result.is_ok());
@@ -316,9 +403,35 @@ mod tests {
     #[async_test]
     async fn multiple_urls_build_successfully() {
         let result = GrpcClientBuilder::new()
-            .url("http://localhost:9090")
-            .url("http://localhost:9091")
-            .url("http://localhost:9092")
+            .url("http://localhost:9090", EndpointConfig::default())
+            .url("http://localhost:9091", EndpointConfig::default())
+            .url("http://localhost:9092", EndpointConfig::default())
+            .build();
+
+        assert!(result.is_ok());
+    }
+
+    #[async_test]
+    async fn url_with_metadata_builds_successfully() {
+        let result = GrpcClientBuilder::new()
+            .url(
+                "http://localhost:9090",
+                EndpointConfig::new()
+                    .metadata("authorization", "Bearer token")
+                    .timeout(Duration::from_secs(30)),
+            )
+            .build();
+
+        assert!(result.is_ok());
+    }
+
+    #[async_test]
+    async fn urls_helper_builds_successfully() {
+        let result = GrpcClientBuilder::new()
+            .urls([
+                ("http://localhost:9090", EndpointConfig::default()),
+                ("http://localhost:9091", EndpointConfig::default()),
+            ])
             .build();
 
         assert!(result.is_ok());

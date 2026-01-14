@@ -92,7 +92,6 @@ struct GrpcClientInner {
     transports: Arc<ArcSwap<Vec<BoxedTransport>>>,
     account: Option<AccountState>,
     chain_state: OnceCell<ChainState>,
-    context: Context,
 }
 
 impl GrpcClient {
@@ -100,14 +99,12 @@ impl GrpcClient {
     pub(crate) fn new(
         transports: Arc<ArcSwap<Vec<BoxedTransport>>>,
         account: Option<AccountState>,
-        context: Context,
     ) -> Self {
         Self {
             inner: Arc::new(GrpcClientInner {
                 transports,
                 account,
                 chain_state: OnceCell::new(),
-                context,
             }),
         }
     }
@@ -154,7 +151,6 @@ impl GrpcClient {
             this.get_verified_balance_impl(&address, &header, &context)
                 .await
         })
-        .context(&self.inner.context)
     }
 
     /// Retrieves the Celestia coin balance for the given address.
@@ -287,7 +283,7 @@ impl GrpcClient {
     /// # Example
     /// ```no_run
     /// # async fn docs() {
-    /// use celestia_grpc::{GrpcClient, TxConfig};
+    /// use celestia_grpc::{EndpointConfig, GrpcClient, TxConfig};
     /// use celestia_proto::cosmos::bank::v1beta1::MsgSend;
     /// use celestia_types::state::{Address, Coin};
     /// use tendermint::crypto::default::ecdsa_secp256k1::SigningKey;
@@ -297,7 +293,7 @@ impl GrpcClient {
     /// let grpc_url = "public-celestia-mocha4-consensus.numia.xyz:9090";
     ///
     /// let tx_client = GrpcClient::builder()
-    ///     .url(grpc_url)
+    ///     .urls([(grpc_url, EndpointConfig::default())])
     ///     .signer_keypair(signing_key)
     ///     .build()
     ///     .unwrap();
@@ -326,7 +322,6 @@ impl GrpcClient {
                 .await?;
             this.confirm_tx(tx, cfg, &context).await
         })
-        .context(&self.inner.context)
     }
 
     /// Submit given message to celestia network, and return without confirming.
@@ -334,7 +329,7 @@ impl GrpcClient {
     /// # Example
     /// ```no_run
     /// # async fn docs() {
-    /// use celestia_grpc::{GrpcClient, TxConfig};
+    /// use celestia_grpc::{EndpointConfig, GrpcClient, TxConfig};
     /// use celestia_proto::cosmos::bank::v1beta1::MsgSend;
     /// use celestia_types::state::{Address, Coin};
     /// use tendermint::crypto::default::ecdsa_secp256k1::SigningKey;
@@ -344,7 +339,7 @@ impl GrpcClient {
     /// let grpc_url = "public-celestia-mocha4-consensus.numia.xyz:9090";
     ///
     /// let tx_client = GrpcClient::builder()
-    ///     .url(grpc_url)
+    ///     .urls([(grpc_url, EndpointConfig::default())])
     ///     .signer_keypair(signing_key)
     ///     .build()
     ///     .unwrap();
@@ -380,7 +375,6 @@ impl GrpcClient {
                 .context(&context),
             ))
         })
-        .context(&self.inner.context)
     }
 
     /// Submit given blobs to celestia network.
@@ -388,7 +382,7 @@ impl GrpcClient {
     /// # Example
     /// ```no_run
     /// # async fn docs() {
-    /// use celestia_grpc::{GrpcClient, TxConfig};
+    /// use celestia_grpc::{EndpointConfig, GrpcClient, TxConfig};
     /// use celestia_types::state::{Address, Coin};
     /// use celestia_types::{AppVersion, Blob};
     /// use celestia_types::nmt::Namespace;
@@ -399,7 +393,7 @@ impl GrpcClient {
     /// let grpc_url = "public-celestia-mocha4-consensus.numia.xyz:9090";
     ///
     /// let tx_client = GrpcClient::builder()
-    ///     .url(grpc_url)
+    ///     .urls([(grpc_url, EndpointConfig::default())])
     ///     .signer_keypair(signing_key)
     ///     .build()
     ///     .unwrap();
@@ -423,7 +417,6 @@ impl GrpcClient {
                 .await?;
             this.confirm_tx(tx, cfg, &context).await
         })
-        .context(&self.inner.context)
     }
 
     /// Submit given blobs to celestia network, and return without confirming.
@@ -431,7 +424,7 @@ impl GrpcClient {
     /// # Example
     /// ```no_run
     /// # async fn docs() {
-    /// use celestia_grpc::{GrpcClient, TxConfig};
+    /// use celestia_grpc::{EndpointConfig, GrpcClient, TxConfig};
     /// use celestia_types::state::{Address, Coin};
     /// use celestia_types::{AppVersion, Blob};
     /// use celestia_types::nmt::Namespace;
@@ -442,7 +435,7 @@ impl GrpcClient {
     /// let grpc_url = "public-celestia-mocha4-consensus.numia.xyz:9090";
     ///
     /// let tx_client = GrpcClient::builder()
-    ///     .url(grpc_url)
+    ///     .urls([(grpc_url, EndpointConfig::default())])
     ///     .signer_keypair(signing_key)
     ///     .build()
     ///     .unwrap();
@@ -474,7 +467,6 @@ impl GrpcClient {
                 .context(&context),
             ))
         })
-        .context(&self.inner.context)
     }
 
     /// Get client's app version
@@ -485,7 +477,6 @@ impl GrpcClient {
             let ChainState { app_version, .. } = this.load_chain_state(&context).await?;
             Ok(*app_version)
         })
-        .context(&self.inner.context)
     }
 
     /// Get client's chain id
@@ -496,7 +487,6 @@ impl GrpcClient {
             let ChainState { chain_id, .. } = this.load_chain_state(&context).await?;
             Ok(chain_id.clone())
         })
-        .context(&self.inner.context)
     }
 
     /// Manually confirm transaction broadcasted with [`GrpcClient::broadcast_blobs`] or [`GrpcClient::broadcast_message`].
@@ -518,7 +508,6 @@ impl GrpcClient {
         let this = self.clone();
 
         AsyncGrpcCall::new(move |context| async move { this.confirm_tx(tx, cfg, &context).await })
-            .context(&self.inner.context)
     }
 
     /// Get client's account public key if the signer is set
@@ -1051,16 +1040,23 @@ mod tests {
     use crate::{Error, TxConfig};
 
     #[async_test]
-    async fn extending_client_context() {
+    async fn per_call_context_works() {
+        use crate::EndpointConfig;
+
         let client = GrpcClient::builder()
-            .url("http://foo")
-            .metadata("x-token", "secret-token")
+            .url(
+                "http://foo",
+                EndpointConfig::new().metadata("x-token", "secret-token"),
+            )
             .build()
             .unwrap();
-        let call = client.app_version().block_height(1234);
 
-        assert!(call.context.metadata.contains_key("x-token"));
+        // Per-call metadata (.block_height) should be in call.context
+        let call = client.app_version().block_height(1234);
         assert!(call.context.metadata.contains_key("x-cosmos-block-height"));
+
+        // Note: endpoint metadata is now in transport, not in call.context
+        // It will be merged at request time by the macro
     }
 
     #[async_test]
@@ -1306,7 +1302,7 @@ mod tests {
 
         let account = load_account();
         let client = GrpcClient::builder()
-            .url(EVICTION_TESTING_VAL_URL)
+            .urls([(EVICTION_TESTING_VAL_URL, crate::EndpointConfig::default())])
             .signer_keypair(account.signing_key)
             .build()
             .unwrap();
@@ -1552,10 +1548,12 @@ mod tests {
         };
         assert!(timeout.code() == Code::DeadlineExceeded || timeout.code() == Code::Cancelled);
 
-        // too short timeout set in builder
+        // too short timeout set in endpoint config
         let client = GrpcClient::builder()
-            .url(CELESTIA_GRPC_URL)
-            .timeout(Duration::from_nanos(1))
+            .url(
+                CELESTIA_GRPC_URL,
+                crate::EndpointConfig::new().timeout(Duration::from_nanos(1)),
+            )
             .build()
             .unwrap();
 
@@ -1615,10 +1613,14 @@ mod tests {
     #[tokio::test]
     async fn failover_to_second_endpoint() {
         use crate::test_utils::CELESTIA_GRPC_URL;
+        use crate::EndpointConfig;
 
         // First endpoint is invalid, should failover to second valid one
         let client = GrpcClient::builder()
-            .urls(["http://localhost:19999", CELESTIA_GRPC_URL])
+            .urls([
+                ("http://localhost:19999", EndpointConfig::default()),
+                (CELESTIA_GRPC_URL, EndpointConfig::default()),
+            ])
             .build()
             .unwrap();
 
@@ -1630,9 +1632,13 @@ mod tests {
     #[tokio::test]
     async fn endpoint_multiple_requests() {
         use crate::test_utils::CELESTIA_GRPC_URL;
+        use crate::EndpointConfig;
 
         let client = GrpcClient::builder()
-            .urls(["http://localhost:19999", CELESTIA_GRPC_URL])
+            .urls([
+                ("http://localhost:19999", EndpointConfig::default()),
+                (CELESTIA_GRPC_URL, EndpointConfig::default()),
+            ])
             .build()
             .unwrap();
 
@@ -1649,8 +1655,13 @@ mod tests {
     #[cfg(not(target_arch = "wasm32"))]
     #[tokio::test]
     async fn all_endpoints_fail_returns_error() {
+        use crate::EndpointConfig;
+
         let client = GrpcClient::builder()
-            .urls(["http://localhost:19999", "http://localhost:19998"])
+            .urls([
+                ("http://localhost:19999", EndpointConfig::default()),
+                ("http://localhost:19998", EndpointConfig::default()),
+            ])
             .build()
             .unwrap();
 

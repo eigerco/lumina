@@ -62,7 +62,7 @@ mod imp {
 
     pub fn new_grpc_client() -> GrpcClient {
         GrpcClient::builder()
-            .url(CELESTIA_GRPC_URL)
+            .urls([(CELESTIA_GRPC_URL, crate::EndpointConfig::default())])
             .build()
             .unwrap()
     }
@@ -82,7 +82,7 @@ mod imp {
 
         let creds = load_account();
         let client = GrpcClient::builder()
-            .url(CELESTIA_GRPC_URL)
+            .urls([(CELESTIA_GRPC_URL, crate::EndpointConfig::default())])
             .signer_keypair(creds.signing_key)
             .build()
             .unwrap();
@@ -115,7 +115,7 @@ mod imp {
 
     pub fn new_grpc_client() -> GrpcClient {
         GrpcClient::builder()
-            .url(CELESTIA_GRPCWEB_PROXY_URL)
+            .urls([(CELESTIA_GRPCWEB_PROXY_URL, crate::EndpointConfig::default())])
             .build()
             .unwrap()
     }
@@ -129,7 +129,7 @@ mod imp {
     pub async fn new_tx_client() -> ((), GrpcClient) {
         let creds = load_account();
         let client = GrpcClient::builder()
-            .url(CELESTIA_GRPCWEB_PROXY_URL)
+            .urls([(CELESTIA_GRPCWEB_PROXY_URL, crate::EndpointConfig::default())])
             .signer_keypair(creds.signing_key)
             .build();
 

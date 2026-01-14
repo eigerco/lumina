@@ -8,6 +8,7 @@ use uniffi::Object;
 
 mod grpc_client;
 
+use crate::EndpointConfig as RustEndpointConfig;
 use crate::GrpcClientBuilder as RustBuilder;
 use crate::signer::{UniffiSigner, UniffiSignerBox};
 
@@ -42,6 +43,61 @@ pub enum GrpcClientBuilderError {
     TlsNotSupported,
 }
 
+/// Configuration specific to a single URL endpoint.
+///
+/// This includes HTTP/2 headers (metadata) and timeout that will be applied
+/// to all requests made to this endpoint.
+#[derive(Object)]
+pub struct EndpointConfig(Mutex<Option<RustEndpointConfig>>);
+
+#[uniffi::export]
+impl EndpointConfig {
+    /// Create a new, empty endpoint configuration.
+    #[uniffi::constructor]
+    pub fn new() -> Self {
+        EndpointConfig(Mutex::new(Some(RustEndpointConfig::new())))
+    }
+
+    /// Appends ASCII metadata (HTTP/2 header) to requests made to this endpoint.
+    #[uniffi::method(name = "withMetadata")]
+    pub fn metadata(self: Arc<Self>, key: &str, value: &str) -> Arc<Self> {
+        let mut lock = self.0.lock().expect("lock poisoned");
+        let config = lock.take().expect("config must be set");
+        *lock = Some(config.metadata(key, value));
+        self
+    }
+
+    /// Appends binary metadata to requests made to this endpoint.
+    ///
+    /// Keys must have `-bin` suffix.
+    #[uniffi::method(name = "withMetadataBin")]
+    pub fn metadata_bin(self: Arc<Self>, key: &str, value: &[u8]) -> Arc<Self> {
+        let mut lock = self.0.lock().expect("lock poisoned");
+        let config = lock.take().expect("config must be set");
+        *lock = Some(config.metadata_bin(key, value.to_vec()));
+        self
+    }
+
+    /// Sets the request timeout in milliseconds for this endpoint.
+    #[uniffi::method(name = "withTimeout")]
+    pub fn timeout(self: Arc<Self>, timeout_ms: u64) -> Arc<Self> {
+        let mut lock = self.0.lock().expect("lock poisoned");
+        let config = lock.take().expect("config must be set");
+        *lock = Some(config.timeout(Duration::from_millis(timeout_ms)));
+        self
+    }
+}
+
+impl EndpointConfig {
+    fn take(&self) -> RustEndpointConfig {
+        self.0
+            .lock()
+            .expect("lock poisoned")
+            .take()
+            .expect("config must be set")
+    }
+}
+
 /// Builder for [`GrpcClient`]
 #[derive(Object)]
 pub struct GrpcClientBuilder(Mutex<Option<RustBuilder>>);
@@ -63,14 +119,15 @@ impl GrpcClientBuilder {
 // except for constructors: https://github.com/mozilla/uniffi-rs/issues/1074
 #[uniffi::export(async_runtime = "tokio")]
 impl GrpcClientBuilder {
-    /// Create a new builder for the provided url
+    /// Create a new builder for the provided url with optional configuration.
     #[uniffi::constructor(name = "withUrl")]
-    pub fn with_url(url: String) -> Self {
-        let builder = RustBuilder::new().url(url);
+    pub fn with_url(url: String, config: Option<Arc<EndpointConfig>>) -> Self {
+        let config = config.map(|c| c.take()).unwrap_or_default();
+        let builder = RustBuilder::new().url(url, config);
         GrpcClientBuilder(Mutex::new(Some(builder)))
     }
 
-    /// Create a new builder with multiple fallback URLs.
+    /// Create a new builder with multiple fallback URLs using default configuration.
     ///
     /// When multiple endpoints are configured, the client will automatically
     /// fall back to the next endpoint if a network-related error occurs.
@@ -78,6 +135,14 @@ impl GrpcClientBuilder {
     pub fn with_urls(urls: Vec<String>) -> Self {
         let builder = RustBuilder::new().urls(urls);
         GrpcClientBuilder(Mutex::new(Some(builder)))
+    }
+
+    /// Add another URL endpoint with optional configuration.
+    #[uniffi::method(name = "addUrl")]
+    pub fn add_url(self: Arc<Self>, url: String, config: Option<Arc<EndpointConfig>>) -> Arc<Self> {
+        let config = config.map(|c| c.take()).unwrap_or_default();
+        self.map_builder(move |builder| builder.url(url, config));
+        self
     }
 
     /// Add public key and signer to the client being built
@@ -94,29 +159,6 @@ impl GrpcClientBuilder {
         self.map_builder(move |builder| builder.pubkey_and_signer(vk, signer));
 
         Ok(self)
-    }
-
-    /// Appends ascii metadata to all requests made by the client.
-    #[uniffi::method(name = "withMetadata")]
-    pub fn metadata(self: Arc<Self>, key: &str, value: &str) -> Arc<Self> {
-        self.map_builder(move |builder| builder.metadata(key, value));
-        self
-    }
-
-    /// Appends binary metadata to all requests made by the client.
-    ///
-    /// Keys for binary metadata must have `-bin` suffix.
-    #[uniffi::method(name = "withMetadataBin")]
-    pub fn metadata_bin(self: Arc<Self>, key: &str, value: &[u8]) -> Arc<Self> {
-        self.map_builder(move |builder| builder.metadata_bin(key, value));
-        self
-    }
-
-    /// Sets the request timeout in milliseconds, overriding default one from the transport.
-    #[uniffi::method(name = "withTimeout")]
-    pub fn timeout(self: Arc<Self>, timeout_ms: u64) -> Arc<Self> {
-        self.map_builder(move |builder| builder.timeout(Duration::from_millis(timeout_ms)));
-        self
     }
 
     // this function _must_ be async despite not awaiting, so that it executes in tokio runtime
