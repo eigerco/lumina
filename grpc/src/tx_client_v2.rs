@@ -1,3 +1,69 @@
+//! Transaction manager v2: queueing, submission, confirmation, and recovery logic.
+//!
+//! # Overview
+//! - `TransactionManager` is a front-end that signs and enqueues transactions.
+//! - `TransactionManagerWorker` is a background event loop that submits and confirms.
+//! - `TxServer` abstracts the submission/confirmation backend (one or more nodes).
+//!
+//! The worker maintains a contiguous in-order queue keyed by sequence and resolves
+//! submit/confirm callbacks as transitions are observed.
+//!
+//! # Notes
+//! - Sequence continuity is enforced at enqueue time; any gap is treated as fatal.
+//! - Confirmations are batched per node and reduced to a small set of events.
+//! - Recovery runs a narrow confirmation loop for a single node when sequence
+//!   mismatch is detected.
+//!
+//! # Example
+//! ```no_run
+//! # use std::collections::HashMap;
+//! # use std::sync::Arc;
+//! # use std::time::Duration;
+//! # use celestia_grpc::{Result, TxConfig};
+//! # use celestia_grpc::tx_client_v2::{
+//! #     TransactionManagerWorker, TxRequest, TxServer, SignFn,
+//! # };
+//! # struct DummyServer;
+//! # #[async_trait::async_trait]
+//! # impl TxServer for DummyServer {
+//! #     type TxId = u64;
+//! #     async fn submit(&self, _b: Vec<u8>, _s: u64) -> Result<u64, _> { unimplemented!() }
+//! #     async fn status_batch(
+//! #         &self,
+//! #         _ids: Vec<u64>,
+//! #     ) -> Result<std::collections::HashMap<u64, celestia_grpc::tx_client_v2::TxStatus>> {
+//! #         unimplemented!()
+//! #     }
+//! #     async fn current_sequence(&self) -> Result<u64> { unimplemented!() }
+//! # }
+//! # struct DummySigner;
+//! # #[async_trait::async_trait]
+//! # impl SignFn for DummySigner {
+//! #     async fn sign(
+//! #         &self,
+//! #         _sequence: u64,
+//! #         _request: &TxRequest,
+//! #         _cfg: &TxConfig,
+//! #     ) -> Result<celestia_grpc::tx_client_v2::Transaction> {
+//! #         unimplemented!()
+//! #     }
+//! # }
+//! # async fn docs() -> Result<()> {
+//! let nodes = HashMap::from([(String::from("node-1"), Arc::new(DummyServer))]);
+//! let signer = Arc::new(DummySigner);
+//! let (manager, mut worker) = TransactionManagerWorker::new(
+//!     nodes,
+//!     Duration::from_secs(1),
+//!     16,
+//!     signer,
+//!     1,
+//!     128,
+//! );
+//! # let _ = manager;
+//! # let _ = worker;
+//! # Ok(())
+//! # }
+//! ```
 use std::collections::{HashMap, VecDeque};
 use std::hash::Hash as StdHash;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -6,37 +72,66 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use celestia_types::state::ErrorCode;
+use tendermint_proto::google::protobuf::Any;
 use tokio::sync::{mpsc, Mutex, Notify, oneshot};
 use tokio::task::JoinSet;
 use tokio::time;
 
-use crate::{Error, Result};
+use crate::{Error, Result, TxConfig};
+/// Identifier for a submission/confirmation node.
 pub type NodeId = String;
+/// Result for submission calls: either a server TxId or a submission failure.
 pub type TxSubmitResult<T> = Result<T, SubmitFailure>;
+/// Result for confirmation calls.
 pub type TxConfirmResult<T> = Result<T>;
+
+#[derive(Debug, Clone)]
+pub enum TxRequest {
+    /// Pay-for-blobs transaction.
+    Blobs(Vec<celestia_types::Blob>),
+    /// Arbitrary protobuf message (already encoded as `Any`).
+    Message(Any),
+    /// Raw bytes payload (used by tests or external signers).
+    RawPayload(Vec<u8>),
+}
 
 #[derive(Debug)]
 pub struct Transaction {
+    /// Transaction sequence for the signer.
     pub sequence: u64,
+    /// Signed transaction bytes ready for broadcast.
     pub bytes: Vec<u8>,
+    /// One-shot callbacks for submit/confirm acknowledgements.
     pub callbacks: TxCallbacks,
 }
 
 #[derive(Debug, Default)]
 pub struct TxCallbacks {
+    /// Resolves when submission succeeds or fails.
     pub on_submit: Option<oneshot::Sender<Result<()>>>,
+    /// Resolves when the transaction is confirmed or rejected.
     pub on_confirm: Option<oneshot::Sender<Result<()>>>,
 }
 
 #[derive(Debug)]
 pub struct TxHandle {
+    /// Sequence reserved for this transaction.
     pub sequence: u64,
+    /// Receives submit result.
     pub on_submit: oneshot::Receiver<Result<()>>,
+    /// Receives confirm result.
     pub on_confirm: oneshot::Receiver<Result<()>>,
 }
 
+#[async_trait]
 pub trait SignFn: Send + Sync {
-    fn sign(&self, sequence: u64, bytes: &[u8]) -> Result<Transaction>;
+    /// Produce a signed `Transaction` for the provided request and sequence.
+    ///
+    /// # Notes
+    /// - The returned `Transaction.sequence` must match the input `sequence`.
+    /// - Returning a mismatched sequence causes the caller to fail the enqueue.
+    async fn sign(&self, sequence: u64, request: &TxRequest, cfg: &TxConfig)
+        -> Result<Transaction>;
 }
 
 #[derive(Clone)]
@@ -48,10 +143,29 @@ pub struct TransactionManager {
 }
 
 impl TransactionManager {
-    pub async fn add_tx(&self, bytes: Vec<u8>) -> Result<TxHandle> {
+    /// Sign and enqueue a transaction, returning a handle for submit/confirm.
+    ///
+    /// # Notes
+    /// - Sequence reservation is serialized with a mutex.
+    /// - If the queue is full or closed, the sequence is not incremented.
+    ///
+    /// # Example
+    /// ```no_run
+    /// # use celestia_grpc::{TxConfig, Result};
+    /// # use celestia_grpc::tx_client_v2::{TransactionManager, TxRequest};
+    /// # async fn docs(manager: TransactionManager) -> Result<()> {
+    /// let handle = manager
+    ///     .add_tx(TxRequest::RawPayload(vec![1, 2, 3]), TxConfig::default())
+    ///     .await?;
+    /// handle.on_submit.await?;
+    /// handle.on_confirm.await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn add_tx(&self, request: TxRequest, cfg: TxConfig) -> Result<TxHandle> {
         let mut sequence = self.next_sequence.lock().await;
         let current = *sequence;
-        let mut tx = self.signer.sign(current, &bytes)?;
+        let mut tx = self.signer.sign(current, &request, &cfg).await?;
         if tx.sequence != current {
             return Err(Error::UnexpectedResponseType(format!(
                 "tx sequence mismatch: expected {}, got {}",
@@ -81,6 +195,7 @@ impl TransactionManager {
         }
     }
 
+    /// Return the maximum sequence successfully enqueued so far.
     pub fn max_sent(&self) -> u64 {
         self.max_sent.load(Ordering::Relaxed)
     }
@@ -103,26 +218,39 @@ struct NodeSubmissionState {
 
 #[derive(Debug, Clone, Copy)]
 pub enum TxStatus {
+    /// Submitted, but not yet committed.
     Pending,
+    /// Included in a block successfully.
     Confirmed,
+    /// Rejected by the node (with an expected sequence hint).
     Rejected { expected: u64 },
+    /// Removed from mempool; may need resubmission.
     Evicted,
+    /// Status could not be determined.
     Unknown,
 }
 
 #[derive(Debug)]
 pub enum SubmitFailure {
+    /// Server expects a different sequence.
     SequenceMismatch { expected: u64 },
+    /// Transaction failed validation.
     InvalidTx { error_code: ErrorCode },
+    /// Account has insufficient funds.
     InsufficientFunds,
+    /// Fee too low for the computed gas price.
     InsufficientFee { expected_fee: u64 },
+    /// Transport or RPC error while submitting.
     NetworkError { err: Error },
+    /// Node mempool is full.
     MempoolIsFull,
 }
 
 #[derive(Debug)]
 pub enum ConfirmFailure {
+    /// Server expects a different sequence.
     SequenceMismatch { expected: u64 },
+    /// Rejected during recovery with a specific expected sequence.
     Rejected { sequence: u64, expected: u64 },
 }
 
@@ -130,11 +258,14 @@ pub enum ConfirmFailure {
 pub trait TxServer: Send + Sync {
     type TxId: Clone + Eq + StdHash + Send + Sync + 'static;
 
+    /// Submit signed bytes with the given sequence, returning a server TxId.
     async fn submit(&self, tx_bytes: Vec<u8>, sequence: u64) -> TxSubmitResult<Self::TxId>;
+    /// Batch status lookup for submitted TxIds.
     async fn status_batch(
         &self,
         ids: Vec<Self::TxId>,
     ) -> TxConfirmResult<HashMap<Self::TxId, TxStatus>>;
+    /// Fetch current sequence for the account (used by some implementations).
     async fn current_sequence(&self) -> Result<u64>;
 }
 
@@ -226,6 +357,11 @@ pub struct TransactionManagerWorker<S: TxServer> {
 }
 
 impl<S: TxServer + 'static> TransactionManagerWorker<S> {
+    /// Create a manager/worker pair with initial sequence and queue capacity.
+    ///
+    /// # Notes
+    /// - `start_sequence` should be the next sequence to submit for the signer.
+    /// - `confirm_interval` drives periodic confirmation polling.
     pub fn new(
         nodes: HashMap<NodeId, Arc<S>>,
         confirm_interval: Duration,
@@ -285,6 +421,11 @@ impl<S: TxServer + 'static> TransactionManagerWorker<S> {
         Ok(())
     }
 
+    /// Run the worker loop until shutdown or a terminal error.
+    ///
+    /// # Notes
+    /// - The worker is single-owner; it should be run in a dedicated task.
+    /// - On terminal failures it returns `Ok(())` after notifying callbacks.
     pub async fn process(&mut self, shutdown: Arc<Notify>) -> Result<()> {
         let mut state = ProcessorState::Submitting;
         loop {
@@ -838,11 +979,21 @@ mod tests {
     #[derive(Default)]
     struct TestSigner;
 
+    #[async_trait]
     impl SignFn for TestSigner {
-        fn sign(&self, sequence: u64, bytes: &[u8]) -> Result<Transaction> {
+        async fn sign(
+            &self,
+            sequence: u64,
+            request: &TxRequest,
+            _cfg: &TxConfig,
+        ) -> Result<Transaction> {
+            let bytes = match request {
+                TxRequest::RawPayload(bytes) => bytes.clone(),
+                TxRequest::Message(_) | TxRequest::Blobs(_) => Vec::new(),
+            };
             Ok(Transaction {
                 sequence,
-                bytes: bytes.to_vec(),
+                bytes,
                 callbacks: TxCallbacks::default(),
             })
         }
@@ -1010,7 +1161,10 @@ mod tests {
         manager: &TransactionManager,
         bytes: Vec<u8>,
     ) -> (u64, oneshot::Receiver<Result<()>>, oneshot::Receiver<Result<()>>) {
-        let handle = manager.add_tx(bytes).await.expect("add tx");
+        let handle = manager
+            .add_tx(TxRequest::RawPayload(bytes), TxConfig::default())
+            .await
+            .expect("add tx");
         (handle.sequence, handle.on_submit, handle.on_confirm)
     }
 
@@ -1248,7 +1402,10 @@ mod tests {
         harness.start(manager_worker);
 
         let handle = tokio::spawn(async move {
-            let tx_handle = manager.add_tx(vec![7, 8, 9]).await.expect("enqueue tx");
+            let tx_handle = manager
+                .add_tx(TxRequest::RawPayload(vec![7, 8, 9]), TxConfig::default())
+                .await
+                .expect("enqueue tx");
             let _ = tx_handle.on_submit.await;
             tx_handle.sequence
         });
@@ -1270,18 +1427,26 @@ mod tests {
         let (manager, mut worker) =
             TransactionManagerWorker::new(nodes, Duration::from_millis(10), 10, signer, 1, 1);
 
-        let seq1 = manager.add_tx(vec![1]).await.expect("first add").sequence;
+        let seq1 = manager
+            .add_tx(TxRequest::RawPayload(vec![1]), TxConfig::default())
+            .await
+            .expect("first add")
+            .sequence;
         assert_eq!(seq1, 1);
 
         let err = manager
-            .add_tx(vec![2])
+            .add_tx(TxRequest::RawPayload(vec![2]), TxConfig::default())
             .await
             .expect_err("second add should fail");
         assert!(matches!(err, Error::UnexpectedResponseType(_)));
         assert_eq!(manager.max_sent(), 1);
 
         let _drained = worker.add_tx_rx.try_recv().expect("drain queued tx");
-        let seq2 = manager.add_tx(vec![3]).await.expect("third add").sequence;
+        let seq2 = manager
+            .add_tx(TxRequest::RawPayload(vec![3]), TxConfig::default())
+            .await
+            .expect("third add")
+            .sequence;
         assert_eq!(seq2, 2);
         assert_eq!(manager.max_sent(), 2);
     }
@@ -1292,12 +1457,22 @@ mod tests {
             seen: Arc<AtomicU64>,
         }
 
+        #[async_trait]
         impl SignFn for BadSigner {
-            fn sign(&self, sequence: u64, bytes: &[u8]) -> Result<Transaction> {
+            async fn sign(
+                &self,
+                sequence: u64,
+                request: &TxRequest,
+                _cfg: &TxConfig,
+            ) -> Result<Transaction> {
                 self.seen.store(sequence, Ordering::SeqCst);
+                let bytes = match request {
+                    TxRequest::RawPayload(bytes) => bytes.clone(),
+                    TxRequest::Message(_) | TxRequest::Blobs(_) => Vec::new(),
+                };
                 Ok(Transaction {
                     sequence: sequence.saturating_add(1),
-                    bytes: bytes.to_vec(),
+                    bytes,
                     callbacks: TxCallbacks::default(),
                 })
             }
@@ -1310,7 +1485,7 @@ mod tests {
             TransactionManagerWorker::new(nodes, Duration::from_millis(10), 10, signer, 1, 4);
 
         let err = manager
-            .add_tx(vec![1])
+            .add_tx(TxRequest::RawPayload(vec![1]), TxConfig::default())
             .await
             .expect_err("bad signer");
         assert!(matches!(err, Error::UnexpectedResponseType(_)));
@@ -1322,7 +1497,7 @@ mod tests {
         ));
 
         let err = manager
-            .add_tx(vec![2])
+            .add_tx(TxRequest::RawPayload(vec![2]), TxConfig::default())
             .await
             .expect_err("bad signer again");
         assert!(matches!(err, Error::UnexpectedResponseType(_)));
@@ -1340,7 +1515,7 @@ mod tests {
         drop(_worker);
 
         let err = manager
-            .add_tx(vec![1])
+            .add_tx(TxRequest::RawPayload(vec![1]), TxConfig::default())
             .await
             .expect_err("closed manager");
         assert!(matches!(err, Error::UnexpectedResponseType(_)));
@@ -1358,7 +1533,10 @@ mod tests {
         for _ in 0..20 {
             let manager = manager.clone();
             handles.push(tokio::spawn(async move {
-                manager.add_tx(vec![1, 2, 3]).await.map(|handle| handle.sequence)
+                manager
+                    .add_tx(TxRequest::RawPayload(vec![1, 2, 3]), TxConfig::default())
+                    .await
+                    .map(|handle| handle.sequence)
             }));
         }
 

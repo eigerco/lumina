@@ -12,6 +12,7 @@ pub mod signer;
 #[cfg(test)]
 mod test_utils;
 mod tx;
+mod tx_client_impl;
 mod tx_client_v2;
 #[cfg(all(not(target_arch = "wasm32"), feature = "uniffi"))]
 pub mod uniffi_client;
