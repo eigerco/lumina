@@ -6,7 +6,7 @@ use async_trait::async_trait;
 use k256::ecdsa::VerifyingKey;
 use prost::Message;
 use tendermint::chain::Id;
-use tokio::sync::{Notify, OnceCell};
+use tokio::sync::{Mutex, Notify, OnceCell, RwLock};
 use tokio::task::JoinHandle;
 
 use celestia_types::any::IntoProtobufAny;
@@ -115,9 +115,22 @@ impl SignFnBuilder {
 }
 
 pub struct TransactionService {
-    manager: TransactionManager<Hash, TxInfo>,
+    inner: Arc<TransactionServiceInner>,
+}
+
+struct TransactionServiceInner {
+    manager: RwLock<TransactionManager<Hash, TxInfo>>,
+    worker: Mutex<Option<WorkerHandle>>,
+    client: GrpcClient,
+    sign_fn: Arc<dyn SignFn<Hash, TxInfo>>,
+    confirm_interval: Duration,
+    max_status_batch: usize,
+    queue_capacity: usize,
+}
+
+struct WorkerHandle {
     shutdown: Arc<Notify>,
-    worker_handle: JoinHandle<Result<()>>,
+    handle: JoinHandle<Result<()>>,
 }
 
 impl TransactionService {
@@ -126,30 +139,28 @@ impl TransactionService {
         let signer = Arc::new(signer);
         let context = Arc::new(GrpcSignContext::new(client.clone()));
         let sign_fn = SignFnBuilder::new(context, pubkey, signer).build();
-
-        let address = client.get_account_address().ok_or(Error::MissingSigner)?;
-        let account = client.get_account(&address).await?;
-        let start_sequence = account.sequence;
-
-        let nodes = HashMap::from([(String::from("default"), Arc::new(client))]);
         let confirm_interval = Duration::from_millis(TxConfig::default().confirmation_interval_ms);
-        let (manager, mut worker) = TransactionWorker::new(
-            nodes,
+        let max_status_batch = DEFAULT_MAX_STATUS_BATCH;
+        let queue_capacity = DEFAULT_QUEUE_CAPACITY;
+        let (manager, worker_handle) = Self::spawn_worker(
+            &client,
+            sign_fn.clone(),
             confirm_interval,
-            DEFAULT_MAX_STATUS_BATCH,
-            sign_fn,
-            start_sequence,
-            DEFAULT_QUEUE_CAPACITY,
-        );
-
-        let shutdown = Arc::new(Notify::new());
-        let worker_shutdown = shutdown.clone();
-        let worker_handle = tokio::spawn(async move { worker.process(worker_shutdown).await });
+            max_status_batch,
+            queue_capacity,
+        )
+        .await?;
 
         Ok(Self {
-            manager,
-            shutdown,
-            worker_handle,
+            inner: Arc::new(TransactionServiceInner {
+                manager: RwLock::new(manager),
+                worker: Mutex::new(Some(worker_handle)),
+                client,
+                sign_fn,
+                confirm_interval,
+                max_status_batch,
+                queue_capacity,
+            }),
         })
     }
 
@@ -158,14 +169,56 @@ impl TransactionService {
         request: TxRequest,
         cfg: TxConfig,
     ) -> Result<TxHandle<Hash, TxInfo>> {
-        self.manager.add_tx(request, cfg).await
+        let manager = self.inner.manager.read().await.clone();
+        manager.add_tx(request, cfg).await
     }
-}
 
-impl Drop for TransactionService {
-    fn drop(&mut self) {
-        self.shutdown.notify_one();
-        self.worker_handle.abort();
+    pub async fn recreate_worker(&self) -> Result<()> {
+        let (manager, worker_handle) = Self::spawn_worker(
+            &self.inner.client,
+            self.inner.sign_fn.clone(),
+            self.inner.confirm_interval,
+            self.inner.max_status_batch,
+            self.inner.queue_capacity,
+        )
+        .await?;
+
+        let mut worker_guard = self.inner.worker.lock().await;
+        if let Some(old_worker) = worker_guard.replace(worker_handle) {
+            old_worker.shutdown.notify_one();
+            old_worker.handle.abort();
+            let _ = old_worker.handle.await;
+        }
+
+        let mut manager_guard = self.inner.manager.write().await;
+        *manager_guard = manager;
+
+        Ok(())
+    }
+
+    async fn spawn_worker(
+        client: &GrpcClient,
+        sign_fn: Arc<dyn SignFn<Hash, TxInfo>>,
+        confirm_interval: Duration,
+        max_status_batch: usize,
+        queue_capacity: usize,
+    ) -> Result<(TransactionManager<Hash, TxInfo>, WorkerHandle)> {
+        let start_sequence = client.current_sequence().await?;
+        let nodes = HashMap::from([(String::from("default"), Arc::new(client.clone()))]);
+        let (manager, mut worker) = TransactionWorker::new(
+            nodes,
+            confirm_interval,
+            max_status_batch,
+            sign_fn,
+            start_sequence,
+            queue_capacity,
+        );
+
+        let shutdown = Arc::new(Notify::new());
+        let worker_shutdown = shutdown.clone();
+        let handle = tokio::spawn(async move { worker.process(worker_shutdown).await });
+
+        Ok((manager, WorkerHandle { shutdown, handle }))
     }
 }
 
@@ -430,7 +483,7 @@ mod tests {
 
     use super::*;
     use crate::GrpcClient;
-    use crate::test_utils::{CELESTIA_GRPC_URL, new_tx_client};
+    use crate::test_utils::{CELESTIA_GRPC_URL, load_account, new_tx_client};
     use async_trait::async_trait;
     use celestia_types::nmt::Namespace;
     use celestia_types::state::{AccAddress, RawTxBody};
@@ -549,12 +602,10 @@ mod tests {
     #[async_test]
     async fn submit_with_worker_and_confirm() {
         let (_lock, _client) = new_tx_client().await;
-        let hex_key = include_str!("../../ci/credentials/node-0.plaintext-key").trim();
-        let key_bytes = hex::decode(hex_key).expect("valid hex representation");
-        let signing_key = SigningKey::from_slice(&key_bytes).expect("valid signing key");
+        let account = load_account();
         let client = GrpcClient::builder()
             .url(CELESTIA_GRPC_URL)
-            .signer_keypair(signing_key)
+            .signer_keypair(account.signing_key)
             .build()
             .unwrap();
 
