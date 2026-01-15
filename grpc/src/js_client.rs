@@ -81,6 +81,44 @@ impl Default for EndpointConfig {
     }
 }
 
+/// A URL endpoint paired with its configuration.
+///
+/// Use this with `withUrls` to configure multiple endpoints with different settings.
+///
+/// # Example
+///
+/// ```js
+/// const primary = new EndpointEntry(
+///   "http://primary:9090",
+///   new EndpointConfig().withMetadata("auth", "token1")
+/// );
+/// const fallback = new EndpointEntry(
+///   "http://fallback:9090",
+///   new EndpointConfig().withTimeout(10000)
+/// );
+///
+/// const client = await new GrpcClientBuilder()
+///   .withUrls([primary, fallback])
+///   .build();
+/// ```
+#[wasm_bindgen]
+pub struct EndpointEntry {
+    url: String,
+    config: crate::EndpointConfig,
+}
+
+#[wasm_bindgen]
+impl EndpointEntry {
+    /// Create a new endpoint entry with a URL and optional configuration.
+    #[wasm_bindgen(constructor)]
+    pub fn new(url: String, config: Option<EndpointConfig>) -> Self {
+        Self {
+            url,
+            config: config.map(|c| c.inner).unwrap_or_default(),
+        }
+    }
+}
+
 /// Builder for [`GrpcClient`] and [`TxClient`].
 ///
 /// Url must point to a [grpc-web proxy](https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-WEB.md).
@@ -154,17 +192,30 @@ impl GrpcClientBuilder {
         }
     }
 
-    /// Add multiple URL endpoints at once for fallback support with default configuration.
+    /// Add multiple URL endpoints at once for fallback support.
     ///
     /// When multiple endpoints are configured, the client will automatically
     /// fall back to the next endpoint if a network-related error occurs.
     ///
+    /// # Example
+    ///
+    /// ```js
+    /// const client = await new GrpcClientBuilder()
+    ///   .withUrls([
+    ///     new EndpointEntry("http://primary:9090", new EndpointConfig().withMetadata("auth", "token1")),
+    ///     new EndpointEntry("http://fallback:9090", new EndpointConfig().withTimeout(10000)),
+    ///   ])
+    ///   .build();
+    /// ```
+    ///
     /// Note that this method **consumes** builder and returns updated instance of it.
     /// Make sure to re-assign it if you keep builder in a variable.
     #[wasm_bindgen(js_name = "withUrls")]
-    pub fn with_urls(self, urls: Vec<String>) -> Self {
+    pub fn with_urls(self, endpoints: Vec<EndpointEntry>) -> Self {
+        let urls_with_configs: Vec<(String, crate::EndpointConfig)> =
+            endpoints.into_iter().map(|e| (e.url, e.config)).collect();
         Self {
-            inner: self.inner.urls(urls),
+            inner: self.inner.urls(urls_with_configs),
         }
     }
 

@@ -4,12 +4,12 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use blockstore::cond_send::CondSend;
+pub use celestia_grpc::EndpointConfig;
 use celestia_grpc::{GrpcClient, GrpcClientBuilder};
 use celestia_rpc::{Client as RpcClient, HeaderClient};
 use http::Request;
 use tonic::body::Body as TonicBody;
 use tonic::codegen::{Bytes, Service};
-use tonic::metadata::MetadataMap;
 
 use crate::blob::BlobApi;
 use crate::blobstream::BlobstreamApi;
@@ -32,11 +32,11 @@ use crate::{Error, Result};
 /// Read-only mode:
 ///
 /// ```no_run
-/// # use celestia_client::{Client, Result};
+/// # use celestia_client::{Client, EndpointConfig, Result};
 /// # async fn docs() -> Result<()> {
 /// let client = Client::builder()
 ///     .rpc_url("ws://localhost:26658")
-///     .grpc_url("http://localhost:9090") // optional in read-only mode
+///     .grpc_url("http://localhost:9090", EndpointConfig::new()) // optional in read-only mode
 ///     .build()
 ///     .await?;
 ///
@@ -48,12 +48,17 @@ use crate::{Error, Result};
 /// Submit mode:
 ///
 /// ```no_run
-/// # use celestia_client::{Client, Result};
+/// # use celestia_client::{Client, EndpointConfig, Result};
 /// # use celestia_client::tx::TxConfig;
+/// # use std::time::Duration;
 /// # async fn docs() -> Result<()> {
+/// let grpc_config = EndpointConfig::new()
+///     .metadata("x-token", "auth-token")
+///     .timeout(Duration::from_secs(30));
+///
 /// let client = Client::builder()
 ///     .rpc_url("ws://localhost:26658")
-///     .grpc_url("http://localhost:9090")
+///     .grpc_url("http://localhost:9090", grpc_config)
 ///     .private_key_hex("393fdb5def075819de55756b45c9e2c8531a8c78dd6eede483d3440e9457d839")
 ///     .build()
 ///     .await?;
@@ -84,11 +89,11 @@ pub(crate) struct ClientInner {
 }
 
 /// A builder for [`Client`].
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct ClientBuilder {
     rpc_url: Option<String>,
     rpc_auth_token: Option<String>,
-    timeout: Option<Duration>,
+    rpc_timeout: Option<Duration>,
     grpc_builder: Option<GrpcClientBuilder>,
 }
 
@@ -217,20 +222,20 @@ impl ClientBuilder {
         self
     }
 
-    /// Set the request timeout for both RPC and gRPC endpoints.
-    pub fn timeout(mut self, timeout: Duration) -> ClientBuilder {
-        self.timeout = Some(timeout);
+    /// Set the request timeout for RPC endpoints.
+    pub fn rpc_timeout(mut self, timeout: Duration) -> ClientBuilder {
+        self.rpc_timeout = Some(timeout);
         self
     }
 
-    /// Set the gRPC endpoint.
+    /// Set the gRPC endpoint with its configuration.
     ///
     /// # Note
     ///
     /// In WASM the endpoint needs to support gRPC-Web.
-    pub fn grpc_url(mut self, url: &str) -> ClientBuilder {
+    pub fn grpc_url(mut self, url: &str, config: EndpointConfig) -> ClientBuilder {
         let grpc_builder = self.grpc_builder.unwrap_or_default();
-        self.grpc_builder = Some(grpc_builder.url(url));
+        self.grpc_builder = Some(grpc_builder.url(url, config));
         self
     }
 
@@ -242,9 +247,15 @@ impl ClientBuilder {
     /// # Note
     ///
     /// In WASM the endpoints need to support gRPC-Web.
-    pub fn grpc_urls(mut self, urls: impl IntoIterator<Item = impl AsRef<str>>) -> ClientBuilder {
-        let grpc_builder = self.grpc_builder.unwrap_or_default();
-        self.grpc_builder = Some(grpc_builder.urls(urls));
+    pub fn grpc_urls<S: AsRef<str>>(
+        mut self,
+        urls: impl IntoIterator<Item = (S, EndpointConfig)>,
+    ) -> ClientBuilder {
+        let mut grpc_builder = self.grpc_builder.unwrap_or_default();
+        for (url, config) in urls {
+            grpc_builder = grpc_builder.url(url.as_ref(), config);
+        }
+        self.grpc_builder = Some(grpc_builder);
         self
     }
 
@@ -266,38 +277,12 @@ impl ClientBuilder {
         self
     }
 
-    /// Appends ascii metadata to all requests made by the client.
-    pub fn grpc_metadata(mut self, key: &str, value: &str) -> Self {
-        let grpc_builder = self.grpc_builder.unwrap_or_default();
-        self.grpc_builder = Some(grpc_builder.metadata(key, value));
-        self
-    }
-
-    /// Appends binary metadata to all requests made by the client.
-    ///
-    /// Keys for binary metadata must have `-bin` suffix.
-    pub fn grpc_metadata_bin(mut self, key: &str, value: &[u8]) -> Self {
-        let grpc_builder = self.grpc_builder.unwrap_or_default();
-        self.grpc_builder = Some(grpc_builder.metadata_bin(key, value));
-        self
-    }
-
-    /// Sets the initial metadata map that will be attached to all requestes made by the client.
-    pub fn grpc_metadata_map(mut self, metadata: MetadataMap) -> Self {
-        let grpc_builder = self.grpc_builder.unwrap_or_default();
-        self.grpc_builder = Some(grpc_builder.metadata_map(metadata));
-        self
-    }
-
     /// Build [`Client`].
     pub async fn build(self) -> Result<Client> {
         let rpc_url = self.rpc_url.as_ref().ok_or(Error::RpcEndpointNotSet)?;
         let rpc_auth_token = self.rpc_auth_token.as_deref();
 
-        let (grpc, pubkey) = if let Some(mut grpc_builder) = self.grpc_builder {
-            if let Some(timeout) = self.timeout {
-                grpc_builder = grpc_builder.timeout(timeout)
-            };
+        let (grpc, pubkey) = if let Some(grpc_builder) = self.grpc_builder {
             let client = grpc_builder.build()?;
             let pubkey = client.get_account_pubkey();
             (Some(client), pubkey)
@@ -305,7 +290,8 @@ impl ClientBuilder {
             (None, None)
         };
 
-        let rpc = RpcClient::new(rpc_url, rpc_auth_token, self.timeout, self.timeout).await?;
+        let rpc =
+            RpcClient::new(rpc_url, rpc_auth_token, self.rpc_timeout, self.rpc_timeout).await?;
 
         let head = rpc.header_network_head().await?;
         head.validate()?;

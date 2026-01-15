@@ -3,9 +3,9 @@ use std::sync::OnceLock;
 use serde::{Deserialize, Serialize};
 use tokio::sync::{Mutex, MutexGuard};
 
-use crate::Client;
 use crate::tx::{SigningKey, TxConfig};
 use crate::types::state::{AccAddress, ValAddress};
+use crate::{Client, EndpointConfig};
 
 pub(crate) const TEST_PRIV_KEY: &str = include_str!("../../ci/credentials/node-0.plaintext-key");
 #[cfg(not(target_arch = "wasm32"))]
@@ -29,7 +29,7 @@ async fn node0_client() -> (MutexGuard<'static, ()>, Client) {
 
     let client = Client::builder()
         .rpc_url(TEST_RPC_URL)
-        .grpc_url(TEST_GRPC_URL)
+        .grpc_url(TEST_GRPC_URL, EndpointConfig::new())
         .private_key_hex(TEST_PRIV_KEY)
         .build()
         .await
@@ -49,7 +49,7 @@ pub(crate) async fn new_rpc_only_client() -> Client {
 pub(crate) async fn new_read_only_client() -> Client {
     Client::builder()
         .rpc_url(TEST_RPC_URL)
-        .grpc_url(TEST_GRPC_URL)
+        .grpc_url(TEST_GRPC_URL, EndpointConfig::new())
         .build()
         .await
         .unwrap()
@@ -70,7 +70,7 @@ pub(crate) async fn new_client() -> Client {
 
     Client::builder()
         .rpc_url(TEST_RPC_URL)
-        .grpc_url(TEST_GRPC_URL)
+        .grpc_url(TEST_GRPC_URL, EndpointConfig::new())
         .keypair(random_key)
         .build()
         .await

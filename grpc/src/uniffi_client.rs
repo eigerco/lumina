@@ -61,9 +61,11 @@ impl EndpointConfig {
     /// Appends ASCII metadata (HTTP/2 header) to requests made to this endpoint.
     #[uniffi::method(name = "withMetadata")]
     pub fn metadata(self: Arc<Self>, key: &str, value: &str) -> Arc<Self> {
-        let mut lock = self.0.lock().expect("lock poisoned");
-        let config = lock.take().expect("config must be set");
-        *lock = Some(config.metadata(key, value));
+        {
+            let mut lock = self.0.lock().expect("lock poisoned");
+            let config = lock.take().expect("config must be set");
+            *lock = Some(config.metadata(key, value));
+        }
         self
     }
 
@@ -72,19 +74,29 @@ impl EndpointConfig {
     /// Keys must have `-bin` suffix.
     #[uniffi::method(name = "withMetadataBin")]
     pub fn metadata_bin(self: Arc<Self>, key: &str, value: &[u8]) -> Arc<Self> {
-        let mut lock = self.0.lock().expect("lock poisoned");
-        let config = lock.take().expect("config must be set");
-        *lock = Some(config.metadata_bin(key, value.to_vec()));
+        {
+            let mut lock = self.0.lock().expect("lock poisoned");
+            let config = lock.take().expect("config must be set");
+            *lock = Some(config.metadata_bin(key, value.to_vec()));
+        }
         self
     }
 
     /// Sets the request timeout in milliseconds for this endpoint.
     #[uniffi::method(name = "withTimeout")]
     pub fn timeout(self: Arc<Self>, timeout_ms: u64) -> Arc<Self> {
-        let mut lock = self.0.lock().expect("lock poisoned");
-        let config = lock.take().expect("config must be set");
-        *lock = Some(config.timeout(Duration::from_millis(timeout_ms)));
+        {
+            let mut lock = self.0.lock().expect("lock poisoned");
+            let config = lock.take().expect("config must be set");
+            *lock = Some(config.timeout(Duration::from_millis(timeout_ms)));
+        }
         self
+    }
+}
+
+impl Default for EndpointConfig {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -133,7 +145,11 @@ impl GrpcClientBuilder {
     /// fall back to the next endpoint if a network-related error occurs.
     #[uniffi::constructor(name = "withUrls")]
     pub fn with_urls(urls: Vec<String>) -> Self {
-        let builder = RustBuilder::new().urls(urls);
+        let urls_with_configs: Vec<(String, RustEndpointConfig)> = urls
+            .into_iter()
+            .map(|url| (url, RustEndpointConfig::default()))
+            .collect();
+        let builder = RustBuilder::new().urls(urls_with_configs);
         GrpcClientBuilder(Mutex::new(Some(builder)))
     }
 

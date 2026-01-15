@@ -158,7 +158,7 @@ impl StateApi {
     ///
     /// # Example
     /// ```no_run
-    /// # use celestia_client::{Client, Result};
+    /// # use celestia_client::{Client, EndpointConfig, Result};
     /// # use celestia_client::tx::TxConfig;
     /// # async fn docs() -> Result<()> {
     /// use celestia_proto::cosmos::bank::v1beta1::MsgSend;
@@ -166,7 +166,7 @@ impl StateApi {
     ///
     /// let client = Client::builder()
     ///     .rpc_url("ws://localhost:26658")
-    ///     .grpc_url("http://localhost:9090")
+    ///     .grpc_url("http://localhost:9090", EndpointConfig::new())
     ///     .private_key_hex("393fdb5def075819de55756b45c9e2c8531a8c78dd6eede483d3440e9457d839")
     ///     .build()
     ///     .await?;
@@ -232,7 +232,7 @@ impl StateApi {
     /// # Example
     ///
     /// ```no_run
-    /// # use celestia_client::{Client, Result};
+    /// # use celestia_client::{Client, EndpointConfig, Result};
     /// # use celestia_client::tx::TxConfig;
     /// # async fn docs() -> Result<()> {
     /// use celestia_types::nmt::Namespace;
@@ -241,7 +241,7 @@ impl StateApi {
     ///
     /// let client = Client::builder()
     ///     .rpc_url("ws://localhost:26658")
-    ///     .grpc_url("http://localhost:9090")
+    ///     .grpc_url("http://localhost:9090", EndpointConfig::new())
     ///     .private_key_hex("393fdb5def075819de55756b45c9e2c8531a8c78dd6eede483d3440e9457d839")
     ///     .build()
     ///     .await?;
@@ -476,7 +476,7 @@ mod tests {
         TEST_GRPC_URL, TEST_RPC_URL, ensure_serializable_deserializable, new_client,
         new_read_only_client, new_rpc_only_client, node0_address, validator_address,
     };
-    use crate::{Client, Error};
+    use crate::{Client, EndpointConfig, Error};
 
     #[async_test]
     async fn transfer() {
@@ -736,8 +736,8 @@ mod tests {
     async fn rpc_timeout() {
         let client_build_error = Client::builder()
             .rpc_url(TEST_RPC_URL)
-            .grpc_url(TEST_GRPC_URL)
-            .timeout(Duration::from_nanos(1))
+            .grpc_url(TEST_GRPC_URL, EndpointConfig::new())
+            .rpc_timeout(Duration::from_nanos(1))
             .build()
             .await
             .unwrap_err();

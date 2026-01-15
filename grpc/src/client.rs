@@ -1612,8 +1612,8 @@ mod tests {
     #[cfg(not(target_arch = "wasm32"))]
     #[tokio::test]
     async fn failover_to_second_endpoint() {
-        use crate::test_utils::CELESTIA_GRPC_URL;
         use crate::EndpointConfig;
+        use crate::test_utils::CELESTIA_GRPC_URL;
 
         // First endpoint is invalid, should failover to second valid one
         let client = GrpcClient::builder()
@@ -1631,8 +1631,8 @@ mod tests {
     #[cfg(not(target_arch = "wasm32"))]
     #[tokio::test]
     async fn endpoint_multiple_requests() {
-        use crate::test_utils::CELESTIA_GRPC_URL;
         use crate::EndpointConfig;
+        use crate::test_utils::CELESTIA_GRPC_URL;
 
         let client = GrpcClient::builder()
             .urls([

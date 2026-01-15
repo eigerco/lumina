@@ -30,13 +30,6 @@ impl TransportMetadata {
             context,
         }
     }
-
-    pub fn with_context(context: GrpcContext) -> Self {
-        Self {
-            url: None,
-            context,
-        }
-    }
 }
 
 dyn_clone::clone_trait_object!(AbstractTransport);

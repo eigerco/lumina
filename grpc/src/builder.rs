@@ -28,7 +28,7 @@ use imp::build_transport;
 ///
 /// # Example
 ///
-/// ```
+/// ```no_run
 /// use std::time::Duration;
 /// use celestia_grpc::{GrpcClient, EndpointConfig};
 ///
@@ -82,20 +82,23 @@ impl EndpointConfig {
         self.timeout = Some(timeout);
         self
     }
+}
 
-    /// Convert to Context (internal use)
-    pub(crate) fn into_context(self) -> Result<Context, GrpcClientBuilderError> {
+impl TryFrom<EndpointConfig> for Context {
+    type Error = GrpcClientBuilderError;
+
+    fn try_from(config: EndpointConfig) -> Result<Self, Self::Error> {
         let mut context = Context {
-            timeout: self.timeout,
+            timeout: config.timeout,
             ..Default::default()
         };
-        for (key, value) in self.ascii_metadata {
+        for (key, value) in config.ascii_metadata {
             context.append_metadata(&key, &value)?;
         }
-        for (key, value) in self.binary_metadata {
+        for (key, value) in config.binary_metadata {
             context.append_metadata_bin(&key, &value)?;
         }
-        if let Some(metadata) = self.metadata_map {
+        if let Some(metadata) = config.metadata_map {
             context.append_metadata_map(&metadata);
         }
         Ok(context)
@@ -135,7 +138,7 @@ impl GrpcClientBuilder {
     ///
     /// # Example
     ///
-    /// ```
+    /// ```no_run
     /// use std::time::Duration;
     /// use celestia_grpc::{GrpcClient, EndpointConfig};
     ///
@@ -166,7 +169,7 @@ impl GrpcClientBuilder {
     ///
     /// # Example
     ///
-    /// ```
+    /// ```no_run
     /// use std::time::Duration;
     /// use celestia_grpc::{GrpcClient, EndpointConfig};
     ///
@@ -185,11 +188,11 @@ impl GrpcClientBuilder {
         self
     }
 
-    /// Add a transport endpoint with specific configuration. Multiple calls add multiple fallback endpoints.
+    /// Add a custom transport endpoint. Multiple calls add multiple fallback endpoints.
     ///
     /// When multiple endpoints are configured, the client will automatically
     /// fall back to the next endpoint if a network-related error occurs.
-    pub fn transport<B, T>(mut self, transport: T, config: EndpointConfig) -> Self
+    pub fn transport<B, T>(mut self, transport: T) -> Self
     where
         B: http_body::Body<Data = Bytes> + Send + Unpin + 'static,
         <B as http_body::Body>::Error: StdError + Send + Sync,
@@ -201,11 +204,9 @@ impl GrpcClientBuilder {
         <T as Service<http::Request<TonicBody>>>::Error: StdError + Send + Sync + 'static,
         <T as Service<http::Request<TonicBody>>>::Future: CondSend + 'static,
     {
-        // Note: config will be converted to context in build()
-        // For now, store as BoxedTransport with empty metadata, context applied later
         self.transports.push(TransportEntry::BoxedTransport(boxed(
             transport,
-            TransportMetadata::with_context(config.into_context().unwrap_or_default()),
+            TransportMetadata::default(),
         )));
         self
     }
@@ -258,7 +259,7 @@ impl GrpcClientBuilder {
             .into_iter()
             .map(|entry| match entry {
                 TransportEntry::EndpointUrl(url, config) => {
-                    let context = config.into_context()?;
+                    let context = config.try_into()?;
                     build_transport(url, context)
                 }
                 TransportEntry::BoxedTransport(t) => Ok(t),
@@ -334,7 +335,10 @@ mod imp {
             .tls_config(tls_config)?
             .connect_lazy();
 
-        Ok(boxed(channel, TransportMetadata::with_url_and_context(url, context)))
+        Ok(boxed(
+            channel,
+            TransportMetadata::with_url_and_context(url, context),
+        ))
     }
 }
 
@@ -360,7 +364,10 @@ mod imp {
             .user_agent("celestia-grpc")?
             .connect_lazy();
 
-        Ok(boxed(channel, TransportMetadata::with_url_and_context(url, context)))
+        Ok(boxed(
+            channel,
+            TransportMetadata::with_url_and_context(url, context),
+        ))
     }
 }
 
@@ -372,7 +379,10 @@ mod imp {
         context: Context,
     ) -> Result<BoxedTransport, GrpcClientBuilderError> {
         let client = tonic_web_wasm_client::Client::new(url.clone());
-        Ok(boxed(client, TransportMetadata::with_url_and_context(url, context)))
+        Ok(boxed(
+            client,
+            TransportMetadata::with_url_and_context(url, context),
+        ))
     }
 }
 
