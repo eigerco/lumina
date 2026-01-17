@@ -476,7 +476,7 @@ mod tests {
         TEST_GRPC_URL, TEST_RPC_URL, ensure_serializable_deserializable, new_client,
         new_read_only_client, new_rpc_only_client, node0_address, validator_address,
     };
-    use crate::{Client, EndpointConfig, Error};
+    use crate::{Client, Error};
 
     #[async_test]
     async fn transfer() {

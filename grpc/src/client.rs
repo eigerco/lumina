@@ -1671,7 +1671,7 @@ mod tests {
             .url_with_config(
                 &proxy_url,
                 EndpointConfig::new()
-                    .metadata("authorization", &format!("Bearer {}", TEST_AUTH_TOKEN)),
+                    .metadata("authorization", format!("Bearer {}", TEST_AUTH_TOKEN)),
             )
             .build()
             .unwrap();
@@ -1758,7 +1758,7 @@ mod tests {
                 (
                     &proxy_url as &str,
                     EndpointConfig::new()
-                        .metadata("authorization", &format!("Bearer {}", TEST_AUTH_TOKEN)),
+                        .metadata("authorization", format!("Bearer {}", TEST_AUTH_TOKEN)),
                 ),
             ])
             .build()
@@ -1793,7 +1793,7 @@ mod tests {
                 (
                     &proxy_url as &str,
                     EndpointConfig::new()
-                        .metadata("authorization", &format!("Bearer {}", TEST_AUTH_TOKEN))
+                        .metadata("authorization", format!("Bearer {}", TEST_AUTH_TOKEN))
                         .timeout(Duration::from_secs(10)),
                 ),
             ])

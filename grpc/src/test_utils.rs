@@ -206,14 +206,10 @@ mod imp {
                     });
 
                     let stream = TokioIo::new(stream);
-                    if ServerBuilder::new(TokioExecutor::new())
+                    let _ = ServerBuilder::new(TokioExecutor::new())
                         .http2_only()
                         .serve_connection(stream, service)
-                        .await
-                        .is_err()
-                    {
-                        return;
-                    }
+                        .await;
                 });
             }
         });
