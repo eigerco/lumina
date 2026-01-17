@@ -29,7 +29,7 @@ use grpc_client::GrpcClient;
 /// ```
 #[wasm_bindgen]
 pub struct EndpointConfig {
-    inner: crate::EndpointConfig,
+    pub(crate) inner: crate::EndpointConfig,
 }
 
 #[wasm_bindgen]
@@ -103,8 +103,8 @@ impl Default for EndpointConfig {
 /// ```
 #[wasm_bindgen]
 pub struct EndpointEntry {
-    url: String,
-    config: crate::EndpointConfig,
+    pub(crate) url: String,
+    pub(crate) config: crate::EndpointConfig,
 }
 
 #[wasm_bindgen]

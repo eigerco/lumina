@@ -14,7 +14,7 @@ use crate::Result;
 use crate::grpc::{
     ConfigResponse, GasInfo, GetTxResponse, JsBroadcastMode, TxPriority, TxStatusResponse,
 };
-use crate::js_client::GrpcClientBuilder;
+use crate::js_client::{EndpointConfig, EndpointEntry, GrpcClientBuilder};
 use crate::tx::{BroadcastedTx, JsBroadcastedTx, JsTxConfig, JsTxInfo};
 
 /// Celestia gRPC client, for builder see [`GrpcClientBuilder`]
@@ -25,19 +25,43 @@ pub struct GrpcClient {
 
 #[wasm_bindgen]
 impl GrpcClient {
-    /// Create a builder for [`GrpcClient`] connected to `url`
+    /// Create a builder for [`GrpcClient`] connected to `url` with optional configuration.
+    ///
+    /// # Example
+    ///
+    /// ```js
+    /// // Without config
+    /// const client = await GrpcClient.withUrl("http://localhost:18080").build();
+    ///
+    /// // With config
+    /// const config = new EndpointConfig().withMetadata("authorization", "Bearer token");
+    /// const client = await GrpcClient.withUrl("http://localhost:18080", config).build();
+    /// ```
     #[wasm_bindgen(js_name = withUrl)]
-    pub fn with_url(url: String) -> GrpcClientBuilder {
-        crate::GrpcClientBuilder::new().url(url).into()
+    pub fn with_url(url: String, config: Option<EndpointConfig>) -> GrpcClientBuilder {
+        let config = config.map(|c| c.inner).unwrap_or_default();
+        crate::GrpcClientBuilder::new().url(url, config).into()
     }
 
     /// Create a builder for [`GrpcClient`] with multiple URL endpoints for fallback support.
     ///
     /// When multiple endpoints are configured, the client will automatically
     /// fall back to the next endpoint if a network-related error occurs.
+    ///
+    /// # Example
+    ///
+    /// ```js
+    /// const endpoints = [
+    ///   new EndpointEntry("http://primary:9090", new EndpointConfig().withMetadata("auth", "token1")),
+    ///   new EndpointEntry("http://fallback:9090", new EndpointConfig().withTimeout(10000)),
+    /// ];
+    /// const client = await GrpcClient.withUrls(endpoints).build();
+    /// ```
     #[wasm_bindgen(js_name = withUrls)]
-    pub fn with_urls(urls: Vec<String>) -> GrpcClientBuilder {
-        crate::GrpcClientBuilder::new().urls(urls).into()
+    pub fn with_urls(endpoints: Vec<EndpointEntry>) -> GrpcClientBuilder {
+        let urls_with_configs: Vec<(String, crate::EndpointConfig)> =
+            endpoints.into_iter().map(|e| (e.url, e.config)).collect();
+        crate::GrpcClientBuilder::new().urls(urls_with_configs).into()
     }
 
     /// Get auth params

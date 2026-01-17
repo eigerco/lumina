@@ -72,7 +72,10 @@ lumina-utils = { workspace = true, features = ["test-utils"] }
 rand.workspace = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
-tokio = { workspace = true, features = ["rt", "macros"] }
+hyper = { version = "1.8", features = ["http2", "server", "client"] }
+hyper-util = { version = "0.1.19", features = ["client-legacy", "http2", "server-auto", "tokio"] }
+tokio = { workspace = true, features = ["rt", "macros", "net"] }
+tokio-stream = { workspace = true }
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 celestia-rpc = { workspace = true, features = ["wasm-bindgen"] }

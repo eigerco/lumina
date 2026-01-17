@@ -1,6 +1,6 @@
 Error.stackTraceLimit = 99; // rust stack traces can get pretty big, increase the default
 
-import { AppVersion, Blob, Namespace, NodeConfig, BroadcastMode, GrpcClient, TxPriority, protoEncodeSignDoc, spawnNode } from "lumina-node";
+import { AppVersion, Blob, Namespace, NodeConfig, BroadcastMode, GrpcClient, GrpcClientBuilder, EndpointConfig, EndpointEntry, TxPriority, protoEncodeSignDoc, spawnNode } from "lumina-node";
 import { secp256k1 } from "@noble/curves/secp256k1";
 import { Registry } from "@cosmjs/proto-signing";
 
@@ -11,6 +11,9 @@ window.Namespace = Namespace;
 window.TxPriority = TxPriority;
 window.BroadcastMode = BroadcastMode;
 window.GrpcClient = GrpcClient;
+window.GrpcClientBuilder = GrpcClientBuilder;
+window.EndpointConfig = EndpointConfig;
+window.EndpointEntry = EndpointEntry;
 
 // cat ci/credentials/node-0.address
 window.node0Addr = "celestia1t52q7uqgnjfzdh3wx5m5phvma3umrq8k6tq2p9";
@@ -26,7 +29,8 @@ async function createTxClient() {
     return sig.toCompactRawBytes();
   };
 
-  const txClient = await GrpcClient.withUrl("http://127.0.0.1:18080")
+  const config = new EndpointConfig().withTimeout(BigInt(5000));
+  const txClient = await GrpcClient.withUrl("http://127.0.0.1:18080", config)
     .withPubkeyAndSigner(pubKey, signer)
     .build();
   return txClient;

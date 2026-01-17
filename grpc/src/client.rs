@@ -1668,4 +1668,156 @@ mod tests {
         let result = client.get_auth_params().await;
         assert!(result.is_err());
     }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[tokio::test]
+    async fn auth_proxy_with_valid_token() {
+        use crate::EndpointConfig;
+        use crate::test_utils::{spawn_grpc_auth_proxy, CELESTIA_GRPC_URL, TEST_AUTH_TOKEN};
+
+        // Spawn the auth proxy
+        let (addr, _handle) = spawn_grpc_auth_proxy(CELESTIA_GRPC_URL, TEST_AUTH_TOKEN).await;
+        let proxy_url = format!("http://{}", addr);
+
+        // Connect with correct authorization token - should succeed
+        let client = GrpcClient::builder()
+            .url(
+                &proxy_url,
+                EndpointConfig::new().metadata("authorization", &format!("Bearer {}", TEST_AUTH_TOKEN)),
+            )
+            .build()
+            .unwrap();
+
+        let params = client.get_auth_params().await.unwrap();
+        assert!(params.max_memo_characters > 0);
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[tokio::test]
+    async fn auth_proxy_without_token() {
+        use crate::EndpointConfig;
+        use crate::test_utils::{spawn_grpc_auth_proxy, CELESTIA_GRPC_URL, TEST_AUTH_TOKEN};
+
+        // Spawn the auth proxy
+        let (addr, _handle) = spawn_grpc_auth_proxy(CELESTIA_GRPC_URL, TEST_AUTH_TOKEN).await;
+        let proxy_url = format!("http://{}", addr);
+
+        // Connect without authorization token - should fail with Unauthenticated
+        let client = GrpcClient::builder()
+            .url(&proxy_url, EndpointConfig::default())
+            .build()
+            .unwrap();
+
+        let result = client.get_auth_params().await;
+        let Error::TonicError(status) = result.unwrap_err() else {
+            panic!("expected TonicError");
+        };
+        // Proxy returns HTTP 401 which maps to Unauthenticated or Unknown depending on tonic version
+        assert!(
+            status.code() == Code::Unauthenticated || status.code() == Code::Unknown,
+            "expected Unauthenticated or Unknown, got {:?}",
+            status.code()
+        );
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[tokio::test]
+    async fn auth_proxy_with_wrong_token() {
+        use crate::EndpointConfig;
+        use crate::test_utils::{spawn_grpc_auth_proxy, CELESTIA_GRPC_URL, TEST_AUTH_TOKEN};
+
+        // Spawn the auth proxy
+        let (addr, _handle) = spawn_grpc_auth_proxy(CELESTIA_GRPC_URL, TEST_AUTH_TOKEN).await;
+        let proxy_url = format!("http://{}", addr);
+
+        // Connect with wrong authorization token - should fail with Unauthenticated
+        let client = GrpcClient::builder()
+            .url(
+                &proxy_url,
+                EndpointConfig::new().metadata("authorization", "Bearer wrong-token"),
+            )
+            .build()
+            .unwrap();
+
+        let result = client.get_auth_params().await;
+        let Error::TonicError(status) = result.unwrap_err() else {
+            panic!("expected TonicError");
+        };
+        // Proxy returns HTTP 401 which maps to Unauthenticated or Unknown depending on tonic version
+        assert!(
+            status.code() == Code::Unauthenticated || status.code() == Code::Unknown,
+            "expected Unauthenticated or Unknown, got {:?}",
+            status.code()
+        );
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[tokio::test]
+    async fn auth_proxy_failover_unreachable_then_authenticated() {
+        use crate::EndpointConfig;
+        use crate::test_utils::{spawn_grpc_auth_proxy, CELESTIA_GRPC_URL, TEST_AUTH_TOKEN};
+
+        // Spawn the auth proxy
+        let (addr, _handle) = spawn_grpc_auth_proxy(CELESTIA_GRPC_URL, TEST_AUTH_TOKEN).await;
+        let proxy_url = format!("http://{}", addr);
+
+        // Two endpoints with different configurations:
+        // 1. First endpoint is unreachable (network error triggers failover)
+        // 2. Second endpoint is auth proxy with correct token
+        // This tests that per-endpoint metadata is correctly applied during failover
+        let client = GrpcClient::builder()
+            .urls([
+                (
+                    "http://localhost:19999", // unreachable
+                    EndpointConfig::default(),
+                ),
+                (
+                    &proxy_url as &str,
+                    EndpointConfig::new()
+                        .metadata("authorization", &format!("Bearer {}", TEST_AUTH_TOKEN)),
+                ),
+            ])
+            .build()
+            .unwrap();
+
+        // Should succeed - first endpoint fails (network error), falls back to second with auth
+        let params = client.get_auth_params().await.unwrap();
+        assert!(params.max_memo_characters > 0);
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[tokio::test]
+    async fn multiple_endpoints_different_configs() {
+        use crate::EndpointConfig;
+        use crate::test_utils::{spawn_grpc_auth_proxy, CELESTIA_GRPC_URL, TEST_AUTH_TOKEN};
+        use std::time::Duration;
+
+        // Spawn the auth proxy
+        let (addr, _handle) = spawn_grpc_auth_proxy(CELESTIA_GRPC_URL, TEST_AUTH_TOKEN).await;
+        let proxy_url = format!("http://{}", addr);
+
+        // Test that different endpoints can have completely different configurations:
+        // - First: direct gRPC (no auth needed) with short timeout
+        // - Second: auth proxy (needs auth token) with longer timeout
+        // Both should be valid configurations
+        let client = GrpcClient::builder()
+            .urls([
+                (
+                    CELESTIA_GRPC_URL,
+                    EndpointConfig::new().timeout(Duration::from_secs(5)),
+                ),
+                (
+                    &proxy_url as &str,
+                    EndpointConfig::new()
+                        .metadata("authorization", &format!("Bearer {}", TEST_AUTH_TOKEN))
+                        .timeout(Duration::from_secs(10)),
+                ),
+            ])
+            .build()
+            .unwrap();
+
+        // First endpoint (direct, no auth) should work
+        let params = client.get_auth_params().await.unwrap();
+        assert!(params.max_memo_characters > 0);
+    }
 }
