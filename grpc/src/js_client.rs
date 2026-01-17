@@ -126,14 +126,14 @@ impl EndpointEntry {
 /// # Keyless client example
 ///
 /// ```js
-/// const client = await GrpcClientBuilder
+/// const client = await new GrpcClientBuilder()
 ///   .withUrl("http://127.0.0.1:18080")
 ///   .build()
 ///
-/// // With timeout:
+/// // With config:
 /// const config = new EndpointConfig().withTimeout(5000);
-/// const client = await GrpcClientBuilder
-///   .withUrl("http://127.0.0.1:18080", config)
+/// const client = await new GrpcClientBuilder()
+///   .withUrlWithConfig("http://127.0.0.1:18080", config)
 ///   .build()
 /// ```
 ///
@@ -152,7 +152,7 @@ impl EndpointEntry {
 ///   return sig.toCompactRawBytes();
 /// };
 ///
-/// const client = await GrpcClientBuilder
+/// const client = await new GrpcClientBuilder()
 ///   .withUrl("http://127.0.0.1:18080")
 ///   .withPubkeyAndSigner(pubKey, signer)
 ///   .build();
@@ -168,7 +168,7 @@ impl EndpointEntry {
 ///     .then(sig => Uint8Array.from(atob(sig.signature.signature), c => c.charCodeAt(0)))
 /// }
 ///
-/// const client = await GrpcClientBuilder
+/// const client = await new GrpcClientBuilder()
 ///   .withUrl("http://127.0.0.1:18080")
 ///   .withPubkeyAndSigner(keys.pubKey, signer)
 ///   .build()
@@ -180,15 +180,25 @@ pub struct GrpcClientBuilder {
 
 #[wasm_bindgen]
 impl GrpcClientBuilder {
-    /// Set the `url` of the grpc-web server to connect to with optional configuration.
+    /// Set the `url` of the grpc-web server to connect to.
     ///
     /// Note that this method **consumes** builder and returns updated instance of it.
     /// Make sure to re-assign it if you keep builder in a variable.
     #[wasm_bindgen(js_name = "withUrl")]
-    pub fn with_url(self, url: String, config: Option<EndpointConfig>) -> Self {
-        let config = config.map(|c| c.inner).unwrap_or_default();
+    pub fn with_url(self, url: String) -> Self {
         Self {
-            inner: self.inner.url(url, config),
+            inner: self.inner.url(url),
+        }
+    }
+
+    /// Set the `url` of the grpc-web server to connect to with configuration.
+    ///
+    /// Note that this method **consumes** builder and returns updated instance of it.
+    /// Make sure to re-assign it if you keep builder in a variable.
+    #[wasm_bindgen(js_name = "withUrlWithConfig")]
+    pub fn with_url_with_config(self, url: String, config: EndpointConfig) -> Self {
+        Self {
+            inner: self.inner.url_with_config(url, config.inner),
         }
     }
 
@@ -201,7 +211,29 @@ impl GrpcClientBuilder {
     ///
     /// ```js
     /// const client = await new GrpcClientBuilder()
-    ///   .withUrls([
+    ///   .withUrls(["http://primary:9090", "http://fallback:9090"])
+    ///   .build();
+    /// ```
+    ///
+    /// Note that this method **consumes** builder and returns updated instance of it.
+    /// Make sure to re-assign it if you keep builder in a variable.
+    #[wasm_bindgen(js_name = "withUrls")]
+    pub fn with_urls(self, urls: Vec<String>) -> Self {
+        Self {
+            inner: self.inner.urls(urls),
+        }
+    }
+
+    /// Add multiple URL endpoints with configurations for fallback support.
+    ///
+    /// When multiple endpoints are configured, the client will automatically
+    /// fall back to the next endpoint if a network-related error occurs.
+    ///
+    /// # Example
+    ///
+    /// ```js
+    /// const client = await new GrpcClientBuilder()
+    ///   .withUrlsAndConfig([
     ///     new EndpointEntry("http://primary:9090", new EndpointConfig().withMetadata("auth", "token1")),
     ///     new EndpointEntry("http://fallback:9090", new EndpointConfig().withTimeout(10000)),
     ///   ])
@@ -210,12 +242,12 @@ impl GrpcClientBuilder {
     ///
     /// Note that this method **consumes** builder and returns updated instance of it.
     /// Make sure to re-assign it if you keep builder in a variable.
-    #[wasm_bindgen(js_name = "withUrls")]
-    pub fn with_urls(self, endpoints: Vec<EndpointEntry>) -> Self {
+    #[wasm_bindgen(js_name = "withUrlsAndConfig")]
+    pub fn with_urls_and_config(self, endpoints: Vec<EndpointEntry>) -> Self {
         let urls_with_configs: Vec<(String, crate::EndpointConfig)> =
             endpoints.into_iter().map(|e| (e.url, e.config)).collect();
         Self {
-            inner: self.inner.urls(urls_with_configs),
+            inner: self.inner.urls_with_config(urls_with_configs),
         }
     }
 

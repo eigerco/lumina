@@ -33,7 +33,7 @@ use imp::build_transport;
 /// use celestia_grpc::{GrpcClient, EndpointConfig};
 ///
 /// let client = GrpcClient::builder()
-///     .url("http://localhost:9090", EndpointConfig::new()
+///     .url_with_config("http://localhost:9090", EndpointConfig::new()
 ///         .metadata("authorization", "Bearer token")
 ///         .timeout(Duration::from_secs(30)))
 ///     .build();
@@ -131,7 +131,7 @@ impl GrpcClientBuilder {
         GrpcClientBuilder::default()
     }
 
-    /// Add multiple URL endpoints with their configurations.
+    /// Add a URL endpoint. Multiple calls add multiple fallback endpoints.
     ///
     /// When multiple endpoints are configured, the client will automatically
     /// fall back to the next endpoint if a network-related error occurs.
@@ -139,26 +139,18 @@ impl GrpcClientBuilder {
     /// # Example
     ///
     /// ```no_run
-    /// use std::time::Duration;
-    /// use celestia_grpc::{GrpcClient, EndpointConfig};
+    /// use celestia_grpc::GrpcClient;
     ///
     /// let client = GrpcClient::builder()
-    ///     .urls([
-    ///         ("http://primary:9090", EndpointConfig::new()
-    ///             .metadata("auth", "token1")
-    ///             .timeout(Duration::from_secs(5))),
-    ///         ("http://fallback:9090", EndpointConfig::new()
-    ///             .metadata("auth", "token2")),
-    ///     ])
+    ///     .url("http://primary:9090")
+    ///     .url("http://fallback:9090")
     ///     .build();
     /// ```
-    pub fn urls<S: AsRef<str>>(
-        mut self,
-        urls: impl IntoIterator<Item = (S, EndpointConfig)>,
-    ) -> Self {
-        for (url, config) in urls {
-            self = self.url(url.as_ref(), config);
-        }
+    pub fn url(mut self, url: impl Into<String>) -> Self {
+        self.transports.push(TransportEntry::EndpointUrl(
+            url.into(),
+            EndpointConfig::default(),
+        ));
         self
     }
 
@@ -174,17 +166,69 @@ impl GrpcClientBuilder {
     /// use celestia_grpc::{GrpcClient, EndpointConfig};
     ///
     /// let client = GrpcClient::builder()
-    ///     .url("http://primary:9090", EndpointConfig::new()
+    ///     .url_with_config("http://primary:9090", EndpointConfig::new()
     ///         .metadata("authorization", "Bearer token1")
     ///         .timeout(Duration::from_secs(5)))
-    ///     .url("http://fallback:9090", EndpointConfig::new()
+    ///     .url_with_config("http://fallback:9090", EndpointConfig::new()
     ///         .metadata("authorization", "Bearer token2")
     ///         .timeout(Duration::from_secs(10)))
     ///     .build();
     /// ```
-    pub fn url(mut self, url: impl Into<String>, config: EndpointConfig) -> Self {
+    pub fn url_with_config(mut self, url: impl Into<String>, config: EndpointConfig) -> Self {
         self.transports
             .push(TransportEntry::EndpointUrl(url.into(), config));
+        self
+    }
+
+    /// Add multiple URL endpoints.
+    ///
+    /// When multiple endpoints are configured, the client will automatically
+    /// fall back to the next endpoint if a network-related error occurs.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use celestia_grpc::GrpcClient;
+    ///
+    /// let client = GrpcClient::builder()
+    ///     .urls(["http://primary:9090", "http://fallback:9090"])
+    ///     .build();
+    /// ```
+    pub fn urls<S: AsRef<str>>(mut self, urls: impl IntoIterator<Item = S>) -> Self {
+        for url in urls {
+            self = self.url(url.as_ref());
+        }
+        self
+    }
+
+    /// Add multiple URL endpoints with their configurations.
+    ///
+    /// When multiple endpoints are configured, the client will automatically
+    /// fall back to the next endpoint if a network-related error occurs.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use std::time::Duration;
+    /// use celestia_grpc::{GrpcClient, EndpointConfig};
+    ///
+    /// let client = GrpcClient::builder()
+    ///     .urls_with_config([
+    ///         ("http://primary:9090", EndpointConfig::new()
+    ///             .metadata("auth", "token1")
+    ///             .timeout(Duration::from_secs(5))),
+    ///         ("http://fallback:9090", EndpointConfig::new()
+    ///             .metadata("auth", "token2")),
+    ///     ])
+    ///     .build();
+    /// ```
+    pub fn urls_with_config<S: AsRef<str>>(
+        mut self,
+        urls: impl IntoIterator<Item = (S, EndpointConfig)>,
+    ) -> Self {
+        for (url, config) in urls {
+            self = self.url_with_config(url.as_ref(), config);
+        }
         self
     }
 
@@ -404,7 +448,7 @@ mod tests {
     #[async_test]
     async fn single_url_builds_successfully() {
         let result = GrpcClientBuilder::new()
-            .url("http://localhost:9090", EndpointConfig::default())
+            .url("http://localhost:9090")
             .build();
 
         assert!(result.is_ok());
@@ -413,18 +457,18 @@ mod tests {
     #[async_test]
     async fn multiple_urls_build_successfully() {
         let result = GrpcClientBuilder::new()
-            .url("http://localhost:9090", EndpointConfig::default())
-            .url("http://localhost:9091", EndpointConfig::default())
-            .url("http://localhost:9092", EndpointConfig::default())
+            .url("http://localhost:9090")
+            .url("http://localhost:9091")
+            .url("http://localhost:9092")
             .build();
 
         assert!(result.is_ok());
     }
 
     #[async_test]
-    async fn url_with_metadata_builds_successfully() {
+    async fn url_with_config_builds_successfully() {
         let result = GrpcClientBuilder::new()
-            .url(
+            .url_with_config(
                 "http://localhost:9090",
                 EndpointConfig::new()
                     .metadata("authorization", "Bearer token")
@@ -438,7 +482,16 @@ mod tests {
     #[async_test]
     async fn urls_helper_builds_successfully() {
         let result = GrpcClientBuilder::new()
-            .urls([
+            .urls(["http://localhost:9090", "http://localhost:9091"])
+            .build();
+
+        assert!(result.is_ok());
+    }
+
+    #[async_test]
+    async fn urls_with_config_helper_builds_successfully() {
+        let result = GrpcClientBuilder::new()
+            .urls_with_config([
                 ("http://localhost:9090", EndpointConfig::default()),
                 ("http://localhost:9091", EndpointConfig::default()),
             ])

@@ -29,7 +29,7 @@ async fn node0_client() -> (MutexGuard<'static, ()>, Client) {
 
     let client = Client::builder()
         .rpc_url(TEST_RPC_URL)
-        .grpc_url(TEST_GRPC_URL, EndpointConfig::new())
+        .grpc_url(TEST_GRPC_URL)
         .private_key_hex(TEST_PRIV_KEY)
         .build()
         .await
@@ -49,7 +49,7 @@ pub(crate) async fn new_rpc_only_client() -> Client {
 pub(crate) async fn new_read_only_client() -> Client {
     Client::builder()
         .rpc_url(TEST_RPC_URL)
-        .grpc_url(TEST_GRPC_URL, EndpointConfig::new())
+        .grpc_url(TEST_GRPC_URL)
         .build()
         .await
         .unwrap()
@@ -70,7 +70,7 @@ pub(crate) async fn new_client() -> Client {
 
     Client::builder()
         .rpc_url(TEST_RPC_URL)
-        .grpc_url(TEST_GRPC_URL, EndpointConfig::new())
+        .grpc_url(TEST_GRPC_URL)
         .keypair(random_key)
         .build()
         .await

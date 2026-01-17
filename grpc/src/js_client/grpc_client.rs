@@ -25,25 +25,49 @@ pub struct GrpcClient {
 
 #[wasm_bindgen]
 impl GrpcClient {
-    /// Create a builder for [`GrpcClient`] connected to `url` with optional configuration.
+    /// Create a builder for [`GrpcClient`] connected to `url`.
     ///
     /// # Example
     ///
     /// ```js
-    /// // Without config
     /// const client = await GrpcClient.withUrl("http://localhost:18080").build();
-    ///
-    /// // With config
-    /// const config = new EndpointConfig().withMetadata("authorization", "Bearer token");
-    /// const client = await GrpcClient.withUrl("http://localhost:18080", config).build();
     /// ```
     #[wasm_bindgen(js_name = withUrl)]
-    pub fn with_url(url: String, config: Option<EndpointConfig>) -> GrpcClientBuilder {
-        let config = config.map(|c| c.inner).unwrap_or_default();
-        crate::GrpcClientBuilder::new().url(url, config).into()
+    pub fn with_url(url: String) -> GrpcClientBuilder {
+        crate::GrpcClientBuilder::new().url(url).into()
+    }
+
+    /// Create a builder for [`GrpcClient`] connected to `url` with configuration.
+    ///
+    /// # Example
+    ///
+    /// ```js
+    /// const config = new EndpointConfig().withMetadata("authorization", "Bearer token");
+    /// const client = await GrpcClient.withUrlWithConfig("http://localhost:18080", config).build();
+    /// ```
+    #[wasm_bindgen(js_name = withUrlWithConfig)]
+    pub fn with_url_with_config(url: String, config: EndpointConfig) -> GrpcClientBuilder {
+        crate::GrpcClientBuilder::new()
+            .url_with_config(url, config.inner)
+            .into()
     }
 
     /// Create a builder for [`GrpcClient`] with multiple URL endpoints for fallback support.
+    ///
+    /// When multiple endpoints are configured, the client will automatically
+    /// fall back to the next endpoint if a network-related error occurs.
+    ///
+    /// # Example
+    ///
+    /// ```js
+    /// const client = await GrpcClient.withUrls(["http://primary:9090", "http://fallback:9090"]).build();
+    /// ```
+    #[wasm_bindgen(js_name = withUrls)]
+    pub fn with_urls(urls: Vec<String>) -> GrpcClientBuilder {
+        crate::GrpcClientBuilder::new().urls(urls).into()
+    }
+
+    /// Create a builder for [`GrpcClient`] with multiple URL endpoints and configurations.
     ///
     /// When multiple endpoints are configured, the client will automatically
     /// fall back to the next endpoint if a network-related error occurs.
@@ -55,14 +79,14 @@ impl GrpcClient {
     ///   new EndpointEntry("http://primary:9090", new EndpointConfig().withMetadata("auth", "token1")),
     ///   new EndpointEntry("http://fallback:9090", new EndpointConfig().withTimeout(10000)),
     /// ];
-    /// const client = await GrpcClient.withUrls(endpoints).build();
+    /// const client = await GrpcClient.withUrlsAndConfig(endpoints).build();
     /// ```
-    #[wasm_bindgen(js_name = withUrls)]
-    pub fn with_urls(endpoints: Vec<EndpointEntry>) -> GrpcClientBuilder {
+    #[wasm_bindgen(js_name = withUrlsAndConfig)]
+    pub fn with_urls_and_config(endpoints: Vec<EndpointEntry>) -> GrpcClientBuilder {
         let urls_with_configs: Vec<(String, crate::EndpointConfig)> =
             endpoints.into_iter().map(|e| (e.url, e.config)).collect();
         crate::GrpcClientBuilder::new()
-            .urls(urls_with_configs)
+            .urls_with_config(urls_with_configs)
             .into()
     }
 

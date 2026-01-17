@@ -293,7 +293,7 @@ impl GrpcClient {
     /// let grpc_url = "public-celestia-mocha4-consensus.numia.xyz:9090";
     ///
     /// let tx_client = GrpcClient::builder()
-    ///     .urls([(grpc_url, EndpointConfig::default())])
+    ///     .url(grpc_url)
     ///     .signer_keypair(signing_key)
     ///     .build()
     ///     .unwrap();
@@ -339,7 +339,7 @@ impl GrpcClient {
     /// let grpc_url = "public-celestia-mocha4-consensus.numia.xyz:9090";
     ///
     /// let tx_client = GrpcClient::builder()
-    ///     .urls([(grpc_url, EndpointConfig::default())])
+    ///     .url(grpc_url)
     ///     .signer_keypair(signing_key)
     ///     .build()
     ///     .unwrap();
@@ -393,7 +393,7 @@ impl GrpcClient {
     /// let grpc_url = "public-celestia-mocha4-consensus.numia.xyz:9090";
     ///
     /// let tx_client = GrpcClient::builder()
-    ///     .urls([(grpc_url, EndpointConfig::default())])
+    ///     .url(grpc_url)
     ///     .signer_keypair(signing_key)
     ///     .build()
     ///     .unwrap();
@@ -435,7 +435,7 @@ impl GrpcClient {
     /// let grpc_url = "public-celestia-mocha4-consensus.numia.xyz:9090";
     ///
     /// let tx_client = GrpcClient::builder()
-    ///     .urls([(grpc_url, EndpointConfig::default())])
+    ///     .url(grpc_url)
     ///     .signer_keypair(signing_key)
     ///     .build()
     ///     .unwrap();
@@ -1044,7 +1044,7 @@ mod tests {
         use crate::EndpointConfig;
 
         let client = GrpcClient::builder()
-            .url(
+            .url_with_config(
                 "http://foo",
                 EndpointConfig::new().metadata("x-token", "secret-token"),
             )
@@ -1302,7 +1302,7 @@ mod tests {
 
         let account = load_account();
         let client = GrpcClient::builder()
-            .urls([(EVICTION_TESTING_VAL_URL, crate::EndpointConfig::default())])
+            .url(EVICTION_TESTING_VAL_URL)
             .signer_keypair(account.signing_key)
             .build()
             .unwrap();
@@ -1550,7 +1550,7 @@ mod tests {
 
         // too short timeout set in endpoint config
         let client = GrpcClient::builder()
-            .url(
+            .url_with_config(
                 CELESTIA_GRPC_URL,
                 crate::EndpointConfig::new().timeout(Duration::from_nanos(1)),
             )
@@ -1612,15 +1612,11 @@ mod tests {
     #[cfg(not(target_arch = "wasm32"))]
     #[tokio::test]
     async fn failover_to_second_endpoint() {
-        use crate::EndpointConfig;
         use crate::test_utils::CELESTIA_GRPC_URL;
 
         // First endpoint is invalid, should failover to second valid one
         let client = GrpcClient::builder()
-            .urls([
-                ("http://localhost:19999", EndpointConfig::default()),
-                (CELESTIA_GRPC_URL, EndpointConfig::default()),
-            ])
+            .urls(["http://localhost:19999", CELESTIA_GRPC_URL])
             .build()
             .unwrap();
 
@@ -1631,14 +1627,10 @@ mod tests {
     #[cfg(not(target_arch = "wasm32"))]
     #[tokio::test]
     async fn endpoint_multiple_requests() {
-        use crate::EndpointConfig;
         use crate::test_utils::CELESTIA_GRPC_URL;
 
         let client = GrpcClient::builder()
-            .urls([
-                ("http://localhost:19999", EndpointConfig::default()),
-                (CELESTIA_GRPC_URL, EndpointConfig::default()),
-            ])
+            .urls(["http://localhost:19999", CELESTIA_GRPC_URL])
             .build()
             .unwrap();
 
@@ -1655,13 +1647,8 @@ mod tests {
     #[cfg(not(target_arch = "wasm32"))]
     #[tokio::test]
     async fn all_endpoints_fail_returns_error() {
-        use crate::EndpointConfig;
-
         let client = GrpcClient::builder()
-            .urls([
-                ("http://localhost:19999", EndpointConfig::default()),
-                ("http://localhost:19998", EndpointConfig::default()),
-            ])
+            .urls(["http://localhost:19999", "http://localhost:19998"])
             .build()
             .unwrap();
 
@@ -1681,7 +1668,7 @@ mod tests {
 
         // Connect with correct authorization token - should succeed
         let client = GrpcClient::builder()
-            .url(
+            .url_with_config(
                 &proxy_url,
                 EndpointConfig::new()
                     .metadata("authorization", &format!("Bearer {}", TEST_AUTH_TOKEN)),
@@ -1696,7 +1683,6 @@ mod tests {
     #[cfg(not(target_arch = "wasm32"))]
     #[tokio::test]
     async fn auth_proxy_without_token() {
-        use crate::EndpointConfig;
         use crate::test_utils::{CELESTIA_GRPC_URL, TEST_AUTH_TOKEN, spawn_grpc_auth_proxy};
 
         // Spawn the auth proxy
@@ -1704,10 +1690,7 @@ mod tests {
         let proxy_url = format!("http://{}", addr);
 
         // Connect without authorization token - should fail with Unauthenticated
-        let client = GrpcClient::builder()
-            .url(&proxy_url, EndpointConfig::default())
-            .build()
-            .unwrap();
+        let client = GrpcClient::builder().url(&proxy_url).build().unwrap();
 
         let result = client.get_auth_params().await;
         let Error::TonicError(status) = result.unwrap_err() else {
@@ -1733,7 +1716,7 @@ mod tests {
 
         // Connect with wrong authorization token - should fail with Unauthenticated
         let client = GrpcClient::builder()
-            .url(
+            .url_with_config(
                 &proxy_url,
                 EndpointConfig::new().metadata("authorization", "Bearer wrong-token"),
             )
@@ -1767,7 +1750,7 @@ mod tests {
         // 2. Second endpoint is auth proxy with correct token
         // This tests that per-endpoint metadata is correctly applied during failover
         let client = GrpcClient::builder()
-            .urls([
+            .urls_with_config([
                 (
                     "http://localhost:19999", // unreachable
                     EndpointConfig::default(),
@@ -1802,7 +1785,7 @@ mod tests {
         // - Second: auth proxy (needs auth token) with longer timeout
         // Both should be valid configurations
         let client = GrpcClient::builder()
-            .urls([
+            .urls_with_config([
                 (
                     CELESTIA_GRPC_URL,
                     EndpointConfig::new().timeout(Duration::from_secs(5)),

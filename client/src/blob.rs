@@ -31,7 +31,7 @@ impl BlobApi {
     ///
     /// # Example
     /// ```no_run
-    /// # use celestia_client::{Client, EndpointConfig, Result};
+    /// # use celestia_client::{Client, Result};
     /// # use celestia_client::tx::TxConfig;
     /// # async fn docs() -> Result<()> {
     /// use celestia_types::nmt::Namespace;
@@ -40,7 +40,7 @@ impl BlobApi {
     ///
     /// let client = Client::builder()
     ///     .rpc_url("ws://localhost:26658")
-    ///     .grpc_url("http://localhost:9090", EndpointConfig::new())
+    ///     .grpc_url("http://localhost:9090")
     ///     .private_key_hex("393fdb5def075819de55756b45c9e2c8531a8c78dd6eede483d3440e9457d839")
     ///     .build()
     ///     .await?;

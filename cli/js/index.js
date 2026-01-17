@@ -30,7 +30,7 @@ async function createTxClient() {
   };
 
   const config = new EndpointConfig();
-  const txClient = await GrpcClient.withUrl("http://127.0.0.1:18080", config)
+  const txClient = await GrpcClient.withUrlWithConfig("http://127.0.0.1:18080", config)
     .withPubkeyAndSigner(pubKey, signer)
     .build();
   return txClient;
