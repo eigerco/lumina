@@ -54,9 +54,9 @@ mod imp {
     use bytes::Bytes;
     use celestia_rpc::Client;
     use http_body_util::{BodyExt, Empty};
-    use hyper::{body::Incoming, header::HOST, service::service_fn, Request, Response, StatusCode};
+    use hyper::{Request, Response, StatusCode, body::Incoming, header::HOST, service::service_fn};
     use hyper_util::{
-        client::legacy::{connect::HttpConnector, Client as HyperClient},
+        client::legacy::{Client as HyperClient, connect::HttpConnector},
         rt::{TokioExecutor, TokioIo},
         server::conn::auto::Builder as ServerBuilder,
     };
@@ -121,8 +121,9 @@ mod imp {
         let mut http = HttpConnector::new();
         http.enforce_http(false);
 
-        let client: HyperClient<_, Incoming> =
-            HyperClient::builder(TokioExecutor::new()).http2_only(true).build(http);
+        let client: HyperClient<_, Incoming> = HyperClient::builder(TokioExecutor::new())
+            .http2_only(true)
+            .build(http);
 
         let upstream_base = Arc::new(upstream_base.trim_end_matches('/').to_string());
         let expected_token = Arc::new(expected_token.to_string());
@@ -153,25 +154,24 @@ mod imp {
                                 .and_then(|v| v.to_str().ok());
 
                             let want = format!("Bearer {}", expected_token);
-                            let ok =
-                                auth == Some(want.as_str()) || auth == Some(expected_token.as_str());
+                            let ok = auth == Some(want.as_str())
+                                || auth == Some(expected_token.as_str());
 
                             if !ok {
                                 let resp = Response::builder()
                                     .status(StatusCode::UNAUTHORIZED)
                                     .header("content-type", "application/grpc")
-                                    .body(
-                                        Empty::<Bytes>::new()
-                                            .map_err(|err| match err {})
-                                            .boxed(),
-                                    )
+                                    .body(Empty::<Bytes>::new().map_err(|err| match err {}).boxed())
                                     .unwrap();
                                 return Ok::<_, Infallible>(resp);
                             }
 
                             // --- 2) rewrite URI to upstream (keep path/query intact) ---
-                            let path_and_query =
-                                req.uri().path_and_query().map(|pq| pq.as_str()).unwrap_or("/");
+                            let path_and_query = req
+                                .uri()
+                                .path_and_query()
+                                .map(|pq| pq.as_str())
+                                .unwrap_or("/");
 
                             let new_uri = format!("{}{}", upstream_base.as_str(), path_and_query);
 

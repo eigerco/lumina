@@ -1673,7 +1673,7 @@ mod tests {
     #[tokio::test]
     async fn auth_proxy_with_valid_token() {
         use crate::EndpointConfig;
-        use crate::test_utils::{spawn_grpc_auth_proxy, CELESTIA_GRPC_URL, TEST_AUTH_TOKEN};
+        use crate::test_utils::{CELESTIA_GRPC_URL, TEST_AUTH_TOKEN, spawn_grpc_auth_proxy};
 
         // Spawn the auth proxy
         let (addr, _handle) = spawn_grpc_auth_proxy(CELESTIA_GRPC_URL, TEST_AUTH_TOKEN).await;
@@ -1683,7 +1683,8 @@ mod tests {
         let client = GrpcClient::builder()
             .url(
                 &proxy_url,
-                EndpointConfig::new().metadata("authorization", &format!("Bearer {}", TEST_AUTH_TOKEN)),
+                EndpointConfig::new()
+                    .metadata("authorization", &format!("Bearer {}", TEST_AUTH_TOKEN)),
             )
             .build()
             .unwrap();
@@ -1696,7 +1697,7 @@ mod tests {
     #[tokio::test]
     async fn auth_proxy_without_token() {
         use crate::EndpointConfig;
-        use crate::test_utils::{spawn_grpc_auth_proxy, CELESTIA_GRPC_URL, TEST_AUTH_TOKEN};
+        use crate::test_utils::{CELESTIA_GRPC_URL, TEST_AUTH_TOKEN, spawn_grpc_auth_proxy};
 
         // Spawn the auth proxy
         let (addr, _handle) = spawn_grpc_auth_proxy(CELESTIA_GRPC_URL, TEST_AUTH_TOKEN).await;
@@ -1724,7 +1725,7 @@ mod tests {
     #[tokio::test]
     async fn auth_proxy_with_wrong_token() {
         use crate::EndpointConfig;
-        use crate::test_utils::{spawn_grpc_auth_proxy, CELESTIA_GRPC_URL, TEST_AUTH_TOKEN};
+        use crate::test_utils::{CELESTIA_GRPC_URL, TEST_AUTH_TOKEN, spawn_grpc_auth_proxy};
 
         // Spawn the auth proxy
         let (addr, _handle) = spawn_grpc_auth_proxy(CELESTIA_GRPC_URL, TEST_AUTH_TOKEN).await;
@@ -1755,7 +1756,7 @@ mod tests {
     #[tokio::test]
     async fn auth_proxy_failover_unreachable_then_authenticated() {
         use crate::EndpointConfig;
-        use crate::test_utils::{spawn_grpc_auth_proxy, CELESTIA_GRPC_URL, TEST_AUTH_TOKEN};
+        use crate::test_utils::{CELESTIA_GRPC_URL, TEST_AUTH_TOKEN, spawn_grpc_auth_proxy};
 
         // Spawn the auth proxy
         let (addr, _handle) = spawn_grpc_auth_proxy(CELESTIA_GRPC_URL, TEST_AUTH_TOKEN).await;
@@ -1789,7 +1790,7 @@ mod tests {
     #[tokio::test]
     async fn multiple_endpoints_different_configs() {
         use crate::EndpointConfig;
-        use crate::test_utils::{spawn_grpc_auth_proxy, CELESTIA_GRPC_URL, TEST_AUTH_TOKEN};
+        use crate::test_utils::{CELESTIA_GRPC_URL, TEST_AUTH_TOKEN, spawn_grpc_auth_proxy};
         use std::time::Duration;
 
         // Spawn the auth proxy

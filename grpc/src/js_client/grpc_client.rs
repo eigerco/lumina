@@ -61,7 +61,9 @@ impl GrpcClient {
     pub fn with_urls(endpoints: Vec<EndpointEntry>) -> GrpcClientBuilder {
         let urls_with_configs: Vec<(String, crate::EndpointConfig)> =
             endpoints.into_iter().map(|e| (e.url, e.config)).collect();
-        crate::GrpcClientBuilder::new().urls(urls_with_configs).into()
+        crate::GrpcClientBuilder::new()
+            .urls(urls_with_configs)
+            .into()
     }
 
     /// Get auth params
