@@ -3,9 +3,9 @@ use std::sync::OnceLock;
 use serde::{Deserialize, Serialize};
 use tokio::sync::{Mutex, MutexGuard};
 
+use crate::Client;
 use crate::tx::{SigningKey, TxConfig};
 use crate::types::state::{AccAddress, ValAddress};
-use crate::Client;
 
 pub(crate) const TEST_PRIV_KEY: &str = include_str!("../../ci/credentials/node-0.plaintext-key");
 #[cfg(not(target_arch = "wasm32"))]
