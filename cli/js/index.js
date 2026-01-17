@@ -29,7 +29,7 @@ async function createTxClient() {
     return sig.toCompactRawBytes();
   };
 
-  const config = new EndpointConfig().withTimeout(BigInt(5000));
+  const config = new EndpointConfig();
   const txClient = await GrpcClient.withUrl("http://127.0.0.1:18080", config)
     .withPubkeyAndSigner(pubKey, signer)
     .build();
