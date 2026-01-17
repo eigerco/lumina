@@ -11,6 +11,114 @@ mod grpc_client;
 
 use grpc_client::GrpcClient;
 
+/// Configuration specific to a single URL endpoint.
+///
+/// This includes HTTP/2 headers (metadata) and timeout that will be applied
+/// to all requests made to this endpoint.
+///
+/// # Example
+///
+/// ```js
+/// const config = new EndpointConfig()
+///   .withMetadata("authorization", "Bearer token")
+///   .withTimeout(5000);
+///
+/// const client = await GrpcClientBuilder
+///   .withUrl("http://127.0.0.1:18080", config)
+///   .build();
+/// ```
+#[wasm_bindgen]
+pub struct EndpointConfig {
+    pub(crate) inner: crate::EndpointConfig,
+}
+
+#[wasm_bindgen]
+impl EndpointConfig {
+    /// Create a new, empty endpoint configuration.
+    #[wasm_bindgen(constructor)]
+    pub fn new() -> Self {
+        Self {
+            inner: crate::EndpointConfig::new(),
+        }
+    }
+
+    /// Appends ASCII metadata (HTTP/2 header) to requests made to this endpoint.
+    ///
+    /// Note that this method **consumes** the config and returns an updated instance.
+    #[wasm_bindgen(js_name = "withMetadata")]
+    pub fn with_metadata(self, key: String, value: String) -> Self {
+        Self {
+            inner: self.inner.metadata(key, value),
+        }
+    }
+
+    /// Appends binary metadata to requests made to this endpoint.
+    ///
+    /// Keys must have `-bin` suffix.
+    ///
+    /// Note that this method **consumes** the config and returns an updated instance.
+    #[wasm_bindgen(js_name = "withMetadataBin")]
+    pub fn with_metadata_bin(self, key: String, value: Uint8Array) -> Self {
+        Self {
+            inner: self.inner.metadata_bin(key, value.to_vec()),
+        }
+    }
+
+    /// Sets the request timeout in milliseconds for this endpoint.
+    ///
+    /// Note that this method **consumes** the config and returns an updated instance.
+    #[wasm_bindgen(js_name = "withTimeout")]
+    pub fn with_timeout(self, timeout_ms: u64) -> Self {
+        Self {
+            inner: self.inner.timeout(Duration::from_millis(timeout_ms)),
+        }
+    }
+}
+
+impl Default for EndpointConfig {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// A URL endpoint paired with its configuration.
+///
+/// Use this with `withUrls` to configure multiple endpoints with different settings.
+///
+/// # Example
+///
+/// ```js
+/// const primary = new EndpointEntry(
+///   "http://primary:9090",
+///   new EndpointConfig().withMetadata("auth", "token1")
+/// );
+/// const fallback = new EndpointEntry(
+///   "http://fallback:9090",
+///   new EndpointConfig().withTimeout(10000)
+/// );
+///
+/// const client = await new GrpcClientBuilder()
+///   .withUrls([primary, fallback])
+///   .build();
+/// ```
+#[wasm_bindgen]
+pub struct EndpointEntry {
+    pub(crate) url: String,
+    pub(crate) config: crate::EndpointConfig,
+}
+
+#[wasm_bindgen]
+impl EndpointEntry {
+    /// Create a new endpoint entry with a URL and optional configuration.
+    #[wasm_bindgen(constructor)]
+    pub fn new(url: String, config: Option<EndpointConfig>) -> Self {
+        Self {
+            url,
+            config: config.map(|c| c.inner).unwrap_or_default(),
+        }
+    }
+}
+
 /// Builder for [`GrpcClient`] and [`TxClient`].
 ///
 /// Url must point to a [grpc-web proxy](https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-WEB.md).
@@ -18,9 +126,14 @@ use grpc_client::GrpcClient;
 /// # Keyless client example
 ///
 /// ```js
-/// const client = await GrpcClient
+/// const client = await new GrpcClientBuilder()
 ///   .withUrl("http://127.0.0.1:18080")
-///   .withTimeout(5000)  // Optional: 5 second timeout
+///   .build()
+///
+/// // With config:
+/// const config = new EndpointConfig().withTimeout(5000);
+/// const client = await new GrpcClientBuilder()
+///   .withUrlWithConfig("http://127.0.0.1:18080", config)
 ///   .build()
 /// ```
 ///
@@ -39,7 +152,7 @@ use grpc_client::GrpcClient;
 ///   return sig.toCompactRawBytes();
 /// };
 ///
-/// const client = await GrpcClient
+/// const client = await new GrpcClientBuilder()
 ///   .withUrl("http://127.0.0.1:18080")
 ///   .withPubkeyAndSigner(pubKey, signer)
 ///   .build();
@@ -55,7 +168,7 @@ use grpc_client::GrpcClient;
 ///     .then(sig => Uint8Array.from(atob(sig.signature.signature), c => c.charCodeAt(0)))
 /// }
 ///
-/// const client = await GrpcClient
+/// const client = await new GrpcClientBuilder()
 ///   .withUrl("http://127.0.0.1:18080")
 ///   .withPubkeyAndSigner(keys.pubKey, signer)
 ///   .build()
@@ -67,7 +180,7 @@ pub struct GrpcClientBuilder {
 
 #[wasm_bindgen]
 impl GrpcClientBuilder {
-    /// Set the `url` of the grpc-web server to connect to
+    /// Set the `url` of the grpc-web server to connect to.
     ///
     /// Note that this method **consumes** builder and returns updated instance of it.
     /// Make sure to re-assign it if you keep builder in a variable.
@@ -78,10 +191,29 @@ impl GrpcClientBuilder {
         }
     }
 
+    /// Set the `url` of the grpc-web server to connect to with configuration.
+    ///
+    /// Note that this method **consumes** builder and returns updated instance of it.
+    /// Make sure to re-assign it if you keep builder in a variable.
+    #[wasm_bindgen(js_name = "withUrlWithConfig")]
+    pub fn with_url_with_config(self, url: String, config: EndpointConfig) -> Self {
+        Self {
+            inner: self.inner.url_with_config(url, config.inner),
+        }
+    }
+
     /// Add multiple URL endpoints at once for fallback support.
     ///
     /// When multiple endpoints are configured, the client will automatically
     /// fall back to the next endpoint if a network-related error occurs.
+    ///
+    /// # Example
+    ///
+    /// ```js
+    /// const client = await new GrpcClientBuilder()
+    ///   .withUrls(["http://primary:9090", "http://fallback:9090"])
+    ///   .build();
+    /// ```
     ///
     /// Note that this method **consumes** builder and returns updated instance of it.
     /// Make sure to re-assign it if you keep builder in a variable.
@@ -89,6 +221,33 @@ impl GrpcClientBuilder {
     pub fn with_urls(self, urls: Vec<String>) -> Self {
         Self {
             inner: self.inner.urls(urls),
+        }
+    }
+
+    /// Add multiple URL endpoints with configurations for fallback support.
+    ///
+    /// When multiple endpoints are configured, the client will automatically
+    /// fall back to the next endpoint if a network-related error occurs.
+    ///
+    /// # Example
+    ///
+    /// ```js
+    /// const client = await new GrpcClientBuilder()
+    ///   .withUrlsAndConfig([
+    ///     new EndpointEntry("http://primary:9090", new EndpointConfig().withMetadata("auth", "token1")),
+    ///     new EndpointEntry("http://fallback:9090", new EndpointConfig().withTimeout(10000)),
+    ///   ])
+    ///   .build();
+    /// ```
+    ///
+    /// Note that this method **consumes** builder and returns updated instance of it.
+    /// Make sure to re-assign it if you keep builder in a variable.
+    #[wasm_bindgen(js_name = "withUrlsAndConfig")]
+    pub fn with_urls_and_config(self, endpoints: Vec<EndpointEntry>) -> Self {
+        let urls_with_configs: Vec<(String, crate::EndpointConfig)> =
+            endpoints.into_iter().map(|e| (e.url, e.config)).collect();
+        Self {
+            inner: self.inner.urls_with_config(urls_with_configs),
         }
     }
 
@@ -108,41 +267,6 @@ impl GrpcClientBuilder {
         Ok(Self {
             inner: self.inner.pubkey_and_signer(account_pubkey, signer),
         })
-    }
-
-    /// Appends ascii metadata to all requests made by the client.
-    ///
-    /// Note that this method **consumes** builder and returns updated instance of it.
-    /// Make sure to re-assign it if you keep builder in a variable.
-    #[wasm_bindgen(js_name = withMetadata)]
-    pub fn with_metadata(self, key: String, value: String) -> Self {
-        Self {
-            inner: self.inner.metadata(&key, &value),
-        }
-    }
-
-    /// Appends binary metadata to all requests made by the client.
-    ///
-    /// Keys for binary metadata must have `-bin` suffix.
-    ///
-    /// Note that this method **consumes** builder and returns updated instance of it.
-    /// Make sure to re-assign it if you keep builder in a variable.
-    #[wasm_bindgen(js_name = withMetadataBin)]
-    pub fn with_metadata_bin(self, key: String, value: Uint8Array) -> Self {
-        Self {
-            inner: self.inner.metadata_bin(&key, &value.to_vec()),
-        }
-    }
-
-    /// Sets the request timeout in milliseconds, overriding default one from the transport.
-    ///
-    /// Note that this method **consumes** builder and returns updated instance of it.
-    /// Make sure to re-assign it if you keep builder in a variable.
-    #[wasm_bindgen(js_name = withTimeout)]
-    pub fn with_timeout(self, timeout_ms: u64) -> Self {
-        Self {
-            inner: self.inner.timeout(Duration::from_millis(timeout_ms)),
-        }
     }
 
     /// build gRPC client

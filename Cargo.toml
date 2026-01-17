@@ -77,9 +77,9 @@ serde-wasm-bindgen = "0.6"
 tendermint = { version = "0.40.3", default-features = false }
 tendermint-proto = "0.40.3"
 time = { version = "0.3.35", default-features = false }
-tokio = "1.42"
+tokio = "1.49.0"
 tokio-util = "0.7.14"
-tokio-stream = "0.1.16"
+tokio-stream = "0.1.18"
 tonic = { version = "0.13", default-features = false }
 tonic-build = { version = "0.13", default-features = false }
 tonic-web-wasm-client = "0.7"
