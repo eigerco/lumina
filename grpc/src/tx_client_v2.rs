@@ -86,6 +86,9 @@ pub type TxSubmitResult<T> = Result<T, SubmitFailure>;
 /// Result for confirmation calls.
 pub type TxConfirmResult<T> = Result<T>;
 
+pub trait TxIdT: Clone + std::fmt::Debug {}
+impl<T> TxIdT for T where T: Clone + std::fmt::Debug {}
+
 #[derive(Debug, Clone)]
 pub enum TxRequest {
     /// Pay-for-blobs transaction.
@@ -97,24 +100,26 @@ pub enum TxRequest {
 }
 
 #[derive(Debug)]
-pub struct Transaction<TxId, ConfirmInfo> {
+pub struct Transaction<TxId: TxIdT, ConfirmInfo> {
     /// Transaction sequence for the signer.
     pub sequence: u64,
     /// Signed transaction bytes ready for broadcast.
     pub bytes: Vec<u8>,
     /// One-shot callbacks for submit/confirm acknowledgements.
     pub callbacks: TxCallbacks<TxId, ConfirmInfo>,
+    /// Id of the transaction
+    pub id: TxId,
 }
 
 #[derive(Debug)]
-pub struct TxCallbacks<TxId, ConfirmInfo> {
+pub struct TxCallbacks<TxId: TxIdT, ConfirmInfo> {
     /// Resolves when submission succeeds or fails.
     pub on_submit: Option<oneshot::Sender<Result<TxId>>>,
     /// Resolves when the transaction is confirmed or rejected.
     pub on_confirm: Option<oneshot::Sender<Result<ConfirmInfo>>>,
 }
 
-impl<TxId, ConfirmInfo> Default for TxCallbacks<TxId, ConfirmInfo> {
+impl<TxId: TxIdT, ConfirmInfo> Default for TxCallbacks<TxId, ConfirmInfo> {
     fn default() -> Self {
         Self {
             on_submit: None,
@@ -124,7 +129,7 @@ impl<TxId, ConfirmInfo> Default for TxCallbacks<TxId, ConfirmInfo> {
 }
 
 #[derive(Debug)]
-pub struct TxHandle<TxId, ConfirmInfo> {
+pub struct TxHandle<TxId: TxIdT, ConfirmInfo> {
     /// Sequence reserved for this transaction.
     pub sequence: u64,
     /// Receives submit result.
@@ -134,7 +139,7 @@ pub struct TxHandle<TxId, ConfirmInfo> {
 }
 
 #[async_trait]
-pub trait SignFn<TxId, ConfirmInfo>: Send + Sync {
+pub trait SignFn<TxId: TxIdT, ConfirmInfo>: Send + Sync {
     /// Produce a signed `Transaction` for the provided request and sequence.
     ///
     /// # Notes
@@ -149,14 +154,14 @@ pub trait SignFn<TxId, ConfirmInfo>: Send + Sync {
 }
 
 #[derive(Clone)]
-pub struct TransactionManager<TxId, ConfirmInfo> {
+pub struct TransactionManager<TxId: TxIdT, ConfirmInfo> {
     add_tx: mpsc::Sender<Transaction<TxId, ConfirmInfo>>,
     next_sequence: Arc<Mutex<u64>>,
     max_sent: Arc<AtomicU64>,
     signer: Arc<dyn SignFn<TxId, ConfirmInfo>>,
 }
 
-impl<TxId, ConfirmInfo> TransactionManager<TxId, ConfirmInfo> {
+impl<TxId: TxIdT, ConfirmInfo> TransactionManager<TxId, ConfirmInfo> {
     /// Sign and enqueue a transaction, returning a handle for submit/confirm.
     ///
     /// # Notes
@@ -220,7 +225,7 @@ impl<TxId, ConfirmInfo> TransactionManager<TxId, ConfirmInfo> {
 }
 
 #[derive(Debug)]
-struct TxIndexEntry<TxId> {
+struct TxIndexEntry<TxId: TxIdT> {
     node_id: NodeId,
     sequence: u64,
     id: TxId,
@@ -231,7 +236,7 @@ struct NodeSubmissionState {
     submitted_seq: u64,
     inflight: bool,
     confirm_inflight: bool,
-    submit_delay_until: Option<time::Instant>,
+    delay: Option<time::Duration>,
 }
 
 #[derive(Debug)]
@@ -240,8 +245,8 @@ pub enum TxStatus<ConfirmInfo> {
     Pending,
     /// Included in a block successfully with confirmation info.
     Confirmed { info: ConfirmInfo },
-    /// Rejected by the node (with an expected sequence hint).
-    Rejected { expected: u64 },
+    /// Rejected by the node with a specific reason.
+    Rejected { reason: RejectionReason },
     /// Removed from mempool; may need resubmission.
     Evicted,
     /// Status could not be determined.
@@ -265,16 +270,20 @@ pub enum SubmitFailure {
 }
 
 #[derive(Debug)]
-pub enum ConfirmFailure {
-    /// Server expects a different sequence.
+pub struct ConfirmFailure {
+    reason: RejectionReason,
+}
+
+#[derive(Debug)]
+pub enum RejectionReason {
     SequenceMismatch { expected: u64 },
-    /// Rejected during recovery with a specific expected sequence.
-    Rejected { sequence: u64, expected: u64 },
+    OtherReason, // todo: replace with some string reason
+    UnknownTransaction,
 }
 
 #[async_trait]
 pub trait TxServer: Send + Sync {
-    type TxId: Clone + Eq + StdHash + Send + Sync + 'static;
+    type TxId: TxIdT + Clone + Eq + StdHash + Send + Sync + 'static;
     type ConfirmInfo: Send + Sync + 'static;
 
     /// Submit signed bytes with the given sequence, returning a server TxId.
@@ -283,30 +292,14 @@ pub trait TxServer: Send + Sync {
     async fn status_batch(
         &self,
         ids: Vec<Self::TxId>,
-    ) -> TxConfirmResult<HashMap<Self::TxId, TxStatus<Self::ConfirmInfo>>>;
+    ) -> TxConfirmResult<Vec<(Self::TxId, TxStatus<Self::ConfirmInfo>)>>;
     /// Fetch current sequence for the account (used by some implementations).
     async fn current_sequence(&self) -> Result<u64>;
 }
 
 #[derive(Debug)]
 enum TransactionEvent<TxId, ConfirmInfo> {
-    Added(Transaction<TxId, ConfirmInfo>),
     Submitted {
-        node_id: NodeId,
-        sequence: u64,
-        id: TxId,
-    },
-    Confirmed {
-        sequence: u64,
-        info: ConfirmInfo,
-        id: TxId,
-    },
-    Rejected {
-        node_id: NodeId,
-        sent: u64,
-        actual: u64,
-    },
-    Evicted {
         node_id: NodeId,
         sequence: u64,
         id: TxId,
@@ -318,7 +311,7 @@ enum TransactionEvent<TxId, ConfirmInfo> {
     },
     StatusBatch {
         node_id: NodeId,
-        statuses: HashMap<TxId, TxStatus<ConfirmInfo>>,
+        statuses: Vec<(TxId, TxStatus<ConfirmInfo>)>,
     },
 }
 
@@ -327,6 +320,40 @@ enum ProcessorState {
     Recovering { node_id: NodeId, expected: u64 },
     Submitting,
     Stopped(StopReason),
+}
+
+impl ProcessorState {
+    fn update(&mut self, other: ProcessorState) {
+        match (&self, other) {
+            (ProcessorState::Stopped(stop_reason), _) => {}
+            (ProcessorState::Recovering { .. }, ProcessorState::Stopped(stop_reason)) => {
+                *self = ProcessorState::Stopped(stop_reason);
+            }
+            (ProcessorState::Recovering { .. }, _) => {}
+            (_, other) => {
+                *self = other;
+            }
+        }
+    }
+
+    fn recovering_sequence(&self) -> u64 {
+        match self {
+            ProcessorState::Recovering { node_id, expected } => expected.clone(),
+            _ => 0,
+        }
+    }
+
+    fn is_stopped(&self) -> bool {
+        matches!(self, ProcessorState::Stopped(_))
+    }
+
+    fn is_recovering(&self) -> bool {
+        matches!(self, ProcessorState::Recovering { .. })
+    }
+
+    fn is_submitting(&self) -> bool {
+        matches!(self, ProcessorState::Submitting)
+    }
 }
 
 #[derive(Debug)]
@@ -356,13 +383,13 @@ struct SubmissionResult<TxId> {
 
 struct ConfirmationResult<TxId, ConfirmInfo> {
     node_id: NodeId,
-    statuses: HashMap<TxId, TxStatus<ConfirmInfo>>,
+    statuses: Vec<(TxId, TxStatus<ConfirmInfo>)>,
 }
 
 pub struct TransactionWorker<S: TxServer> {
     nodes: HashMap<NodeId, Arc<S>>,
     txs: VecDeque<Transaction<S::TxId, S::ConfirmInfo>>,
-    tx_index: HashMap<S::TxId, TxIndexEntry<S::TxId>>,
+    tx_index: HashMap<S::TxId, u64>,
     events: VecDeque<TransactionEvent<S::TxId, S::ConfirmInfo>>,
     confirmed_info: HashMap<u64, S::ConfirmInfo>,
     confirmed_sequence: u64,
@@ -376,6 +403,7 @@ pub struct TransactionWorker<S: TxServer> {
     confirm_ticker: time::Interval,
     confirm_interval: Duration,
     max_status_batch: usize,
+    state: ProcessorState,
 }
 
 impl<S: TxServer + 'static> TransactionWorker<S> {
@@ -422,6 +450,7 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
                 submissions: JoinSet::new(),
                 confirmations: JoinSet::new(),
                 confirm_ticker: time::interval(confirm_interval),
+                state: ProcessorState::Submitting,
                 confirm_interval,
                 max_status_batch,
             },
@@ -436,7 +465,9 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
             )));
         }
         self.next_enqueue_sequence += 1;
+        let id = tx.id.clone();
         self.txs.push_back(tx);
+        self.tx_index.insert(id, self.next_enqueue_sequence);
         self.new_submit.notify_one();
         Ok(())
     }
@@ -447,285 +478,306 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
     /// - The worker is single-owner; it should be run in a dedicated task.
     /// - On terminal failures it returns `Ok(())` after notifying callbacks.
     pub async fn process(&mut self, shutdown: Arc<Notify>) -> Result<()> {
-        let mut state = ProcessorState::Submitting;
         loop {
-            state = match state {
+            while let Some(event) = self.events.pop_front() {
+                self.process_event(event).await?;
+            }
+
+            let state = std::mem::replace(&mut self.state, ProcessorState::Submitting);
+            match state {
                 ProcessorState::Recovering { node_id, expected } => {
-                    self.run_recovering(&shutdown, node_id, expected).await?
+                    self.run_recovering(&node_id, expected).await?;
+                    self.state = ProcessorState::Recovering { node_id, expected };
                 }
-                ProcessorState::Submitting => self.run_submitting(&shutdown).await?,
-                ProcessorState::Stopped(_) => break,
-            };
+                ProcessorState::Submitting => {
+                    self.run_submitting().await?;
+                    self.state = ProcessorState::Submitting;
+                }
+                ProcessorState::Stopped(reason) => {
+                    self.state = ProcessorState::Stopped(reason);
+                    break;
+                }
+            }
         }
         Ok(())
     }
 
-    async fn run_recovering(
-        &mut self,
-        shutdown: &Notify,
-        node_id: NodeId,
-        mut expected: u64,
-    ) -> Result<ProcessorState> {
-        if !self.events.is_empty() {
-            let drained = self
-                .process_events(ProcessorState::Recovering {
-                    node_id: node_id.clone(),
-                    expected,
-                })
-                .await?;
-            match drained {
-                ProcessorState::Stopped(reason) => {
-                    return Ok(ProcessorState::Stopped(reason));
-                }
-                ProcessorState::Recovering {
-                    node_id: _,
-                    expected: drained_expected,
-                } => {
-                    if drained_expected > expected {
-                        expected = drained_expected;
-                    }
-                }
-                ProcessorState::Submitting => {}
-            }
+    async fn run_recovering(&mut self, node_id: &NodeId, expected: u64) -> Result<()> {
+        let start = self.confirmed_sequence.saturating_add(1);
+        if expected < start {
+            self.state = ProcessorState::Submitting;
+            return Ok(());
         }
 
-        loop {
-            let start = self.confirmed_sequence.saturating_add(1);
-            if expected < start {
-                return Ok(ProcessorState::Submitting);
-            }
-
-            tokio::select! {
+        tokio::select! {
             _ = self.confirm_ticker.tick() => {
-                let start = self.confirmed_sequence.saturating_add(1);
-                self.spawn_confirmations(Some((start, expected)), Some(&node_id));
+                self.spawn_confirmations(Some(expected), Some(&node_id));
+            }
+            Some(result) = self.confirmations.join_next() => {
+                match result {
+                    Ok(ConfirmationResult { node_id, statuses }) => {
+                        self.events.push_back(TransactionEvent::StatusBatch { node_id, statuses });
+                    }
+                    Err(err) => {
+                        // TODO: add error handling
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    async fn run_submitting(&mut self) -> Result<()> {
+        tokio::select! {
+            Some(tx) = self.add_tx_rx.recv() => {
+                self.enqueue_tx(tx)?;
+            }
+            _ = self.new_submit.notified() => {
+                self.spawn_submissions();
+            }
+            _ = self.confirm_ticker.tick() => {
+                self.spawn_confirmations(None, None);
+            }
+            Some(result) = self.submissions.join_next() => {
+                if let Ok(result) = result {
+                    self.events.push_back(match result.result {
+                        Ok(id) => TransactionEvent::Submitted {
+                            node_id: result.node_id,
+                            sequence: result.sequence,
+                            id,
+                        },
+                        Err(failure) => TransactionEvent::SubmitFailed {
+                            node_id: result.node_id,
+                            sequence: result.sequence,
+                            failure,
+                        },
+                    });
+                    self.new_event.notify_one();
+                }
             }
             Some(result) = self.confirmations.join_next() => {
                 if let Ok(result) = result {
-                    if let Some(next_state) =
-                        self.handle_recovery_confirmation(&node_id, expected, result)
-                    {
-                        return Ok(next_state);
-                    }
-                }
-            }
-            _ = shutdown.notified() => return Ok(ProcessorState::Stopped(StopReason::Shutdown)),
-            }
-        }
-    }
-
-    async fn run_submitting(&mut self, shutdown: &Notify) -> Result<ProcessorState> {
-        loop {
-            let next_state = tokio::select! {
-                Some(tx) = self.add_tx_rx.recv() => {
-                    self.enqueue_tx(tx)?;
-                    ProcessorState::Submitting
-                }
-                _ = self.new_submit.notified() => {
-                    self.spawn_submissions();
-                    ProcessorState::Submitting
-                }
-                _ = self.new_event.notified() => self.process_events(ProcessorState::Submitting).await?,
-                _ = self.confirm_ticker.tick() => {
-                    self.spawn_confirmations(None, None);
-                    ProcessorState::Submitting
-                }
-                Some(result) = self.submissions.join_next() => {
-                    if let Ok(result) = result {
-                        self.events.push_back(match result.result {
-                            Ok(id) => TransactionEvent::Submitted {
-                                node_id: result.node_id,
-                                sequence: result.sequence,
-                                id,
-                            },
-                            Err(failure) => TransactionEvent::SubmitFailed {
-                                node_id: result.node_id,
-                                sequence: result.sequence,
-                                failure,
-                            },
-                        });
-                        self.new_event.notify_one();
-                    }
-                    ProcessorState::Submitting
-                }
-                Some(result) = self.confirmations.join_next() => {
-                    if let Ok(result) = result {
-                        self.events.push_back(TransactionEvent::StatusBatch {
-                            node_id: result.node_id,
-                            statuses: result.statuses,
-                        });
-                        self.new_event.notify_one();
-                    }
-                    ProcessorState::Submitting
-                }
-                _ = shutdown.notified() => ProcessorState::Stopped(StopReason::Shutdown),
-            };
-
-            match next_state {
-                ProcessorState::Submitting => continue,
-                ProcessorState::Recovering { .. } | ProcessorState::Stopped(_) => {
-                    return Ok(next_state);
+                    self.events.push_back(TransactionEvent::StatusBatch {
+                        node_id: result.node_id,
+                        statuses: result.statuses,
+                    });
+                    self.new_event.notify_one();
                 }
             }
         }
+        Ok(())
     }
 
-    async fn process_events(&mut self, current: ProcessorState) -> Result<ProcessorState> {
-        let mut per_node_next: Vec<(NodeId, ProcessorState)> = Vec::new();
-        while let Some(event) = self.events.pop_front() {
-            match event {
-                TransactionEvent::Added(tx) => {
-                    self.txs.push_back(tx);
-                    self.new_submit.notify_one();
-                }
-                TransactionEvent::Confirmed { sequence, info, id } => {
-                    self.apply_confirmed(sequence, info, id);
-                }
-                TransactionEvent::Rejected {
-                    node_id,
-                    sent,
-                    actual,
-                } => {
-                    if sent < actual {
-                        per_node_next.push((
-                            node_id.clone(),
-                            ProcessorState::Recovering {
+    // either confirmation or submission or
+    async fn process_event(
+        &mut self,
+        event: TransactionEvent<S::TxId, S::ConfirmInfo>,
+    ) -> Result<()> {
+        match event {
+            TransactionEvent::SubmitFailed {
+                node_id,
+                sequence,
+                failure,
+                ..
+            } => {
+                let Some(state) = self.node_state.get_mut(&node_id) else {
+                    return Ok(());
+                };
+                state.inflight = false;
+                state.submitted_seq = sequence.saturating_sub(1);
+                match failure {
+                    SubmitFailure::SequenceMismatch { expected } => {
+                        if sequence < expected {
+                            self.state.update(ProcessorState::Recovering {
                                 node_id: node_id.clone(),
-                                expected: actual,
-                            },
-                        ));
-                    } else {
-                        if let Some(state) = self.node_state.get_mut(&node_id) {
-                            state.submitted_seq = actual.saturating_sub(1);
-                            state.inflight = false;
-                        }
-                        per_node_next.push((node_id.clone(), ProcessorState::Submitting));
-                    }
-                }
-                TransactionEvent::Evicted {
-                    node_id,
-                    sequence,
-                    id: _,
-                } => {
-                    if let Some(state) = self.node_state.get_mut(&node_id) {
-                        state.submitted_seq = sequence;
-                    }
-                }
-                TransactionEvent::SubmitFailed {
-                    node_id,
-                    sequence,
-                    failure,
-                    ..
-                } => {
-                    if let Some(state) = self.node_state.get_mut(&node_id) {
-                        state.inflight = false;
-                        state.submitted_seq = sequence.saturating_sub(1);
-                        if sequence < self.confirmed_sequence {
-                            state.submit_delay_until =
-                                Some(time::Instant::now() + self.confirm_interval);
-                        }
-                    }
-                    let next_state = match failure {
-                        SubmitFailure::SequenceMismatch { expected } => {
-                            if sequence > expected {
-                                if let Some(state) = self.node_state.get_mut(&node_id) {
-                                    state.submitted_seq = sequence;
-                                }
-                                ProcessorState::Submitting
-                            } else {
-                                ProcessorState::Recovering {
-                                    node_id: node_id.clone(),
-                                    expected,
-                                }
+                                expected,
+                            });
+                        } else {
+                            if let Some(state) = self.node_state.get_mut(&node_id) {
+                                state.submitted_seq = expected.saturating_sub(1);
                             }
+                            self.state.update(ProcessorState::Submitting);
                         }
-                        SubmitFailure::MempoolIsFull => ProcessorState::Submitting,
-                        SubmitFailure::NetworkError { err: _ } => ProcessorState::Submitting,
-                        _ => ProcessorState::Stopped(failure.into()),
-                    };
-                    per_node_next.push((node_id.clone(), next_state));
-                    self.new_submit.notify_one();
+                    }
+                    SubmitFailure::MempoolIsFull => {
+                        state.delay = Some(self.confirm_interval);
+                    }
+                    SubmitFailure::NetworkError { err: _ } => {
+                        state.delay = Some(self.confirm_interval);
+                    }
+                    _ => {
+                        self.state.update(ProcessorState::Stopped(failure.into()));
+                    }
+                };
+                self.new_submit.notify_one();
+            }
+            TransactionEvent::Submitted {
+                node_id,
+                sequence,
+                id,
+            } => {
+                let state_node_id = node_id.clone();
+                let submit_id = id.clone();
+                // TODO: refactor to make it inside func
+                if let Some(on_submit) = self.take_on_submit(sequence) {
+                    let _ = on_submit.send(Ok(submit_id));
                 }
-                TransactionEvent::Submitted {
-                    node_id,
-                    sequence,
-                    id,
-                } => {
-                    let state_node_id = node_id.clone();
-                    let submit_id = id.clone();
-                    self.tx_index.insert(
-                        id.clone(),
-                        TxIndexEntry {
-                            node_id,
-                            sequence,
-                            id,
-                        },
-                    );
-                    if let Some(on_submit) = self.take_on_submit(sequence) {
-                        let _ = on_submit.send(Ok(submit_id));
-                    }
-                    if let Some(state) = self.node_state.get_mut(&state_node_id) {
-                        state.inflight = false;
-                    }
-                    self.new_submit.notify_one();
+                if let Some(state) = self.node_state.get_mut(&state_node_id) {
+                    state.inflight = false;
                 }
-                TransactionEvent::StatusBatch { node_id, statuses } => {
-                    if let Some(state) = self.node_state.get_mut(&node_id) {
-                        state.confirm_inflight = false;
-                    }
-                    let new_events = self.prepare_status_batch(node_id, statuses);
-                    if !new_events.is_empty() {
-                        self.events.extend(new_events);
-                        self.new_event.notify_one();
-                    }
+                self.new_submit.notify_one();
+            }
+            TransactionEvent::StatusBatch { node_id, statuses } => {
+                if let Some(state) = self.node_state.get_mut(&node_id) {
+                    state.confirm_inflight = false;
+                } else {
+                    return Ok(());
+                }
+                if self.state.is_recovering() {
+                    self.process_status_batch_recovering(node_id, statuses)?;
+                } else {
+                    self.process_status_batch_submitting(node_id, statuses)?;
                 }
             }
         }
-        let mut max_recover: Option<(NodeId, u64)> = None;
-        for (_, state) in per_node_next {
-            match state {
-                ProcessorState::Stopped(reason) => return Ok(ProcessorState::Stopped(reason)),
-                ProcessorState::Recovering { node_id, expected } => {
-                    let update = match &max_recover {
-                        None => true,
-                        Some((_, current)) => expected > *current,
-                    };
-                    if update {
-                        max_recover = Some((node_id, expected));
-                    }
-                }
-                ProcessorState::Submitting => {}
-            }
-        }
+        Ok(())
+    }
 
-        if let Some((node_id, expected)) = max_recover {
-            Ok(ProcessorState::Recovering { node_id, expected })
-        } else {
-            Ok(current)
+    fn process_status_batch_submitting(
+        &mut self,
+        node_id: NodeId,
+        statuses: Vec<(S::TxId, TxStatus<S::ConfirmInfo>)>,
+    ) -> Result<()> {
+        let mut collected = statuses
+            .into_iter()
+            .map(|(tx_id, status)| (self.tx_index.get(&tx_id).unwrap().clone(), status))
+            .collect::<Vec<_>>();
+        collected.sort_by(|first, second| first.0.cmp(&second.0));
+        for (cur_seq, status) in collected.into_iter() {
+            match status {
+                TxStatus::Pending => {
+                    continue;
+                }
+                TxStatus::Evicted => {
+                    let mut node_state = self.node_state.get_mut(&node_id).unwrap();
+                    node_state.submitted_seq =
+                        node_state.submitted_seq.min(cur_seq.saturating_sub(1));
+                    break;
+                }
+                TxStatus::Rejected { reason } => match reason {
+                    RejectionReason::SequenceMismatch { expected } => {
+                        if cur_seq < expected {
+                            self.state.update(ProcessorState::Recovering {
+                                node_id: node_id.clone(),
+                                expected,
+                            });
+                        } else {
+                            let mut node_state = self.node_state.get_mut(&node_id).unwrap();
+                            node_state.submitted_seq = node_state.submitted_seq.min(expected);
+                        }
+                        break;
+                    }
+                    RejectionReason::OtherReason => {
+                        self.state
+                            .update(ProcessorState::Stopped(StopReason::ConfirmFailure(
+                                ConfirmFailure {
+                                    reason: RejectionReason::OtherReason,
+                                },
+                            )));
+                    }
+                },
+                TxStatus::Confirmed { info } => {
+                    self.update_confirmed_sequence(cur_seq)?;
+                }
+                TxStatus::Unknown => {
+                    self.state
+                        .update(ProcessorState::Stopped(StopReason::ConfirmFailure(
+                            ConfirmFailure {
+                                reason: RejectionReason::UnknownTransaction,
+                            },
+                        )));
+                }
+            }
         }
+        Ok(())
+    }
+
+    fn process_status_batch_recovering(
+        &mut self,
+        node_id: NodeId,
+        statuses: Vec<(S::TxId, TxStatus<S::ConfirmInfo>)>,
+    ) -> Result<()> {
+        let mut collected = statuses
+            .into_iter()
+            .map(|(tx_id, status)| (self.tx_index.get(&tx_id).unwrap().clone(), status))
+            .collect::<Vec<_>>();
+        collected.sort_by(|first, second| first.0.cmp(&second.0));
+        let expected = self.state.recovering_sequence();
+        for (cur_seq, status) in collected.into_iter() {
+            match status {
+                TxStatus::Pending => {
+                    continue;
+                }
+                TxStatus::Evicted => {
+                    self.state
+                        .update(ProcessorState::Stopped(StopReason::ConfirmFailure(
+                            ConfirmFailure {
+                                reason: RejectionReason::SequenceMismatch { expected },
+                            },
+                        )));
+                }
+                TxStatus::Rejected { reason } => {
+                    self.state
+                        .update(ProcessorState::Stopped(StopReason::ConfirmFailure(
+                            ConfirmFailure {
+                                reason: RejectionReason::SequenceMismatch { expected },
+                            },
+                        )));
+                }
+                TxStatus::Confirmed { info } => {
+                    self.update_confirmed_sequence(cur_seq)?;
+                }
+                TxStatus::Unknown => {
+                    self.state
+                        .update(ProcessorState::Stopped(StopReason::ConfirmFailure(
+                            ConfirmFailure {
+                                reason: RejectionReason::SequenceMismatch { expected },
+                            },
+                        )));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn update_confirmed_sequence(&mut self, sequence: u64) -> Result<()> {
+        for (_, state) in self.node_state.iter_mut() {
+            state.submitted_seq = state.submitted_seq.max(sequence);
+        }
+        self.confirmed_sequence = sequence;
+        Ok(())
     }
 
     fn spawn_submissions(&mut self) {
         if self.nodes.is_empty() {
             return;
         }
-        let now = time::Instant::now();
         for (node_id, node) in self.nodes.clone() {
-            let target_sequence = {
+            let (target_sequence, delay) = {
                 let state = self.node_state.entry(node_id.clone()).or_default();
                 if state.inflight {
                     continue;
                 }
-                if let Some(delay_until) = state.submit_delay_until {
-                    if now < delay_until {
-                        continue;
-                    }
-                    state.submit_delay_until = None;
-                }
+                let delay = if let Some(delay) = state.delay {
+                    state.delay = None;
+                    delay
+                } else {
+                    Duration::from_nanos(0)
+                };
                 if state.submitted_seq < self.confirmed_sequence {
                     state.submitted_seq = self.confirmed_sequence;
                 }
-                state.submitted_seq.saturating_add(1)
+                (state.submitted_seq.saturating_add(1), delay)
             };
             let Some(bytes) = self.peek_submission(target_sequence) else {
                 continue;
@@ -735,6 +787,7 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
                 state.inflight = true;
             }
             self.submissions.spawn(async move {
+                tokio::time::sleep(delay).await;
                 let result = node.submit(bytes.clone(), target_sequence).await;
                 SubmissionResult {
                     node_id,
@@ -745,204 +798,41 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
         }
     }
 
-    fn apply_confirmed(&mut self, sequence: u64, info: S::ConfirmInfo, id: S::TxId) {
-        let node_id = self.tx_index.get(&id).map(|entry| entry.node_id.clone());
-        if self.tx_index.remove(&id).is_some() {}
-        if let Some(node_id) = node_id {
-            if let Some(state) = self.node_state.get_mut(&node_id) {
-                state.submitted_seq = state.submitted_seq.max(sequence);
-            }
-        }
-        self.confirmed_info.insert(sequence, info);
-        loop {
-            let next_sequence = self.confirmed_sequence.saturating_add(1);
-            let Some(info) = self.confirmed_info.remove(&next_sequence) else {
-                break;
-            };
-            if let Some(tx) = self.take_on_confirm(next_sequence) {
-                let _ = tx.send(Ok(info));
-            }
-            self.txs.pop_front();
-            self.confirmed_sequence = self.confirmed_sequence.saturating_add(1);
-        }
-    }
-
-    fn spawn_confirmations(&mut self, range: Option<(u64, u64)>, node_filter: Option<&NodeId>) {
+    fn spawn_confirmations(&mut self, max_seq: Option<u64>, node_filter: Option<&NodeId>) {
         if self.tx_index.is_empty() {
             return;
         }
-        let mut per_node: HashMap<NodeId, Vec<(u64, S::TxId)>> = HashMap::new();
-        for (id, entry) in &self.tx_index {
-            if let Some(node_id) = node_filter {
-                if &entry.node_id != node_id {
-                    continue;
-                }
-            }
-            if let Some((start, end)) = range {
-                if entry.sequence < start || entry.sequence > end {
-                    continue;
-                }
-            }
-            per_node
-                .entry(entry.node_id.clone())
-                .or_default()
-                .push((entry.sequence, id.clone()));
-        }
-        for (node_id, mut entries) in per_node {
-            let state = self.node_state.entry(node_id.clone()).or_default();
+        // gathering all the sequences for each node
+        for (node_id, state) in self.node_state.iter_mut() {
             if state.confirm_inflight {
                 continue;
             }
-            let Some(node) = self.nodes.get(&node_id).cloned() else {
-                continue;
-            };
-            entries.sort_by_key(|(seq, _)| *seq);
-            let ids: Vec<S::TxId> = entries
-                .into_iter()
-                .take(self.max_status_batch)
-                .map(|(_, id)| id)
-                .collect();
-            if ids.is_empty() {
-                continue;
+            if let Some(filter) = node_filter {
+                if node_id != filter {
+                    continue;
+                }
             }
-            state.confirm_inflight = true;
+            let mut sub_seq = state.submitted_seq;
+            if let Some(max_seq) = max_seq {
+                sub_seq = sub_seq.max(max_seq);
+            }
+            let node_id = node_id.clone();
+            let total = sub_seq - self.confirmed_sequence;
+            let cap = self.max_status_batch.min(total as usize);
+            let mut to_send = Vec::with_capacity(cap);
+            for i in 0..cap {
+                to_send.push(self.txs[i].id.clone());
+            }
+            let node = self.nodes.get(&node_id).unwrap().clone();
             self.confirmations.spawn(async move {
-                // TODO: check confirmation handling
-                let statuses = node.status_batch(ids).await.unwrap_or_default();
+                let statuses = node.status_batch(to_send).await.unwrap_or_default();
                 ConfirmationResult { node_id, statuses }
             });
         }
     }
 
-    fn handle_recovery_confirmation(
-        &mut self,
-        recovering_node_id: &NodeId,
-        expected: u64,
-        result: ConfirmationResult<S::TxId, S::ConfirmInfo>,
-    ) -> Option<ProcessorState> {
-        if let Some(state) = self.node_state.get_mut(&result.node_id) {
-            state.confirm_inflight = false;
-        }
-        if &result.node_id != recovering_node_id {
-            return None;
-        }
-
-        let start = self.confirmed_sequence.saturating_add(1);
-        if expected < start {
-            return Some(ProcessorState::Submitting);
-        }
-
-        let new_events = self.prepare_status_batch(result.node_id, result.statuses);
-        for event in new_events {
-            match event {
-                TransactionEvent::Confirmed { sequence, info, id } => {
-                    self.apply_confirmed(sequence, info, id);
-                    if sequence >= expected {
-                        return Some(ProcessorState::Submitting);
-                    }
-                }
-                TransactionEvent::Rejected { sent, actual, .. } => {
-                    if actual > expected {
-                        continue;
-                    }
-                    return Some(ProcessorState::Stopped(StopReason::ConfirmFailure(
-                        ConfirmFailure::Rejected {
-                            sequence: sent,
-                            expected: actual,
-                        },
-                    )));
-                }
-                _ => {}
-            }
-        }
-
-        None
-    }
-
-    fn prepare_status_batch(
-        &mut self,
-        node_id: NodeId,
-        statuses: HashMap<S::TxId, TxStatus<S::ConfirmInfo>>,
-    ) -> Vec<TransactionEvent<S::TxId, S::ConfirmInfo>> {
-        let mut max_confirm: Option<u64> = None;
-        let mut confirms: Vec<(u64, S::TxId, S::ConfirmInfo)> = Vec::new();
-        let mut min_reject: Option<(u64, u64)> = None;
-        let mut min_evict: Option<(u64, S::TxId)> = None;
-
-        for (id, status) in statuses {
-            let Some(entry) = self.tx_index.get(&id) else {
-                continue;
-            };
-            let seq = entry.sequence;
-            match status {
-                TxStatus::Confirmed { info } => {
-                    confirms.push((seq, id, info));
-                    let update = match max_confirm {
-                        Some(max) => seq > max,
-                        None => true,
-                    };
-                    if update {
-                        max_confirm = Some(seq);
-                    }
-                }
-                TxStatus::Rejected { expected } => {
-                    let update = match &min_reject {
-                        Some((min, _)) => seq < *min,
-                        None => true,
-                    };
-                    if update {
-                        min_reject = Some((seq, expected));
-                    }
-                }
-                TxStatus::Evicted => {
-                    let update = match &min_evict {
-                        Some((min, _)) => seq < *min,
-                        None => true,
-                    };
-                    if update {
-                        min_evict = Some((seq, id));
-                    }
-                }
-                TxStatus::Pending | TxStatus::Unknown => {}
-            }
-        }
-
-        let confirmed = max_confirm;
-        let mut new_events = Vec::new();
-        if let Some(max_confirm) = max_confirm {
-            confirms.sort_by_key(|(seq, _, _)| *seq);
-            for (seq, id, info) in confirms {
-                new_events.push(TransactionEvent::Confirmed {
-                    sequence: seq,
-                    id,
-                    info,
-                });
-            }
-        }
-
-        if let Some((seq, expected)) = min_reject {
-            if confirmed.map_or(true, |confirmed| seq >= confirmed) {
-                new_events.push(TransactionEvent::Rejected {
-                    node_id: node_id.clone(),
-                    sent: seq,
-                    actual: expected,
-                });
-            }
-        }
-
-        if let Some((seq, id)) = min_evict {
-            if confirmed.map_or(true, |confirmed| seq >= confirmed) {
-                new_events.push(TransactionEvent::Evicted {
-                    node_id,
-                    sequence: seq,
-                    id,
-                });
-            }
-        }
-        new_events
-    }
-
     fn index_for_sequence(&self, sequence: u64) -> Option<usize> {
+        // checking the first not confirmed sequence
         let start = self.confirmed_sequence.saturating_add(1);
         if sequence < start {
             return None;
@@ -1378,7 +1268,9 @@ mod tests {
         reply
             .send(Ok(HashMap::from([(
                 10,
-                TxStatus::Rejected { expected: 2 },
+                TxStatus::Rejected {
+                    reason: RejectionReason::SequenceMismatch { expected: 2 },
+                },
             )])))
             .expect("status reply send");
 

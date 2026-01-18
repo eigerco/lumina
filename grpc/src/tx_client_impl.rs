@@ -23,7 +23,7 @@ use crate::signer::{BoxedDocSigner, sign_tx};
 
 use crate::tx_client_v2::{
     SignFn, SubmitFailure, Transaction, TransactionManager, TransactionWorker, TxCallbacks,
-    TxConfirmResult, TxHandle, TxRequest, TxServer, TxStatus, TxSubmitResult,
+    RejectionReason, TxConfirmResult, TxHandle, TxRequest, TxServer, TxStatus, TxSubmitResult,
 };
 use crate::{Error, GrpcClient, Result, TxConfig, TxInfo};
 
@@ -410,14 +410,28 @@ async fn map_status_response(
                         height: response.height.value(),
                     },
                 })
-            } else {
+            } else if is_wrong_sequence(response.execution_code) {
                 let expected = ensure_expected_sequence(expected_sequence, client).await?;
-                Ok(TxStatus::Rejected { expected })
+                Ok(TxStatus::Rejected {
+                    reason: RejectionReason::SequenceMismatch { expected },
+                })
+            } else {
+                Ok(TxStatus::Rejected {
+                    reason: RejectionReason::OtherReason,
+                })
             }
         }
         GrpcTxStatus::Rejected => {
-            let expected = ensure_expected_sequence(expected_sequence, client).await?;
-            Ok(TxStatus::Rejected { expected })
+            if is_wrong_sequence(response.execution_code) {
+                let expected = ensure_expected_sequence(expected_sequence, client).await?;
+                Ok(TxStatus::Rejected {
+                    reason: RejectionReason::SequenceMismatch { expected },
+                })
+            } else {
+                Ok(TxStatus::Rejected {
+                    reason: RejectionReason::OtherReason,
+                })
+            }
         }
         GrpcTxStatus::Evicted => Ok(TxStatus::Evicted),
         GrpcTxStatus::Pending => Ok(TxStatus::Pending),
