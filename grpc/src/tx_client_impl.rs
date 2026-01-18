@@ -6,6 +6,7 @@ use async_trait::async_trait;
 use k256::ecdsa::VerifyingKey;
 use prost::Message;
 use tendermint::chain::Id;
+use tendermint::crypto::Sha256 as _;
 use tokio::sync::{Mutex, Notify, OnceCell, RwLock};
 use tokio::task::JoinHandle;
 
@@ -333,10 +334,12 @@ impl SignFn<Hash, TxInfo> for BuiltSignFn {
             }
             None => tx.encode_to_vec(),
         };
+        let id = Hash::Sha256(tendermint::crypto::default::Sha256::digest(&bytes));
         Ok(Transaction {
             sequence,
             bytes,
             callbacks: TxCallbacks::default(),
+            id,
         })
     }
 }
@@ -362,14 +365,14 @@ impl TxServer for GrpcClient {
     async fn status_batch(
         &self,
         ids: Vec<Self::TxId>,
-    ) -> TxConfirmResult<HashMap<Self::TxId, TxStatus<Self::ConfirmInfo>>> {
+    ) -> TxConfirmResult<Vec<(Self::TxId, TxStatus<Self::ConfirmInfo>)>> {
         let response = self.tx_status_batch(ids.clone()).await?;
         let mut response_map = HashMap::new();
         for result in response.statuses {
             response_map.insert(result.hash, result.status);
         }
 
-        let mut statuses = HashMap::new();
+        let mut statuses = Vec::with_capacity(ids.len());
         let mut expected_sequence: Option<u64> = None;
 
         for hash in ids {
@@ -377,10 +380,10 @@ impl TxServer for GrpcClient {
                 Some(status) => {
                     let mapped =
                         map_status_response(hash, status, &mut expected_sequence, self).await?;
-                    statuses.insert(hash, mapped);
+                    statuses.push((hash, mapped));
                 }
                 None => {
-                    statuses.insert(hash, TxStatus::Unknown);
+                    statuses.push((hash, TxStatus::Unknown));
                 }
             }
         }
@@ -413,11 +416,18 @@ async fn map_status_response(
             } else if is_wrong_sequence(response.execution_code) {
                 let expected = ensure_expected_sequence(expected_sequence, client).await?;
                 Ok(TxStatus::Rejected {
-                    reason: RejectionReason::SequenceMismatch { expected },
+                    reason: RejectionReason::SequenceMismatch {
+                        expected,
+                        error_code: response.execution_code,
+                        message: response.error.clone(),
+                    },
                 })
             } else {
                 Ok(TxStatus::Rejected {
-                    reason: RejectionReason::OtherReason,
+                    reason: RejectionReason::OtherReason {
+                        error_code: response.execution_code,
+                        message: response.error.clone(),
+                    },
                 })
             }
         }
@@ -425,11 +435,18 @@ async fn map_status_response(
             if is_wrong_sequence(response.execution_code) {
                 let expected = ensure_expected_sequence(expected_sequence, client).await?;
                 Ok(TxStatus::Rejected {
-                    reason: RejectionReason::SequenceMismatch { expected },
+                    reason: RejectionReason::SequenceMismatch {
+                        expected,
+                        error_code: response.execution_code,
+                        message: response.error.clone(),
+                    },
                 })
             } else {
                 Ok(TxStatus::Rejected {
-                    reason: RejectionReason::OtherReason,
+                    reason: RejectionReason::OtherReason {
+                        error_code: response.execution_code,
+                        message: response.error.clone(),
+                    },
                 })
             }
         }
