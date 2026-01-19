@@ -255,7 +255,7 @@ pub enum TxStatus<ConfirmInfo> {
     Unknown,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[allow(dead_code)]
 pub enum SubmitFailure {
     /// Server expects a different sequence.
@@ -267,12 +267,12 @@ pub enum SubmitFailure {
     /// Fee too low for the computed gas price.
     InsufficientFee { expected_fee: u64 },
     /// Transport or RPC error while submitting.
-    NetworkError { err: Error },
+    NetworkError { err: Arc<Error> },
     /// Node mempool is full.
     MempoolIsFull,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[allow(dead_code)]
 pub struct ConfirmFailure {
     reason: RejectionReason,
@@ -330,9 +330,12 @@ enum TransactionEvent<TxId, ConfirmInfo> {
     },
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum ProcessorState {
-    Recovering { node_id: NodeId, reason: RejectionReason },
+    Recovering {
+        node_id: NodeId,
+        reason: RejectionReason,
+    },
     Submitting,
     Stopped(StopReason),
 }
@@ -366,7 +369,7 @@ impl ProcessorState {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[allow(dead_code)]
 enum StopReason {
     SubmitFailure(SubmitFailure),
@@ -510,31 +513,22 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
                 self.process_event(event).await?;
             }
 
-            let state = std::mem::replace(&mut self.state, ProcessorState::Submitting);
-            self.state = tokio::select! {
-                _ = shutdown.notified() => ProcessorState::Stopped(StopReason::Shutdown),
-                result = async {
-                    match state {
+            tokio::select! {
+                _ = shutdown.notified() => self.state.update(ProcessorState::Stopped(StopReason::Shutdown)),
+                res = async {
+                    match self.state.clone() {
                         ProcessorState::Recovering { node_id, reason } => {
                             if let Some(expected) = recovery_expected(&reason) {
                                 self.run_recovering(&node_id, expected).await?;
-                                Ok::<ProcessorState, Error>(ProcessorState::Recovering {
-                                    node_id,
-                                    reason,
-                                })
-                            } else {
-                                Ok::<ProcessorState, Error>(ProcessorState::Submitting)
                             }
                         }
                         ProcessorState::Submitting => {
                             self.run_submitting().await?;
-                            Ok::<ProcessorState, Error>(ProcessorState::Submitting)
                         }
-                        ProcessorState::Stopped(reason) => {
-                            Ok::<ProcessorState, Error>(ProcessorState::Stopped(reason))
-                        }
+                        _ => (),
                     }
-                } => result?,
+                    Ok::<_, Error>(())
+                } => res?,
             };
             if self.state.is_stopped() {
                 break;
