@@ -353,7 +353,7 @@ impl TxServer for GrpcClient {
         let resp = self
             .broadcast_tx(tx_bytes, BroadcastMode::Sync)
             .await
-            .map_err(|err| SubmitFailure::NetworkError { err })?;
+            .map_err(|err| SubmitFailure::NetworkError { err: Arc::new(err) })?;
 
         if resp.code == ErrorCode::Success {
             return Ok(resp.txhash);
@@ -379,7 +379,7 @@ impl TxServer for GrpcClient {
             match response_map.remove(&hash) {
                 Some(status) => {
                     let mapped =
-                        map_status_response(hash, status, &mut expected_sequence, self).await?;
+                        map_status_response(hash, status, &mut expected_sequence, self, "").await?;
                     statuses.push((hash, mapped));
                 }
                 None => {
@@ -389,6 +389,14 @@ impl TxServer for GrpcClient {
         }
 
         Ok(statuses)
+    }
+
+    async fn status(&self, id: Self::TxId) -> TxConfirmResult<TxStatus<Self::ConfirmInfo>> {
+        let mut result = self.status_batch(vec![id]).await?;
+        result
+            .pop()
+            .map(|(_, status)| status)
+            .ok_or_else(|| Error::UnexpectedResponseType("empty status response".to_string()))
     }
 
     async fn current_sequence(&self) -> Result<u64> {
@@ -403,6 +411,7 @@ async fn map_status_response(
     response: TxStatusResponse,
     expected_sequence: &mut Option<u64>,
     client: &GrpcClient,
+    node_id: &str,
 ) -> Result<TxStatus<TxInfo>> {
     match response.status {
         GrpcTxStatus::Committed => {
@@ -413,20 +422,12 @@ async fn map_status_response(
                         height: response.height.value(),
                     },
                 })
-            } else if is_wrong_sequence(response.execution_code) {
-                let expected = ensure_expected_sequence(expected_sequence, client).await?;
-                Ok(TxStatus::Rejected {
-                    reason: RejectionReason::SequenceMismatch {
-                        expected,
-                        error_code: response.execution_code,
-                        message: response.error.clone(),
-                    },
-                })
             } else {
                 Ok(TxStatus::Rejected {
                     reason: RejectionReason::OtherReason {
                         error_code: response.execution_code,
                         message: response.error.clone(),
+                        node_id: node_id.to_string(),
                     },
                 })
             }
@@ -437,8 +438,7 @@ async fn map_status_response(
                 Ok(TxStatus::Rejected {
                     reason: RejectionReason::SequenceMismatch {
                         expected,
-                        error_code: response.execution_code,
-                        message: response.error.clone(),
+                        node_id: node_id.to_string(),
                     },
                 })
             } else {
@@ -446,6 +446,7 @@ async fn map_status_response(
                     reason: RejectionReason::OtherReason {
                         error_code: response.execution_code,
                         message: response.error.clone(),
+                        node_id: node_id.to_string(),
                     },
                 })
             }
@@ -473,7 +474,7 @@ fn map_submit_failure(code: ErrorCode, message: &str) -> SubmitFailure {
         if let Some(parsed) = extract_sequence_on_mismatch(message) {
             return match parsed {
                 Ok(expected) => SubmitFailure::SequenceMismatch { expected },
-                Err(err) => SubmitFailure::NetworkError { err },
+                Err(err) => SubmitFailure::NetworkError { err: Arc::new(err) },
             };
         }
     }

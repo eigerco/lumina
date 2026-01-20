@@ -1450,8 +1450,7 @@ mod tests {
                         TxStatus::Rejected {
                             reason: RejectionReason::SequenceMismatch {
                                 expected: 2,
-                                error_code: ErrorCode::InvalidSequence,
-                                message: "sequence mismatch".to_string(),
+                                node_id: "node-1".to_string(),
                             },
                         },
                     )
