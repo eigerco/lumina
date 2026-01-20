@@ -608,6 +608,10 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
                 break;
             }
         }
+
+        // Wait for all in-flight tasks to complete before returning
+        self.drain_pending().await;
+
         Ok(())
     }
 
