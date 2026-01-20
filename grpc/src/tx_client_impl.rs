@@ -206,7 +206,7 @@ impl TransactionService {
         queue_capacity: usize,
     ) -> Result<(TransactionManager<Hash, TxInfo>, WorkerHandle)> {
         let start_sequence = client.current_sequence().await?;
-        let nodes = HashMap::from([(String::from("default"), Arc::new(client.clone()))]);
+        let nodes = HashMap::from([(Arc::new(String::from("default")), Arc::new(client.clone()))]);
         let (manager, mut worker) = TransactionWorker::new(
             nodes,
             confirm_interval,
@@ -432,7 +432,7 @@ async fn map_status_response(
                     reason: RejectionReason::OtherReason {
                         error_code: response.execution_code,
                         message: response.error.clone(),
-                        node_id: node_id.to_string(),
+                        node_id: Arc::new(node_id.to_string()),
                     },
                 })
             }
@@ -443,7 +443,7 @@ async fn map_status_response(
                 Ok(TxStatus::Rejected {
                     reason: RejectionReason::SequenceMismatch {
                         expected,
-                        node_id: node_id.to_string(),
+                        node_id: Arc::new(node_id.to_string()),
                     },
                 })
             } else {
@@ -451,7 +451,7 @@ async fn map_status_response(
                     reason: RejectionReason::OtherReason {
                         error_code: response.execution_code,
                         message: response.error.clone(),
-                        node_id: node_id.to_string(),
+                        node_id: Arc::new(node_id.to_string()),
                     },
                 })
             }
@@ -654,8 +654,8 @@ mod tests {
             )
             .await
             .unwrap();
-        let submit_hash = handle.on_submit.await.unwrap().unwrap();
-        let confirm_info = handle.on_confirm.await.unwrap().unwrap();
+        let submit_hash = handle.submitted.await.unwrap().unwrap();
+        let confirm_info = handle.confirmed.await.unwrap().unwrap();
 
         assert_eq!(submit_hash, confirm_info.hash);
         assert!(confirm_info.height > 0);
