@@ -629,7 +629,7 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
                     let node = self.nodes.get(&node_id).unwrap().clone();
                     let id = self.txs[idx].id.clone();
                     let state_epoch = self.state.epoch();
-                    let tx = push_future(&mut self.confirmations);
+                    let tx = push_oneshot(&mut self.confirmations);
                     spawn_cancellable(token, async move {
                         let response = node.status(id.clone()).await.map(|status| {
                             ConfirmationResponse::Recovering {
@@ -941,7 +941,7 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
                 state.submitted_seq = target_sequence;
                 state.inflight = true;
             }
-            let tx = push_future(&mut self.submissions);
+            let tx = push_oneshot(&mut self.submissions);
             spawn_cancellable(token.clone(), async move {
                 time::sleep(delay).await;
                 let result = node.submit(bytes.clone(), target_sequence).await;
@@ -976,7 +976,7 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
                 to_send.push(self.txs[i].id.clone());
             }
             let node = self.nodes.get(&node_id).unwrap().clone();
-            let tx = push_future(&mut self.confirmations);
+            let tx = push_oneshot(&mut self.confirmations);
             spawn_cancellable(token.clone(), async move {
                 let response = node
                     .status_batch(to_send)
@@ -1027,7 +1027,7 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
     }
 }
 
-fn push_future<T: 'static + Send>(
+fn push_oneshot<T: 'static + Send>(
     unordered: &mut FuturesUnordered<BoxFuture<'static, Option<T>>>,
 ) -> oneshot::Sender<T> {
     let (tx, rx) = oneshot::channel();
@@ -1150,7 +1150,8 @@ mod tests {
     }
 
     impl Harness {
-        const MAX_SPINS: usize = 100;
+        /// Maximum spins for polling operations.
+        const MAX_SPINS: usize = 1000;
 
         fn new(
             confirm_interval: Duration,
@@ -1183,22 +1184,55 @@ mod tests {
 
         fn start(&mut self, mut manager: TransactionWorker<MockTxServer>) {
             let shutdown = self.shutdown.clone();
+
+            // CRITICAL FIX: Inject sentinel futures to prevent busy-loop.
+            //
+            // Problem: When FuturesUnordered is empty, next() returns Ready(None) immediately.
+            // This causes the worker's select! to complete without yielding, creating a busy
+            // loop that starves spawned tasks from ever running.
+            //
+            // Solution: Add sentinel futures that stay Pending until shutdown. This makes
+            // next() return Pending (not Ready(None)) when there's no real work, allowing
+            // the worker to yield and let spawned tasks run.
+            let shutdown_for_submissions = shutdown.clone();
+            manager.submissions.push(
+                async move {
+                    shutdown_for_submissions.cancelled().await;
+                    None
+                }
+                .boxed(),
+            );
+
+            let shutdown_for_confirmations = shutdown.clone();
+            manager.confirmations.push(
+                async move {
+                    shutdown_for_confirmations.cancelled().await;
+                    None
+                }
+                .boxed(),
+            );
+
             self.handle = Some(tokio::spawn(async move { manager.process(shutdown).await }));
         }
 
         async fn pump(&self) {
+            // Yield to let other tasks run
             tokio::task::yield_now().await;
         }
 
         async fn expect_call(&mut self) -> ServerCall {
+            // Poll for server calls, yielding between attempts to let worker make progress
             for _ in 0..Self::MAX_SPINS {
                 match self.calls_rx.try_recv() {
                     Ok(call) => return call,
-                    Err(TryRecvError::Empty) => self.pump().await,
                     Err(TryRecvError::Disconnected) => panic!("server call channel closed"),
+                    Err(TryRecvError::Empty) => self.pump().await,
                 }
             }
-            panic!("expected server call, got none");
+            panic!(
+                "expected server call, got none after {} spins",
+                Self::MAX_SPINS
+            );
         }
 
         async fn expect_submit(
@@ -1252,7 +1286,7 @@ mod tests {
         }
 
         async fn drain_status_batches_pending(&mut self) {
-            // Loop multiple times with yields to give spawned tasks a chance to run
+            // Drain any pending calls, yielding to let worker process them
             for _ in 0..Self::MAX_SPINS {
                 match self.calls_rx.try_recv() {
                     Ok(ServerCall::StatusBatch { ids, reply }) => {
@@ -1286,6 +1320,7 @@ mod tests {
         }
 
         async fn tick_confirm(&self) {
+            // Advance mock time to trigger confirm ticker
             tokio::time::advance(self.confirm_interval + Duration::from_nanos(1)).await;
             self.pump().await;
         }
