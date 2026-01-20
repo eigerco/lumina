@@ -283,16 +283,12 @@ pub struct ConfirmFailure {
 pub enum RejectionReason {
     SequenceMismatch {
         expected: u64,
-        error_code: ErrorCode,
-        message: String,
+        node_id: NodeId,
     },
     OtherReason {
         error_code: ErrorCode,
         message: String,
-    },
-    UnknownTransaction {
-        error_code: ErrorCode,
-        message: String,
+        node_id: NodeId,
     },
 }
 
@@ -308,6 +304,8 @@ pub trait TxServer: Send + Sync {
         &self,
         ids: Vec<Self::TxId>,
     ) -> TxConfirmResult<Vec<(Self::TxId, TxStatus<Self::ConfirmInfo>)>>;
+    /// Status lookup for submitted TxId.
+    async fn status(&self, id: Self::TxId) -> TxConfirmResult<TxStatus<Self::ConfirmInfo>>;
     /// Fetch current sequence for the account (used by some implementations).
     async fn current_sequence(&self) -> Result<u64>;
 }
@@ -328,29 +326,29 @@ enum TransactionEvent<TxId, ConfirmInfo> {
         node_id: NodeId,
         statuses: Vec<(TxId, TxStatus<ConfirmInfo>)>,
     },
+    RecoverStatus {
+        node_id: NodeId,
+        id: TxId,
+        status: TxStatus<ConfirmInfo>,
+    },
 }
 
 #[derive(Debug, Clone)]
 enum ProcessorState {
-    Recovering {
-        node_id: NodeId,
-        reason: RejectionReason,
-    },
+    Recovering { node_id: NodeId, expected: u64 },
     Submitting,
     Stopped(StopReason),
 }
 
 impl ProcessorState {
-    fn update(&mut self, other: ProcessorState) {
-        match (&self, other) {
-            (ProcessorState::Stopped(_stop_reason), _) => {}
+    fn transition(&self, other: ProcessorState) -> ProcessorState {
+        match (self, other) {
+            (ProcessorState::Stopped(_stop_reason), _) => self.clone(),
             (ProcessorState::Recovering { .. }, ProcessorState::Stopped(stop_reason)) => {
-                *self = ProcessorState::Stopped(stop_reason);
+                ProcessorState::Stopped(stop_reason)
             }
-            (ProcessorState::Recovering { .. }, _) => {}
-            (_, other) => {
-                *self = other;
-            }
+            (ProcessorState::Recovering { .. }, _) => self.clone(),
+            (_, other) => other,
         }
     }
 
@@ -366,6 +364,63 @@ impl ProcessorState {
     #[allow(dead_code)]
     fn is_submitting(&self) -> bool {
         matches!(self, ProcessorState::Submitting)
+    }
+
+    fn equivalent(&self, other: &ProcessorState) -> bool {
+        match (self, other) {
+            (ProcessorState::Submitting, ProcessorState::Submitting) => true,
+            (ProcessorState::Recovering { .. }, ProcessorState::Recovering { .. }) => true,
+            (ProcessorState::Stopped(_), ProcessorState::Stopped(_)) => true,
+            _ => false,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct ProcessorStateWithEpoch {
+    state: ProcessorState,
+    epoch: u64,
+}
+
+impl ProcessorStateWithEpoch {
+    fn new(state: ProcessorState) -> Self {
+        Self { state, epoch: 0 }
+    }
+
+    fn epoch(&self) -> u64 {
+        self.epoch
+    }
+
+    fn as_ref(&self) -> &ProcessorState {
+        &self.state
+    }
+
+    fn snapshot(&self) -> ProcessorState {
+        self.state.clone()
+    }
+
+    fn update(&mut self, other: ProcessorState) {
+        let next = self.state.transition(other);
+        self.set_if_changed(next);
+    }
+
+    fn force_update(&mut self, other: ProcessorState) {
+        self.set_if_changed(other);
+    }
+
+    fn set_if_changed(&mut self, next: ProcessorState) {
+        if !self.state.equivalent(&next) {
+            self.state = next;
+            self.epoch = self.epoch.saturating_add(1);
+        }
+    }
+
+    fn is_stopped(&self) -> bool {
+        self.state.is_stopped()
+    }
+
+    fn is_recovering(&self) -> bool {
+        self.state.is_recovering()
     }
 }
 
@@ -396,23 +451,24 @@ fn recovery_expected(reason: &RejectionReason) -> Option<u64> {
     }
 }
 
-fn sequence_mismatch_reason(expected: u64) -> RejectionReason {
-    RejectionReason::SequenceMismatch {
-        expected,
-        error_code: ErrorCode::InvalidSequence,
-        message: "sequence mismatch".to_string(),
-    }
-}
-
 struct SubmissionResult<TxId> {
     node_id: NodeId,
     sequence: u64,
     result: TxSubmitResult<TxId>,
 }
 
+enum ConfirmationResponse<TxId, ConfirmInfo> {
+    Recovering {
+        id: TxId,
+        status: TxStatus<ConfirmInfo>,
+    },
+    Submitting(Vec<(TxId, TxStatus<ConfirmInfo>)>),
+}
+
 struct ConfirmationResult<TxId, ConfirmInfo> {
     node_id: NodeId,
-    statuses: Vec<(TxId, TxStatus<ConfirmInfo>)>,
+    state_epoch: u64,
+    response: TxConfirmResult<ConfirmationResponse<TxId, ConfirmInfo>>,
 }
 
 pub struct TransactionWorker<S: TxServer> {
@@ -425,14 +481,13 @@ pub struct TransactionWorker<S: TxServer> {
     next_enqueue_sequence: u64,
     node_state: HashMap<NodeId, NodeSubmissionState>,
     add_tx_rx: mpsc::Receiver<Transaction<S::TxId, S::ConfirmInfo>>,
-    new_event: Arc<Notify>,
     new_submit: Arc<Notify>,
     submissions: JoinSet<SubmissionResult<S::TxId>>,
     confirmations: JoinSet<ConfirmationResult<S::TxId, S::ConfirmInfo>>,
     confirm_ticker: time::Interval,
     confirm_interval: Duration,
     max_status_batch: usize,
-    state: ProcessorState,
+    state: ProcessorStateWithEpoch,
 }
 
 impl<S: TxServer + 'static> TransactionWorker<S> {
@@ -474,12 +529,11 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
                 confirmed_sequence: start_sequence.saturating_sub(1),
                 next_enqueue_sequence: start_sequence,
                 node_state,
-                new_event: Arc::new(Notify::new()),
                 new_submit: Arc::new(Notify::new()),
                 submissions: JoinSet::new(),
                 confirmations: JoinSet::new(),
                 confirm_ticker: time::interval(confirm_interval),
-                state: ProcessorState::Submitting,
+                state: ProcessorStateWithEpoch::new(ProcessorState::Submitting),
                 confirm_interval,
                 max_status_batch,
             },
@@ -516,11 +570,9 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
             tokio::select! {
                 _ = shutdown.notified() => self.state.update(ProcessorState::Stopped(StopReason::Shutdown)),
                 res = async {
-                    match self.state.clone() {
-                        ProcessorState::Recovering { node_id, reason } => {
-                            if let Some(expected) = recovery_expected(&reason) {
-                                self.run_recovering(&node_id, expected).await?;
-                            }
+                    match self.state.snapshot() {
+                        ProcessorState::Recovering { node_id, expected } => {
+                            self.run_recovering(&node_id, expected).await?;
                         }
                         ProcessorState::Submitting => {
                             self.run_submitting().await?;
@@ -540,22 +592,48 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
     async fn run_recovering(&mut self, node_id: &NodeId, expected: u64) -> Result<()> {
         let start = self.confirmed_sequence.saturating_add(1);
         if expected < start {
-            self.state = ProcessorState::Submitting;
+            self.state.force_update(ProcessorState::Submitting);
             return Ok(());
         }
 
         tokio::select! {
             _ = self.confirm_ticker.tick() => {
-                self.spawn_confirmations(Some(expected), Some(&node_id));
+                let target = expected.saturating_sub(1);
+                if let Some(idx) = self.index_for_sequence(target) {
+                    let node_id = node_id.clone();
+                    let node = self.nodes.get(&node_id).unwrap().clone();
+                    let id = self.txs[idx].id.clone();
+                    let state_epoch = self.state.epoch();
+                    self.confirmations.spawn(async move {
+                        let response = node.status(id.clone()).await.map(|status| {
+                            ConfirmationResponse::Recovering {
+                                id,
+                                status,
+                            }
+                        });
+                        ConfirmationResult {
+                            node_id,
+                            response,
+                            state_epoch,
+                        }
+                    });
+                }
             }
             Some(result) = self.confirmations.join_next() => {
-                match result {
-                    Ok(ConfirmationResult { node_id, statuses }) => {
-                        self.events.push_back(TransactionEvent::StatusBatch { node_id, statuses });
+                let Ok(result) = result else {
+                    return Ok(());
+                };
+                if result.state_epoch != self.state.epoch() {
+                    return Ok(());
+                }
+                match result.response {
+                    Ok(ConfirmationResponse::Recovering { id, status }) => {
+                        self.events.push_back(TransactionEvent::RecoverStatus { node_id: result.node_id, id, status });
                     }
                     Err(_err) => {
                         // TODO: add error handling
                     }
+                    _ => {}
                 }
             }
         }
@@ -571,7 +649,7 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
                 self.spawn_submissions();
             }
             _ = self.confirm_ticker.tick() => {
-                self.spawn_confirmations(None, None);
+                self.spawn_confirmations(None);
             }
             Some(result) = self.submissions.join_next() => {
                 if let Ok(result) = result {
@@ -587,16 +665,26 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
                             failure,
                         },
                     });
-                    self.new_event.notify_one();
                 }
             }
             Some(result) = self.confirmations.join_next() => {
-                if let Ok(result) = result {
-                    self.events.push_back(TransactionEvent::StatusBatch {
-                        node_id: result.node_id,
-                        statuses: result.statuses,
-                    });
-                    self.new_event.notify_one();
+                let Ok(result) = result else {
+                    return Ok(());
+                };
+                if result.state_epoch != self.state.epoch() {
+                    return Ok(());
+                }
+                match result.response {
+                    Ok(ConfirmationResponse::Submitting(statuses)) => {
+                        self.events.push_back(TransactionEvent::StatusBatch {
+                            node_id: result.node_id,
+                            statuses,
+                        });
+                    }
+                    Err(_err) => {
+                        // TODO: add error handling
+                    }
+                    _ => {}
                 }
             }
         }
@@ -623,10 +711,8 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
                 match failure {
                     SubmitFailure::SequenceMismatch { expected } => {
                         if sequence < expected {
-                            self.state.update(ProcessorState::Recovering {
-                                node_id: node_id.clone(),
-                                reason: sequence_mismatch_reason(expected),
-                            });
+                            self.state
+                                .update(ProcessorState::Recovering { node_id, expected });
                         } else {
                             if let Some(state) = self.node_state.get_mut(&node_id) {
                                 state.submitted_seq = expected.saturating_sub(1);
@@ -663,22 +749,23 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
                 self.new_submit.notify_one();
             }
             TransactionEvent::StatusBatch { node_id, statuses } => {
-                if let Some(state) = self.node_state.get_mut(&node_id) {
-                    state.confirm_inflight = false;
-                } else {
-                    return Ok(());
-                }
-                if self.state.is_recovering() {
-                    self.process_status_batch_recovering(node_id, statuses)?;
-                } else {
-                    self.process_status_batch_submitting(node_id, statuses)?;
-                }
+                let state = self.node_state.get_mut(&node_id).unwrap();
+                state.confirm_inflight = false;
+                self.process_status_batch(node_id, statuses)?;
+            }
+            TransactionEvent::RecoverStatus {
+                node_id,
+                id,
+                status,
+            } => {
+                let state = self.node_state.get_mut(&node_id).unwrap();
+                state.confirm_inflight = false;
             }
         }
         Ok(())
     }
 
-    fn process_status_batch_submitting(
+    fn process_status_batch(
         &mut self,
         node_id: NodeId,
         statuses: Vec<(S::TxId, TxStatus<S::ConfirmInfo>)>,
@@ -703,13 +790,12 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
                 TxStatus::Rejected { reason } => match reason {
                     RejectionReason::SequenceMismatch {
                         expected,
-                        error_code: _,
-                        message: _,
+                        node_id: _,
                     } => {
                         if cur_seq < expected {
                             self.state.update(ProcessorState::Recovering {
                                 node_id: node_id.clone(),
-                                reason: reason.clone(),
+                                expected,
                             });
                         } else {
                             let node_state = self.node_state.get_mut(&node_id).unwrap();
@@ -731,9 +817,10 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
                     self.state
                         .update(ProcessorState::Stopped(StopReason::ConfirmFailure(
                             ConfirmFailure {
-                                reason: RejectionReason::UnknownTransaction {
+                                reason: RejectionReason::OtherReason {
                                     error_code: ErrorCode::UnknownRequest,
                                     message: "transaction status unknown".to_string(),
+                                    node_id: node_id.clone(),
                                 },
                             },
                         )));
@@ -743,52 +830,27 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
         Ok(())
     }
 
-    fn process_status_batch_recovering(
+    fn process_status_recovering(
         &mut self,
-        _node_id: NodeId,
-        statuses: Vec<(S::TxId, TxStatus<S::ConfirmInfo>)>,
+        node_id: NodeId,
+        id: S::TxId,
+        status: TxStatus<S::ConfirmInfo>,
     ) -> Result<()> {
-        let ProcessorState::Recovering { reason, .. } = &self.state else {
-            return Ok(());
-        };
-        let recovery_reason = reason.clone();
-        let mut collected = statuses
-            .into_iter()
-            .map(|(tx_id, status)| (self.tx_index.get(&tx_id).unwrap().clone(), status))
-            .collect::<Vec<_>>();
-        collected.sort_by(|first, second| first.0.cmp(&second.0));
-        for (cur_seq, status) in collected.into_iter() {
-            match status {
-                TxStatus::Pending => {
-                    continue;
-                }
-                TxStatus::Evicted => {
-                    self.state
-                        .update(ProcessorState::Stopped(StopReason::ConfirmFailure(
-                            ConfirmFailure {
-                                reason: recovery_reason.clone(),
+        let seq = self.tx_index.get(&id).unwrap();
+        match status {
+            TxStatus::Confirmed { info } => {
+                self.update_confirmed_sequence(*seq, info)?;
+            }
+            _ => {
+                self.state
+                    .update(ProcessorState::Stopped(StopReason::ConfirmFailure(
+                        ConfirmFailure {
+                            reason: RejectionReason::SequenceMismatch {
+                                expected: *seq,
+                                node_id,
                             },
-                        )));
-                }
-                TxStatus::Rejected { reason: _reason } => {
-                    self.state
-                        .update(ProcessorState::Stopped(StopReason::ConfirmFailure(
-                            ConfirmFailure {
-                                reason: recovery_reason.clone(),
-                            },
-                        )));
-                }
-                TxStatus::Confirmed { info } => {
-                    self.update_confirmed_sequence(cur_seq, info)?;
-                }
-                TxStatus::Unknown => {
-                    self.state
-                        .update(ProcessorState::Stopped(StopReason::ConfirmFailure(
-                            ConfirmFailure {
-                                reason: recovery_reason.clone(),
-                            },
-                        )));
-                }
+                        },
+                    )));
             }
         }
         Ok(())
@@ -862,10 +924,11 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
         }
     }
 
-    fn spawn_confirmations(&mut self, max_seq: Option<u64>, node_filter: Option<&NodeId>) {
+    fn spawn_confirmations(&mut self, node_filter: Option<&NodeId>) {
         if self.tx_index.is_empty() {
             return;
         }
+        let state_epoch = self.state.epoch();
         // gathering all the sequences for each node
         for (node_id, state) in self.node_state.iter_mut() {
             if state.confirm_inflight {
@@ -876,10 +939,7 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
                     continue;
                 }
             }
-            let mut sub_seq = state.submitted_seq;
-            if let Some(max_seq) = max_seq {
-                sub_seq = sub_seq.max(max_seq);
-            }
+            let sub_seq = state.submitted_seq;
             let node_id = node_id.clone();
             let total = sub_seq - self.confirmed_sequence;
             let cap = self.max_status_batch.min(total as usize);
@@ -892,8 +952,15 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
             }
             let node = self.nodes.get(&node_id).unwrap().clone();
             self.confirmations.spawn(async move {
-                let statuses = node.status_batch(to_send).await.unwrap_or_default();
-                ConfirmationResult { node_id, statuses }
+                let response = node
+                    .status_batch(to_send)
+                    .await
+                    .map(|status| ConfirmationResponse::Submitting(status));
+                ConfirmationResult {
+                    state_epoch,
+                    node_id,
+                    response,
+                }
             });
         }
     }
@@ -1026,6 +1093,10 @@ mod tests {
             rx.await.expect("status batch reply")
         }
 
+        async fn status(&self, id: Self::TxId) -> TxConfirmResult<TxStatus<Self::ConfirmInfo>> {
+            todo!()
+        }
+
         async fn current_sequence(&self) -> Result<u64> {
             let (reply, rx) = oneshot::channel();
             self.calls
@@ -1107,10 +1178,7 @@ mod tests {
                         reply,
                     } => return (bytes, sequence, reply),
                     ServerCall::StatusBatch { ids, reply } => {
-                        let statuses = ids
-                            .into_iter()
-                            .map(|id| (id, TxStatus::Pending))
-                            .collect();
+                        let statuses = ids.into_iter().map(|id| (id, TxStatus::Pending)).collect();
                         let _ = reply.send(Ok(statuses));
                         self.pump().await;
                     }
@@ -1153,10 +1221,7 @@ mod tests {
             loop {
                 match self.calls_rx.try_recv() {
                     Ok(ServerCall::StatusBatch { ids, reply }) => {
-                        let statuses = ids
-                            .into_iter()
-                            .map(|id| (id, TxStatus::Pending))
-                            .collect();
+                        let statuses = ids.into_iter().map(|id| (id, TxStatus::Pending)).collect();
                         let _ = reply.send(Ok(statuses));
                         self.pump().await;
                     }
@@ -1247,10 +1312,7 @@ mod tests {
         let (ids, reply) = harness.expect_status_batch().await;
         assert_eq!(ids, vec![sequence]);
         reply
-            .send(Ok(vec![(
-                sequence,
-                TxStatus::Confirmed { info: 123 },
-            )]))
+            .send(Ok(vec![(sequence, TxStatus::Confirmed { info: 123 })]))
             .expect("status reply send");
 
         let confirm_result = confirm_rx.await.expect("confirm recv");
