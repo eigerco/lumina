@@ -53,7 +53,7 @@ uniffi = { workspace = true, optional = true, features = ["tokio"] }
 zeroize = "1.8"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-tokio = { workspace = true, features = ["time"] }
+tokio = { workspace = true, features = ["rt", "time"] }
 tonic = { workspace = true, features = ["transport"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]

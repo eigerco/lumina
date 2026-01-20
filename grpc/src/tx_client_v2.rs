@@ -73,12 +73,33 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use celestia_types::state::ErrorCode;
+use futures::future::{BoxFuture, FutureExt};
+use futures::select;
+use futures::stream::{FuturesUnordered, StreamExt};
+use lumina_utils::time::{self, Interval};
 use tendermint_proto::google::protobuf::Any;
 use tokio::sync::{Mutex, Notify, mpsc, oneshot};
-use tokio::task::JoinSet;
-use tokio::time;
 
 use crate::{Error, Result, TxConfig};
+
+/// Spawn a future on the appropriate runtime.
+/// On native: uses tokio::spawn
+/// On WASM: uses wasm_bindgen_futures::spawn_local
+#[cfg(not(target_arch = "wasm32"))]
+fn spawn<F>(future: F)
+where
+    F: std::future::Future<Output = ()> + Send + 'static,
+{
+    tokio::spawn(future);
+}
+
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
+fn spawn<F>(future: F)
+where
+    F: std::future::Future<Output = ()> + 'static,
+{
+    wasm_bindgen_futures::spawn_local(future);
+}
 /// Identifier for a submission/confirmation node.
 pub type NodeId = String;
 /// Result for submission calls: either a server TxId or a submission failure.
@@ -238,7 +259,7 @@ struct NodeSubmissionState {
     submitted_seq: u64,
     inflight: bool,
     confirm_inflight: bool,
-    delay: Option<time::Duration>,
+    delay: Option<Duration>,
 }
 
 #[derive(Debug)]
@@ -482,9 +503,10 @@ pub struct TransactionWorker<S: TxServer> {
     node_state: HashMap<NodeId, NodeSubmissionState>,
     add_tx_rx: mpsc::Receiver<Transaction<S::TxId, S::ConfirmInfo>>,
     new_submit: Arc<Notify>,
-    submissions: JoinSet<SubmissionResult<S::TxId>>,
-    confirmations: JoinSet<ConfirmationResult<S::TxId, S::ConfirmInfo>>,
-    confirm_ticker: time::Interval,
+    submissions: FuturesUnordered<BoxFuture<'static, Option<SubmissionResult<S::TxId>>>>,
+    confirmations:
+        FuturesUnordered<BoxFuture<'static, Option<ConfirmationResult<S::TxId, S::ConfirmInfo>>>>,
+    confirm_ticker: Interval,
     confirm_interval: Duration,
     max_status_batch: usize,
     state: ProcessorStateWithEpoch,
@@ -530,9 +552,9 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
                 next_enqueue_sequence: start_sequence,
                 node_state,
                 new_submit: Arc::new(Notify::new()),
-                submissions: JoinSet::new(),
-                confirmations: JoinSet::new(),
-                confirm_ticker: time::interval(confirm_interval),
+                submissions: FuturesUnordered::new(),
+                confirmations: FuturesUnordered::new(),
+                confirm_ticker: Interval::new(confirm_interval),
                 state: ProcessorStateWithEpoch::new(ProcessorState::Submitting),
                 confirm_interval,
                 max_status_batch,
@@ -567,8 +589,8 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
                 self.process_event(event).await?;
             }
 
-            tokio::select! {
-                _ = shutdown.notified() => self.state.update(ProcessorState::Stopped(StopReason::Shutdown)),
+            select! {
+                _ = shutdown.notified().fuse() => self.state.update(ProcessorState::Stopped(StopReason::Shutdown)),
                 res = async {
                     match self.state.snapshot() {
                         ProcessorState::Recovering { node_id, expected } => {
@@ -580,13 +602,23 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
                         _ => (),
                     }
                     Ok::<_, Error>(())
-                } => res?,
-            };
+                }.fuse() => res?,
+            }
             if self.state.is_stopped() {
                 break;
             }
         }
         Ok(())
+    }
+
+    /// Wait for all in-flight submissions and confirmations to complete.
+    ///
+    /// Call this before dropping the worker if you need to ensure all spawned
+    /// tasks have finished. Note: this will block until all pending network
+    /// requests complete, so ensure your servers are responsive.
+    pub async fn drain_pending(&mut self) {
+        while self.submissions.next().await.is_some() {}
+        while self.confirmations.next().await.is_some() {}
     }
 
     async fn run_recovering(&mut self, node_id: &NodeId, expected: u64) -> Result<()> {
@@ -596,31 +628,33 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
             return Ok(());
         }
 
-        tokio::select! {
-            _ = self.confirm_ticker.tick() => {
+        select! {
+            _ = self.confirm_ticker.tick().fuse() => {
                 let target = expected.saturating_sub(1);
                 if let Some(idx) = self.index_for_sequence(target) {
                     let node_id = node_id.clone();
                     let node = self.nodes.get(&node_id).unwrap().clone();
                     let id = self.txs[idx].id.clone();
                     let state_epoch = self.state.epoch();
-                    self.confirmations.spawn(async move {
+                    let (tx, rx) = oneshot::channel();
+                    spawn(async move {
                         let response = node.status(id.clone()).await.map(|status| {
                             ConfirmationResponse::Recovering {
                                 id,
                                 status,
                             }
                         });
-                        ConfirmationResult {
+                        let _ = tx.send(ConfirmationResult {
                             node_id,
                             response,
                             state_epoch,
-                        }
+                        });
                     });
+                    self.confirmations.push(async move { rx.await.ok() }.boxed());
                 }
             }
-            Some(result) = self.confirmations.join_next() => {
-                let Ok(result) = result else {
+            result = self.confirmations.next() => {
+                let Some(Some(result)) = result else {
                     return Ok(());
                 };
                 if result.state_epoch != self.state.epoch() {
@@ -641,18 +675,20 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
     }
 
     async fn run_submitting(&mut self) -> Result<()> {
-        tokio::select! {
-            Some(tx) = self.add_tx_rx.recv() => {
-                self.enqueue_tx(tx)?;
+        select! {
+            tx = self.add_tx_rx.recv().fuse() => {
+                if let Some(tx) = tx {
+                    self.enqueue_tx(tx)?;
+                }
             }
-            _ = self.new_submit.notified() => {
+            _ = self.new_submit.notified().fuse() => {
                 self.spawn_submissions();
             }
-            _ = self.confirm_ticker.tick() => {
+            _ = self.confirm_ticker.tick().fuse() => {
                 self.spawn_confirmations(None);
             }
-            Some(result) = self.submissions.join_next() => {
-                if let Ok(result) = result {
+            result = self.submissions.next() => {
+                if let Some(Some(result)) = result {
                     self.events.push_back(match result.result {
                         Ok(id) => TransactionEvent::Submitted {
                             node_id: result.node_id,
@@ -667,8 +703,8 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
                     });
                 }
             }
-            Some(result) = self.confirmations.join_next() => {
-                let Ok(result) = result else {
+            result = self.confirmations.next() => {
+                let Some(Some(result)) = result else {
                     return Ok(());
                 };
                 if result.state_epoch != self.state.epoch() {
@@ -912,15 +948,17 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
                 state.submitted_seq = target_sequence;
                 state.inflight = true;
             }
-            self.submissions.spawn(async move {
-                tokio::time::sleep(delay).await;
+            let (tx, rx) = oneshot::channel();
+            spawn(async move {
+                time::sleep(delay).await;
                 let result = node.submit(bytes.clone(), target_sequence).await;
-                SubmissionResult {
+                let _ = tx.send(SubmissionResult {
                     node_id,
                     sequence: target_sequence,
                     result,
-                }
+                });
             });
+            self.submissions.push(async move { rx.await.ok() }.boxed());
         }
     }
 
@@ -951,17 +989,19 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
                 to_send.push(self.txs[i].id.clone());
             }
             let node = self.nodes.get(&node_id).unwrap().clone();
-            self.confirmations.spawn(async move {
+            let (tx, rx) = oneshot::channel();
+            spawn(async move {
                 let response = node
                     .status_batch(to_send)
                     .await
                     .map(|status| ConfirmationResponse::Submitting(status));
-                ConfirmationResult {
+                let _ = tx.send(ConfirmationResult {
                     state_epoch,
                     node_id,
                     response,
-                }
+                });
             });
+            self.confirmations.push(async move { rx.await.ok() }.boxed());
         }
     }
 
@@ -1240,7 +1280,7 @@ mod tests {
         }
 
         async fn tick_confirm(&self) {
-            time::advance(self.confirm_interval + Duration::from_nanos(1)).await;
+            tokio::time::advance(self.confirm_interval + Duration::from_nanos(1)).await;
             self.pump().await;
         }
 

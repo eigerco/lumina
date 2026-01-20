@@ -7,8 +7,7 @@ use k256::ecdsa::VerifyingKey;
 use prost::Message;
 use tendermint::chain::Id;
 use tendermint::crypto::Sha256 as _;
-use tokio::sync::{Mutex, Notify, OnceCell, RwLock};
-use tokio::task::JoinHandle;
+use tokio::sync::{Mutex, Notify, OnceCell, RwLock, oneshot};
 
 use celestia_types::any::IntoProtobufAny;
 use celestia_types::blob::{MsgPayForBlobs, RawBlobTx, RawMsgPayForBlobs};
@@ -131,7 +130,7 @@ struct TransactionServiceInner {
 
 struct WorkerHandle {
     shutdown: Arc<Notify>,
-    handle: JoinHandle<Result<()>>,
+    done_rx: oneshot::Receiver<Result<()>>,
 }
 
 impl TransactionService {
@@ -187,8 +186,8 @@ impl TransactionService {
         let mut worker_guard = self.inner.worker.lock().await;
         if let Some(old_worker) = worker_guard.replace(worker_handle) {
             old_worker.shutdown.notify_one();
-            old_worker.handle.abort();
-            let _ = old_worker.handle.await;
+            // Wait for worker to finish
+            let _ = old_worker.done_rx.await;
         }
 
         let mut manager_guard = self.inner.manager.write().await;
@@ -217,10 +216,31 @@ impl TransactionService {
 
         let shutdown = Arc::new(Notify::new());
         let worker_shutdown = shutdown.clone();
-        let handle = tokio::spawn(async move { worker.process(worker_shutdown).await });
+        let (done_tx, done_rx) = oneshot::channel();
+        spawn(async move {
+            let result = worker.process(worker_shutdown).await;
+            let _ = done_tx.send(result);
+        });
 
-        Ok((manager, WorkerHandle { shutdown, handle }))
+        Ok((manager, WorkerHandle { shutdown, done_rx }))
     }
+}
+
+/// Spawn a future on the appropriate runtime.
+#[cfg(not(target_arch = "wasm32"))]
+fn spawn<F>(future: F)
+where
+    F: std::future::Future<Output = ()> + Send + 'static,
+{
+    tokio::spawn(future);
+}
+
+#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
+fn spawn<F>(future: F)
+where
+    F: std::future::Future<Output = ()> + 'static,
+{
+    wasm_bindgen_futures::spawn_local(future);
 }
 
 impl GrpcClient {
