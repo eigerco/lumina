@@ -834,6 +834,7 @@ dependencies = [
  "tendermint-proto",
  "thiserror 2.0.16",
  "tokio",
+ "tokio-util",
  "tonic",
  "tonic-web-wasm-client",
  "tracing",

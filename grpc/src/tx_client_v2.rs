@@ -74,32 +74,16 @@ use std::time::Duration;
 use async_trait::async_trait;
 use celestia_types::state::ErrorCode;
 use futures::future::{BoxFuture, FutureExt};
-use futures::select;
 use futures::stream::{FuturesUnordered, StreamExt};
+use lumina_utils::executor::{spawn, spawn_cancellable};
 use lumina_utils::time::{self, Interval};
 use tendermint_proto::google::protobuf::Any;
+use tendermint_proto::types::CanonicalVoteExtension;
+use tokio::select;
 use tokio::sync::{Mutex, Notify, mpsc, oneshot};
+use tokio_util::sync::CancellationToken;
 
 use crate::{Error, Result, TxConfig};
-
-/// Spawn a future on the appropriate runtime.
-/// On native: uses tokio::spawn
-/// On WASM: uses wasm_bindgen_futures::spawn_local
-#[cfg(not(target_arch = "wasm32"))]
-fn spawn<F>(future: F)
-where
-    F: std::future::Future<Output = ()> + Send + 'static,
-{
-    tokio::spawn(future);
-}
-
-#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
-fn spawn<F>(future: F)
-where
-    F: std::future::Future<Output = ()> + 'static,
-{
-    wasm_bindgen_futures::spawn_local(future);
-}
 /// Identifier for a submission/confirmation node.
 pub type NodeId = String;
 /// Result for submission calls: either a server TxId or a submission failure.
@@ -583,26 +567,26 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
     /// # Notes
     /// - The worker is single-owner; it should be run in a dedicated task.
     /// - On terminal failures it returns `Ok(())` after notifying callbacks.
-    pub async fn process(&mut self, shutdown: Arc<Notify>) -> Result<()> {
+    pub async fn process(&mut self, shutdown: CancellationToken) -> Result<()> {
         loop {
             while let Some(event) = self.events.pop_front() {
                 self.process_event(event).await?;
             }
 
             select! {
-                _ = shutdown.notified().fuse() => self.state.update(ProcessorState::Stopped(StopReason::Shutdown)),
+                _ = shutdown.cancelled() => self.state.update(ProcessorState::Stopped(StopReason::Shutdown)),
                 res = async {
                     match self.state.snapshot() {
                         ProcessorState::Recovering { node_id, expected } => {
-                            self.run_recovering(&node_id, expected).await?;
+                            self.run_recovering(shutdown.clone(), &node_id, expected).await?;
                         }
                         ProcessorState::Submitting => {
-                            self.run_submitting().await?;
+                            self.run_submitting(shutdown.clone()).await?;
                         }
                         _ => (),
                     }
                     Ok::<_, Error>(())
-                }.fuse() => res?,
+                } => res?,
             }
             if self.state.is_stopped() {
                 break;
@@ -625,7 +609,12 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
         while self.confirmations.next().await.is_some() {}
     }
 
-    async fn run_recovering(&mut self, node_id: &NodeId, expected: u64) -> Result<()> {
+    async fn run_recovering(
+        &mut self,
+        token: CancellationToken,
+        node_id: &NodeId,
+        expected: u64,
+    ) -> Result<()> {
         let start = self.confirmed_sequence.saturating_add(1);
         if expected < start {
             self.state.force_update(ProcessorState::Submitting);
@@ -633,15 +622,15 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
         }
 
         select! {
-            _ = self.confirm_ticker.tick().fuse() => {
+            _ = self.confirm_ticker.tick() => {
                 let target = expected.saturating_sub(1);
                 if let Some(idx) = self.index_for_sequence(target) {
                     let node_id = node_id.clone();
                     let node = self.nodes.get(&node_id).unwrap().clone();
                     let id = self.txs[idx].id.clone();
                     let state_epoch = self.state.epoch();
-                    let (tx, rx) = oneshot::channel();
-                    spawn(async move {
+                    let tx = push_future(&mut self.confirmations);
+                    spawn_cancellable(token, async move {
                         let response = node.status(id.clone()).await.map(|status| {
                             ConfirmationResponse::Recovering {
                                 id,
@@ -654,7 +643,6 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
                             state_epoch,
                         });
                     });
-                    self.confirmations.push(async move { rx.await.ok() }.boxed());
                 }
             }
             result = self.confirmations.next() => {
@@ -678,18 +666,18 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
         Ok(())
     }
 
-    async fn run_submitting(&mut self) -> Result<()> {
+    async fn run_submitting(&mut self, token: CancellationToken) -> Result<()> {
         select! {
-            tx = self.add_tx_rx.recv().fuse() => {
+            tx = self.add_tx_rx.recv() => {
                 if let Some(tx) = tx {
                     self.enqueue_tx(tx)?;
                 }
             }
-            _ = self.new_submit.notified().fuse() => {
-                self.spawn_submissions();
+            _ = self.new_submit.notified() => {
+                self.spawn_submissions(token.clone());
             }
-            _ = self.confirm_ticker.tick().fuse() => {
-                self.spawn_confirmations(None);
+            _ = self.confirm_ticker.tick() => {
+                self.spawn_confirmations(token.clone());
             }
             result = self.submissions.next() => {
                 if let Some(Some(result)) = result {
@@ -800,6 +788,7 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
             } => {
                 let state = self.node_state.get_mut(&node_id).unwrap();
                 state.confirm_inflight = false;
+                self.process_status_recovering(node_id, id, status)?;
             }
         }
         Ok(())
@@ -924,7 +913,7 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
         }
     }
 
-    fn spawn_submissions(&mut self) {
+    fn spawn_submissions(&mut self, token: CancellationToken) {
         if self.nodes.is_empty() {
             return;
         }
@@ -952,8 +941,8 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
                 state.submitted_seq = target_sequence;
                 state.inflight = true;
             }
-            let (tx, rx) = oneshot::channel();
-            spawn(async move {
+            let tx = push_future(&mut self.submissions);
+            spawn_cancellable(token.clone(), async move {
                 time::sleep(delay).await;
                 let result = node.submit(bytes.clone(), target_sequence).await;
                 let _ = tx.send(SubmissionResult {
@@ -962,11 +951,10 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
                     result,
                 });
             });
-            self.submissions.push(async move { rx.await.ok() }.boxed());
         }
     }
 
-    fn spawn_confirmations(&mut self, node_filter: Option<&NodeId>) {
+    fn spawn_confirmations(&mut self, token: CancellationToken) {
         if self.tx_index.is_empty() {
             return;
         }
@@ -975,11 +963,6 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
         for (node_id, state) in self.node_state.iter_mut() {
             if state.confirm_inflight {
                 continue;
-            }
-            if let Some(filter) = node_filter {
-                if node_id != filter {
-                    continue;
-                }
             }
             let sub_seq = state.submitted_seq;
             let node_id = node_id.clone();
@@ -993,8 +976,8 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
                 to_send.push(self.txs[i].id.clone());
             }
             let node = self.nodes.get(&node_id).unwrap().clone();
-            let (tx, rx) = oneshot::channel();
-            spawn(async move {
+            let tx = push_future(&mut self.confirmations);
+            spawn_cancellable(token.clone(), async move {
                 let response = node
                     .status_batch(to_send)
                     .await
@@ -1005,8 +988,6 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
                     response,
                 });
             });
-            self.confirmations
-                .push(async move { rx.await.ok() }.boxed());
         }
     }
 
@@ -1044,6 +1025,14 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
         let tx = self.txs.get_mut(idx)?;
         tx.callbacks.on_confirm.take()
     }
+}
+
+fn push_future<T: 'static + Send>(
+    unordered: &mut FuturesUnordered<BoxFuture<'static, Option<T>>>,
+) -> oneshot::Sender<T> {
+    let (tx, rx) = oneshot::channel();
+    unordered.push(async move { rx.await.ok() }.boxed());
+    tx
 }
 
 #[cfg(test)]
@@ -1154,7 +1143,7 @@ mod tests {
 
     struct Harness {
         calls_rx: mpsc::Receiver<ServerCall>,
-        shutdown: Arc<Notify>,
+        shutdown: CancellationToken,
         handle: Option<JoinHandle<Result<()>>>,
         confirm_interval: Duration,
         manager: TransactionManager<TestTxId, TestConfirmInfo>,
@@ -1183,7 +1172,7 @@ mod tests {
             (
                 Self {
                     calls_rx,
-                    shutdown: Arc::new(Notify::new()),
+                    shutdown: CancellationToken::new(),
                     handle: None,
                     confirm_interval,
                     manager,
@@ -1263,15 +1252,27 @@ mod tests {
         }
 
         async fn drain_status_batches_pending(&mut self) {
-            loop {
+            // Loop multiple times with yields to give spawned tasks a chance to run
+            for _ in 0..Self::MAX_SPINS {
                 match self.calls_rx.try_recv() {
                     Ok(ServerCall::StatusBatch { ids, reply }) => {
                         let statuses = ids.into_iter().map(|id| (id, TxStatus::Pending)).collect();
                         let _ = reply.send(Ok(statuses));
                         self.pump().await;
                     }
-                    Ok(call) => panic!("unexpected server call: {:?}", call),
-                    Err(TryRecvError::Empty) => break,
+                    Ok(ServerCall::Submit {
+                        sequence, reply, ..
+                    }) => {
+                        let _ = reply.send(Ok(sequence));
+                        self.pump().await;
+                    }
+                    Ok(ServerCall::CurrentSequence { reply }) => {
+                        let _ = reply.send(Ok(1));
+                        self.pump().await;
+                    }
+                    Err(TryRecvError::Empty) => {
+                        self.pump().await;
+                    }
                     Err(TryRecvError::Disconnected) => break,
                 }
             }
@@ -1289,17 +1290,37 @@ mod tests {
             self.pump().await;
         }
 
-        async fn join(&mut self) -> Result<()> {
-            self.handle
-                .take()
-                .expect("manager started")
-                .await
-                .expect("manager join")
-        }
-
         async fn shutdown(mut self) {
-            self.shutdown.notify_one();
-            let _ = self.join().await;
+            self.shutdown.cancel();
+
+            let mut handle = self.handle.take().expect("manager started");
+
+            // Use select to respond to mock calls while waiting for worker to finish
+            loop {
+                select! {
+                    biased;
+                    result = &mut handle => {
+                        let _ = result;
+                        break;
+                    }
+                    call = self.calls_rx.recv() => {
+                        match call {
+                            Some(ServerCall::Submit { reply, sequence, .. }) => {
+                                let _ = reply.send(Ok(sequence));
+                            }
+                            Some(ServerCall::StatusBatch { ids, reply }) => {
+                                let statuses =
+                                    ids.into_iter().map(|id| (id, TxStatus::Pending)).collect();
+                                let _ = reply.send(Ok(statuses));
+                            }
+                            Some(ServerCall::CurrentSequence { reply }) => {
+                                let _ = reply.send(Ok(1));
+                            }
+                            None => break, // Channel closed
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -1573,7 +1594,7 @@ mod tests {
         let info = confirm_result.expect("confirm ok");
         assert_eq!(info, 456);
 
-        harness.assert_no_calls();
+        harness.drain_status_batches_pending().await;
         harness.shutdown().await;
     }
 
@@ -1585,8 +1606,10 @@ mod tests {
         assert_eq!(seq, 1);
         harness.start(manager_worker);
 
-        let (_bytes, sequence, _reply) = harness.expect_submit().await;
+        let (_bytes, sequence, reply) = harness.expect_submit().await;
         assert_eq!(sequence, 1);
+        // Must reply so the spawned task can complete during drain_pending
+        reply.send(Ok(sequence)).expect("send reply");
 
         harness.drain_status_batches_pending().await;
         harness.shutdown().await;

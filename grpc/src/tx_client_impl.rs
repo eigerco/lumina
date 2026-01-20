@@ -4,10 +4,12 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use k256::ecdsa::VerifyingKey;
+use lumina_utils::executor::spawn;
 use prost::Message;
 use tendermint::chain::Id;
 use tendermint::crypto::Sha256 as _;
-use tokio::sync::{Mutex, Notify, OnceCell, RwLock, oneshot};
+use tokio::sync::{Mutex, OnceCell, RwLock, oneshot};
+use tokio_util::sync::CancellationToken;
 
 use celestia_types::any::IntoProtobufAny;
 use celestia_types::blob::{MsgPayForBlobs, RawBlobTx, RawMsgPayForBlobs};
@@ -129,7 +131,7 @@ struct TransactionServiceInner {
 }
 
 struct WorkerHandle {
-    shutdown: Arc<Notify>,
+    shutdown: CancellationToken,
     done_rx: oneshot::Receiver<Result<()>>,
 }
 
@@ -185,7 +187,7 @@ impl TransactionService {
 
         let mut worker_guard = self.inner.worker.lock().await;
         if let Some(old_worker) = worker_guard.replace(worker_handle) {
-            old_worker.shutdown.notify_one();
+            old_worker.shutdown.cancel();
             // Wait for worker to finish
             let _ = old_worker.done_rx.await;
         }
@@ -214,7 +216,7 @@ impl TransactionService {
             queue_capacity,
         );
 
-        let shutdown = Arc::new(Notify::new());
+        let shutdown = CancellationToken::new();
         let worker_shutdown = shutdown.clone();
         let (done_tx, done_rx) = oneshot::channel();
         spawn(async move {
@@ -224,23 +226,6 @@ impl TransactionService {
 
         Ok((manager, WorkerHandle { shutdown, done_rx }))
     }
-}
-
-/// Spawn a future on the appropriate runtime.
-#[cfg(not(target_arch = "wasm32"))]
-fn spawn<F>(future: F)
-where
-    F: std::future::Future<Output = ()> + Send + 'static,
-{
-    tokio::spawn(future);
-}
-
-#[cfg(all(target_arch = "wasm32", feature = "wasm-bindgen"))]
-fn spawn<F>(future: F)
-where
-    F: std::future::Future<Output = ()> + 'static,
-{
-    wasm_bindgen_futures::spawn_local(future);
 }
 
 impl GrpcClient {

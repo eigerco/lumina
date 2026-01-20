@@ -26,7 +26,7 @@ crate-type = ["cdylib", "lib"]
 celestia-grpc-macros.workspace = true
 celestia-proto = { workspace = true, features = ["tonic"] }
 celestia-types.workspace = true
-lumina-utils = { workspace = true, features = ["time"] }
+lumina-utils = { workspace = true, features = ["time", "executor"] }
 
 arc-swap = "1"
 async-trait = { workspace = true }
@@ -46,7 +46,8 @@ signature = "2"
 tendermint.workspace = true
 tendermint-proto.workspace = true
 thiserror.workspace = true
-tokio = { workspace = true, features = ["sync"] }
+tokio = { workspace = true, features = ["sync", "macros"] }
+tokio-util.workspace = true
 tonic = { workspace = true, features = ["codegen"] }
 tracing.workspace = true
 uniffi = { workspace = true, optional = true, features = ["tokio"] }
