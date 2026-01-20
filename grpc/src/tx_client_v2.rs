@@ -1001,7 +1001,8 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
                     response,
                 });
             });
-            self.confirmations.push(async move { rx.await.ok() }.boxed());
+            self.confirmations
+                .push(async move { rx.await.ok() }.boxed());
         }
     }
 

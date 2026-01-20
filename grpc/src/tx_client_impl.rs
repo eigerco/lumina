@@ -22,8 +22,8 @@ use crate::grpc::{
 use crate::signer::{BoxedDocSigner, sign_tx};
 
 use crate::tx_client_v2::{
-    SignFn, SubmitFailure, Transaction, TransactionManager, TransactionWorker, TxCallbacks,
-    RejectionReason, TxConfirmResult, TxHandle, TxRequest, TxServer, TxStatus, TxSubmitResult,
+    RejectionReason, SignFn, SubmitFailure, Transaction, TransactionManager, TransactionWorker,
+    TxCallbacks, TxConfirmResult, TxHandle, TxRequest, TxServer, TxStatus, TxSubmitResult,
 };
 use crate::{Error, GrpcClient, Result, TxConfig, TxInfo};
 
