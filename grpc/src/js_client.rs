@@ -2,6 +2,7 @@ use std::time::Duration;
 
 use js_sys::{Array, Uint8Array};
 use k256::ecdsa::VerifyingKey;
+use wasm_bindgen::convert::TryFromJsValue;
 use wasm_bindgen::prelude::*;
 
 use crate::GrpcClientBuilderError;
@@ -219,7 +220,13 @@ pub(crate) fn endpoint_from_js(value: JsValue) -> Result<crate::Endpoint, JsValu
         return Ok(crate::Endpoint::from(url));
     }
 
-    Err(JsValue::from_str("Expected a string URL"))
+    if let Ok(endpoint) = Endpoint::try_from_js_value(value) {
+        return Ok(endpoint.inner);
+    }
+
+    Err(JsValue::from_str(
+        "Expected a string or Endpoint for endpoint values",
+    ))
 }
 
 pub(crate) fn endpoints_from_js(value: JsValue) -> Result<Vec<crate::Endpoint>, JsValue> {
