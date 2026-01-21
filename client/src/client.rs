@@ -223,7 +223,7 @@ impl ClientBuilder {
     }
 
     /// Set the request timeout for RPC endpoints.
-    pub fn rpc_timeout(mut self, timeout: Duration) -> ClientBuilder {
+    pub fn timeout(mut self, timeout: Duration) -> ClientBuilder {
         self.timeout = Some(timeout);
         self
     }

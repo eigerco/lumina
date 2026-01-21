@@ -737,7 +737,7 @@ mod tests {
         let client_build_error = Client::builder()
             .rpc_url(TEST_RPC_URL)
             .grpc_url(TEST_GRPC_URL)
-            .rpc_timeout(Duration::from_nanos(1))
+            .timeout(Duration::from_nanos(1))
             .build()
             .await
             .unwrap_err();
