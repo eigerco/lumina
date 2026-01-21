@@ -1051,9 +1051,7 @@ mod tests {
         // Per-call metadata (.block_height) should be in call.context
         let call = client.app_version().block_height(1234);
         assert!(call.context.metadata.contains_key("x-cosmos-block-height"));
-
-        // Note: endpoint metadata is now in transport, not in call.context
-        // It will be merged at request time by the macro
+        // The token metadata is not in the call.context, because it is merged at runtime whenever we decide which transport we use
     }
 
     #[async_test]

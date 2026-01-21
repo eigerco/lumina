@@ -89,7 +89,7 @@ pub(crate) struct ClientInner {
 }
 
 /// A builder for [`Client`].
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct ClientBuilder {
     rpc_url: Option<String>,
     rpc_auth_token: Option<String>,
@@ -222,7 +222,7 @@ impl ClientBuilder {
         self
     }
 
-    /// Set the request timeout for RPC endpoints.
+    /// Set the request timeout for both RPC and gRPC endpoints.
     pub fn timeout(mut self, timeout: Duration) -> ClientBuilder {
         self.timeout = Some(timeout);
         self
@@ -241,7 +241,7 @@ impl ClientBuilder {
         self.grpc_endpoint(url)
     }
 
-    /// Set the gRPC endpoint. Alias of [`ClientBuilder::grpc_url`].
+    /// Set the gRPC endpoint.
     pub fn grpc_endpoint(mut self, endpoint: impl Into<Endpoint>) -> ClientBuilder {
         let grpc_builder = self.grpc_builder.unwrap_or_default();
         self.grpc_builder = Some(grpc_builder.endpoint(endpoint));
@@ -249,8 +249,6 @@ impl ClientBuilder {
     }
 
     /// Add multiple gRPC endpoints at once for fallback support.
-    ///
-    /// Alias of [`ClientBuilder::grpc_endpoints`].
     ///
     /// Accepts `Endpoint`, `&str`, or `String` items.
     ///
