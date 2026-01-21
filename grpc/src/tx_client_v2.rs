@@ -50,7 +50,7 @@
 //! #     }
 //! # }
 //! # async fn docs() -> Result<()> {
-//! let nodes = HashMap::from([(Arc::new(String::from("node-1")), Arc::new(DummyServer))]);
+//! let nodes = HashMap::from([(Arc::from("node-1"), Arc::new(DummyServer))]);
 //! let signer = Arc::new(DummySigner);
 //! let (manager, mut worker) = TransactionWorker::new(
 //!     nodes,
@@ -85,7 +85,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::{Error, Result, TxConfig};
 /// Identifier for a submission/confirmation node.
-pub type NodeId = Arc<String>;
+pub type NodeId = Arc<str>;
 /// Result for submission calls: either a server TxId or a submission failure.
 pub type TxSubmitResult<T> = Result<T, SubmitFailure>;
 /// Result for confirmation calls.
@@ -1139,7 +1139,7 @@ mod tests {
         ) -> (Self, TransactionWorker<MockTxServer>) {
             let (calls_tx, calls_rx) = mpsc::channel(64);
             let server = Arc::new(MockTxServer::new(calls_tx));
-            let nodes = HashMap::from([(Arc::new(String::from("node-1")), server)]);
+            let nodes = HashMap::from([(Arc::from("node-1"), server)]);
             let signer = Arc::new(TestSigner::default());
             let (manager, worker) = TransactionWorker::new(
                 nodes,
@@ -1530,7 +1530,7 @@ mod tests {
                         TxStatus::Rejected {
                             reason: RejectionReason::SequenceMismatch {
                                 expected: 2,
-                                node_id: Arc::new("node-1".to_string()),
+                                node_id: Arc::from("node-1"),
                             },
                         },
                     )
