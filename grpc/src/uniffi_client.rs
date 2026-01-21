@@ -8,7 +8,7 @@ use uniffi::Object;
 
 mod grpc_client;
 
-use crate::EndpointConfig as RustEndpointConfig;
+use crate::Endpoint as RustEndpoint;
 use crate::GrpcClientBuilder as RustBuilder;
 use crate::signer::{UniffiSigner, UniffiSignerBox};
 
@@ -43,19 +43,17 @@ pub enum GrpcClientBuilderError {
     TlsNotSupported,
 }
 
-/// Configuration specific to a single URL endpoint.
-///
-/// This includes HTTP/2 headers (metadata) and timeout that will be applied
-/// to all requests made to this endpoint.
+/// A URL endpoint paired with its configuration.
 #[derive(Object)]
-pub struct EndpointConfig(Mutex<Option<RustEndpointConfig>>);
+pub struct Endpoint(Mutex<Option<RustEndpoint>>);
 
 #[uniffi::export]
-impl EndpointConfig {
-    /// Create a new, empty endpoint configuration.
+impl Endpoint {
+    /// Create a new endpoint with a URL.
     #[uniffi::constructor]
-    pub fn new() -> Self {
-        EndpointConfig(Mutex::new(Some(RustEndpointConfig::new())))
+    pub fn new(url: String) -> Self {
+        let endpoint = RustEndpoint::from(url);
+        Endpoint(Mutex::new(Some(endpoint)))
     }
 
     /// Appends ASCII metadata (HTTP/2 header) to requests made to this endpoint.
@@ -63,8 +61,8 @@ impl EndpointConfig {
     pub fn metadata(self: Arc<Self>, key: &str, value: &str) -> Arc<Self> {
         {
             let mut lock = self.0.lock().expect("lock poisoned");
-            let config = lock.take().expect("config must be set");
-            *lock = Some(config.metadata(key, value));
+            let endpoint = lock.take().expect("endpoint must be set");
+            *lock = Some(endpoint.metadata(key, value));
         }
         self
     }
@@ -76,8 +74,8 @@ impl EndpointConfig {
     pub fn metadata_bin(self: Arc<Self>, key: &str, value: &[u8]) -> Arc<Self> {
         {
             let mut lock = self.0.lock().expect("lock poisoned");
-            let config = lock.take().expect("config must be set");
-            *lock = Some(config.metadata_bin(key, value.to_vec()));
+            let endpoint = lock.take().expect("endpoint must be set");
+            *lock = Some(endpoint.metadata_bin(key, value.to_vec()));
         }
         self
     }
@@ -87,49 +85,20 @@ impl EndpointConfig {
     pub fn timeout(self: Arc<Self>, timeout_ms: u64) -> Arc<Self> {
         {
             let mut lock = self.0.lock().expect("lock poisoned");
-            let config = lock.take().expect("config must be set");
-            *lock = Some(config.timeout(Duration::from_millis(timeout_ms)));
+            let endpoint = lock.take().expect("endpoint must be set");
+            *lock = Some(endpoint.timeout(Duration::from_millis(timeout_ms)));
         }
         self
     }
 }
 
-impl Default for EndpointConfig {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl EndpointConfig {
-    fn take(&self) -> RustEndpointConfig {
+impl Endpoint {
+    fn take(&self) -> RustEndpoint {
         self.0
             .lock()
             .expect("lock poisoned")
             .take()
-            .expect("config must be set")
-    }
-}
-
-/// An endpoint entry containing a URL and its configuration.
-///
-/// Used to configure multiple endpoints with `GrpcClientBuilder.withUrls()`.
-#[derive(Object)]
-pub struct EndpointEntry {
-    url: String,
-    config: RustEndpointConfig,
-}
-
-#[uniffi::export]
-impl EndpointEntry {
-    /// Create a new endpoint entry with a URL and optional configuration.
-    ///
-    /// If no configuration is provided, default settings will be used.
-    #[uniffi::constructor]
-    pub fn new(url: String, config: Option<Arc<EndpointConfig>>) -> Self {
-        Self {
-            url,
-            config: config.map(|c| c.take()).unwrap_or_default(),
-        }
+            .expect("endpoint must be set")
     }
 }
 
@@ -166,17 +135,16 @@ impl GrpcClientBuilder {
         GrpcClientBuilder(Mutex::new(Some(builder)))
     }
 
-    /// Create a new builder for the provided url with configuration.
+    /// Create a new builder for the provided endpoint.
     ///
     /// Example:
     /// ```swift
-    /// let config = EndpointConfig().withMetadata(key: "authorization", value: "Bearer token")
-    /// let client = try await GrpcClientBuilder.withUrlWithConfig(url: "http://localhost:9090", config: config).build()
+    /// let endpoint = Endpoint(url: "http://localhost:9090")
+    /// let client = try await GrpcClientBuilder.withEndpoint(endpoint: endpoint).build()
     /// ```
-    #[uniffi::constructor(name = "withUrlWithConfig")]
-    pub fn with_url_with_config(url: String, config: Arc<EndpointConfig>) -> Self {
-        let config = config.take();
-        let builder = RustBuilder::new().url_with_config(url, config);
+    #[uniffi::constructor(name = "withEndpoint")]
+    pub fn with_endpoint(endpoint: Arc<Endpoint>) -> Self {
+        let builder = RustBuilder::new().endpoint(endpoint.take());
         GrpcClientBuilder(Mutex::new(Some(builder)))
     }
 
@@ -195,26 +163,20 @@ impl GrpcClientBuilder {
         GrpcClientBuilder(Mutex::new(Some(builder)))
     }
 
-    /// Create a new builder with multiple fallback URLs and their configurations.
+    /// Create a new builder with multiple fallback endpoints.
     ///
     /// When multiple endpoints are configured, the client will automatically
     /// fall back to the next endpoint if a network-related error occurs.
     ///
     /// Example:
     /// ```swift
-    /// let endpoints = [
-    ///     EndpointEntry(url: "http://primary:9090", config: EndpointConfig().withTimeout(5000)),
-    ///     EndpointEntry(url: "http://fallback:9090", config: nil)
-    /// ]
-    /// let client = try await GrpcClientBuilder.withUrlsAndConfig(endpoints: endpoints).build()
+    /// let endpoints = [Endpoint(url: "http://primary:9090")]
+    /// let client = try await GrpcClientBuilder.withEndpoints(endpoints: endpoints).build()
     /// ```
-    #[uniffi::constructor(name = "withUrlsAndConfig")]
-    pub fn with_urls_and_config(endpoints: Vec<Arc<EndpointEntry>>) -> Self {
-        let urls_with_configs: Vec<(String, RustEndpointConfig)> = endpoints
-            .into_iter()
-            .map(|e| (e.url.clone(), e.config.clone()))
-            .collect();
-        let builder = RustBuilder::new().urls_with_config(urls_with_configs);
+    #[uniffi::constructor(name = "withEndpoints")]
+    pub fn with_endpoints(endpoints: Vec<Arc<Endpoint>>) -> Self {
+        let endpoints = endpoints.into_iter().map(|e| e.take()).collect::<Vec<_>>();
+        let builder = RustBuilder::new().endpoints(endpoints);
         GrpcClientBuilder(Mutex::new(Some(builder)))
     }
 
@@ -225,15 +187,19 @@ impl GrpcClientBuilder {
         self
     }
 
-    /// Add another URL endpoint with configuration.
-    #[uniffi::method(name = "addUrlWithConfig")]
-    pub fn add_url_with_config(
-        self: Arc<Self>,
-        url: String,
-        config: Arc<EndpointConfig>,
-    ) -> Arc<Self> {
-        let config = config.take();
-        self.map_builder(move |builder| builder.url_with_config(url, config));
+    /// Add another endpoint.
+    #[uniffi::method(name = "endpoint")]
+    pub fn endpoint(self: Arc<Self>, endpoint: Arc<Endpoint>) -> Arc<Self> {
+        let endpoint = endpoint.take();
+        self.map_builder(move |builder| builder.endpoint(endpoint));
+        self
+    }
+
+    /// Add multiple endpoints.
+    #[uniffi::method(name = "endpoints")]
+    pub fn endpoints(self: Arc<Self>, endpoints: Vec<Arc<Endpoint>>) -> Arc<Self> {
+        let endpoints = endpoints.into_iter().map(|e| e.take()).collect::<Vec<_>>();
+        self.map_builder(move |builder| builder.endpoints(endpoints));
         self
     }
 

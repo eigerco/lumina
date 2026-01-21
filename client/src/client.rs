@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use blockstore::cond_send::CondSend;
-pub use celestia_grpc::EndpointConfig;
+pub use celestia_grpc::Endpoint;
 use celestia_grpc::{GrpcClient, GrpcClientBuilder};
 use celestia_rpc::{Client as RpcClient, HeaderClient};
 use http::Request;
@@ -48,17 +48,17 @@ use crate::{Error, Result};
 /// Submit mode:
 ///
 /// ```no_run
-/// # use celestia_client::{Client, EndpointConfig, Result};
+/// # use celestia_client::{Client, Endpoint, Result};
 /// # use celestia_client::tx::TxConfig;
 /// # use std::time::Duration;
 /// # async fn docs() -> Result<()> {
-/// let grpc_config = EndpointConfig::new()
+/// let endpoint = Endpoint::from("http://localhost:9090")
 ///     .metadata("x-token", "auth-token")
 ///     .timeout(Duration::from_secs(30));
 ///
 /// let client = Client::builder()
 ///     .rpc_url("ws://localhost:26658")
-///     .grpc_url_with_config("http://localhost:9090", grpc_config)
+///     .grpc_endpoint(endpoint)
 ///     .private_key_hex("393fdb5def075819de55756b45c9e2c8531a8c78dd6eede483d3440e9457d839")
 ///     .build()
 ///     .await?;
@@ -230,61 +230,53 @@ impl ClientBuilder {
 
     /// Set the gRPC endpoint.
     ///
+    /// Alias of [`ClientBuilder::grpc_endpoint`].
+    ///
+    /// Accepts `Endpoint`, `&str`, or `String`.
+    ///
     /// # Note
     ///
     /// In WASM the endpoint needs to support gRPC-Web.
-    pub fn grpc_url(mut self, url: &str) -> ClientBuilder {
-        let grpc_builder = self.grpc_builder.unwrap_or_default();
-        self.grpc_builder = Some(grpc_builder.url(url));
-        self
+    pub fn grpc_url(self, url: impl Into<Endpoint>) -> ClientBuilder {
+        self.grpc_endpoint(url)
     }
 
-    /// Set the gRPC endpoint with its configuration.
-    ///
-    /// # Note
-    ///
-    /// In WASM the endpoint needs to support gRPC-Web.
-    pub fn grpc_url_with_config(mut self, url: &str, config: EndpointConfig) -> ClientBuilder {
+    /// Set the gRPC endpoint. Alias of [`ClientBuilder::grpc_url`].
+    pub fn grpc_endpoint(mut self, endpoint: impl Into<Endpoint>) -> ClientBuilder {
         let grpc_builder = self.grpc_builder.unwrap_or_default();
-        self.grpc_builder = Some(grpc_builder.url_with_config(url, config));
+        self.grpc_builder = Some(grpc_builder.endpoint(endpoint));
         self
     }
 
     /// Add multiple gRPC endpoints at once for fallback support.
     ///
+    /// Alias of [`ClientBuilder::grpc_endpoints`].
+    ///
+    /// Accepts `Endpoint`, `&str`, or `String` items.
+    ///
     /// When multiple endpoints are configured, the client will automatically
     /// fall back to the next endpoint if a network-related error occurs.
     ///
     /// # Note
     ///
     /// In WASM the endpoints need to support gRPC-Web.
-    pub fn grpc_urls<S: AsRef<str>>(mut self, urls: impl IntoIterator<Item = S>) -> ClientBuilder {
-        let mut grpc_builder = self.grpc_builder.unwrap_or_default();
-        for url in urls {
-            grpc_builder = grpc_builder.url(url.as_ref());
-        }
-        self.grpc_builder = Some(grpc_builder);
+    pub fn grpc_endpoints<I, E>(mut self, endpoints: I) -> ClientBuilder
+    where
+        I: IntoIterator<Item = E>,
+        E: Into<Endpoint>,
+    {
+        let grpc_builder = self.grpc_builder.unwrap_or_default();
+        self.grpc_builder = Some(grpc_builder.endpoints(endpoints));
         self
     }
 
-    /// Add multiple gRPC endpoints with configurations for fallback support.
-    ///
-    /// When multiple endpoints are configured, the client will automatically
-    /// fall back to the next endpoint if a network-related error occurs.
-    ///
-    /// # Note
-    ///
-    /// In WASM the endpoints need to support gRPC-Web.
-    pub fn grpc_urls_with_config<S: AsRef<str>>(
-        mut self,
-        urls: impl IntoIterator<Item = (S, EndpointConfig)>,
-    ) -> ClientBuilder {
-        let mut grpc_builder = self.grpc_builder.unwrap_or_default();
-        for (url, config) in urls {
-            grpc_builder = grpc_builder.url_with_config(url.as_ref(), config);
-        }
-        self.grpc_builder = Some(grpc_builder);
-        self
+    /// Add multiple gRPC endpoints. Alias of [`ClientBuilder::grpc_endpoints`].
+    pub fn grpc_urls<I, E>(self, urls: I) -> ClientBuilder
+    where
+        I: IntoIterator<Item = E>,
+        E: Into<Endpoint>,
+    {
+        self.grpc_endpoints(urls)
     }
 
     /// Set manually configured gRPC transport

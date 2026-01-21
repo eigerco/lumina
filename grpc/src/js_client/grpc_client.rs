@@ -14,7 +14,7 @@ use crate::Result;
 use crate::grpc::{
     ConfigResponse, GasInfo, GetTxResponse, JsBroadcastMode, TxPriority, TxStatusResponse,
 };
-use crate::js_client::{EndpointConfig, EndpointEntry, GrpcClientBuilder};
+use crate::js_client::{GrpcClientBuilder, endpoints_from_js};
 use crate::tx::{BroadcastedTx, JsBroadcastedTx, JsTxConfig, JsTxInfo};
 
 /// Celestia gRPC client, for builder see [`GrpcClientBuilder`]
@@ -27,32 +27,24 @@ pub struct GrpcClient {
 impl GrpcClient {
     /// Create a builder for [`GrpcClient`] connected to `url`.
     ///
+    /// Accepts a string, an `Endpoint`, or an array of strings/endpoints.
+    ///
     /// # Example
     ///
     /// ```js
     /// const client = await GrpcClient.withUrl("http://localhost:18080").build();
     /// ```
     #[wasm_bindgen(js_name = withUrl)]
-    pub fn with_url(url: String) -> GrpcClientBuilder {
-        crate::GrpcClientBuilder::new().url(url).into()
-    }
-
-    /// Create a builder for [`GrpcClient`] connected to `url` with configuration.
-    ///
-    /// # Example
-    ///
-    /// ```js
-    /// const config = new EndpointConfig().withMetadata("authorization", "Bearer token");
-    /// const client = await GrpcClient.withUrlWithConfig("http://localhost:18080", config).build();
-    /// ```
-    #[wasm_bindgen(js_name = withUrlWithConfig)]
-    pub fn with_url_with_config(url: String, config: EndpointConfig) -> GrpcClientBuilder {
-        crate::GrpcClientBuilder::new()
-            .url_with_config(url, config.inner)
-            .into()
+    pub fn with_url(
+        #[wasm_bindgen(unchecked_param_type = "UrlsOrEndpoints")] url: JsValue,
+    ) -> GrpcClientBuilder {
+        let endpoints = endpoints_from_js_or_throw(url);
+        crate::GrpcClientBuilder::new().endpoints(endpoints).into()
     }
 
     /// Create a builder for [`GrpcClient`] with multiple URL endpoints for fallback support.
+    ///
+    /// Accepts a string, an `Endpoint`, or an array of strings/endpoints.
     ///
     /// When multiple endpoints are configured, the client will automatically
     /// fall back to the next endpoint if a network-related error occurs.
@@ -63,31 +55,11 @@ impl GrpcClient {
     /// const client = await GrpcClient.withUrls(["http://primary:9090", "http://fallback:9090"]).build();
     /// ```
     #[wasm_bindgen(js_name = withUrls)]
-    pub fn with_urls(urls: Vec<String>) -> GrpcClientBuilder {
-        crate::GrpcClientBuilder::new().urls(urls).into()
-    }
-
-    /// Create a builder for [`GrpcClient`] with multiple URL endpoints and configurations.
-    ///
-    /// When multiple endpoints are configured, the client will automatically
-    /// fall back to the next endpoint if a network-related error occurs.
-    ///
-    /// # Example
-    ///
-    /// ```js
-    /// const endpoints = [
-    ///   new EndpointEntry("http://primary:9090", new EndpointConfig().withMetadata("auth", "token1")),
-    ///   new EndpointEntry("http://fallback:9090", new EndpointConfig().withTimeout(10000)),
-    /// ];
-    /// const client = await GrpcClient.withUrlsAndConfig(endpoints).build();
-    /// ```
-    #[wasm_bindgen(js_name = withUrlsAndConfig)]
-    pub fn with_urls_and_config(endpoints: Vec<EndpointEntry>) -> GrpcClientBuilder {
-        let urls_with_configs: Vec<(String, crate::EndpointConfig)> =
-            endpoints.into_iter().map(|e| (e.url, e.config)).collect();
-        crate::GrpcClientBuilder::new()
-            .urls_with_config(urls_with_configs)
-            .into()
+    pub fn with_urls(
+        #[wasm_bindgen(unchecked_param_type = "UrlsOrEndpoints")] urls: JsValue,
+    ) -> GrpcClientBuilder {
+        let endpoints = endpoints_from_js_or_throw(urls);
+        crate::GrpcClientBuilder::new().endpoints(endpoints).into()
     }
 
     /// Get auth params
@@ -430,6 +402,18 @@ impl GrpcClient {
             .confirm_broadcasted_tx(broadcasted_tx.try_into()?, tx_config)
             .await?;
         Ok(tx_info.into())
+    }
+}
+
+fn endpoints_from_js_or_throw(value: JsValue) -> Vec<crate::Endpoint> {
+    match endpoints_from_js(value) {
+        Ok(endpoints) => endpoints,
+        Err(err) => {
+            let message = err
+                .as_string()
+                .unwrap_or_else(|| "Invalid endpoint input".to_string());
+            wasm_bindgen::throw_str(&message);
+        }
     }
 }
 

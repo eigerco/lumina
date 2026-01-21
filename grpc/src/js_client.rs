@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use js_sys::Uint8Array;
+use js_sys::{Array, Uint8Array};
 use k256::ecdsa::VerifyingKey;
 use wasm_bindgen::prelude::*;
 
@@ -11,40 +11,49 @@ mod grpc_client;
 
 use grpc_client::GrpcClient;
 
-/// Configuration specific to a single URL endpoint.
+#[wasm_bindgen(typescript_custom_section)]
+const TS_APPEND_CONTENT: &str = r#"
+export type UrlOrEndpoint = string | Endpoint;
+export type UrlsOrEndpoints = UrlOrEndpoint | UrlOrEndpoint[];
+"#;
+
+/// A URL endpoint paired with its configuration.
 ///
-/// This includes HTTP/2 headers (metadata) and timeout that will be applied
-/// to all requests made to this endpoint.
+/// Use this with `withUrl`/`withUrls` to configure endpoints with different settings.
 ///
 /// # Example
 ///
 /// ```js
-/// const config = new EndpointConfig()
-///   .withMetadata("authorization", "Bearer token")
-///   .withTimeout(5000);
+/// const primary = new Endpoint(
+///   "http://primary:9090"
+/// );
+/// primary = primary.withMetadata("auth", "token1");
+/// const fallback = new Endpoint(
+///   "http://fallback:9090"
+/// );
+/// fallback = fallback.withTimeout(10000);
 ///
-/// const client = await GrpcClientBuilder
-///   .withUrl("http://127.0.0.1:18080", config)
+/// const client = await new GrpcClientBuilder()
+///   .withUrls([primary, fallback])
 ///   .build();
 /// ```
 #[wasm_bindgen]
-pub struct EndpointConfig {
-    pub(crate) inner: crate::EndpointConfig,
+pub struct Endpoint {
+    pub(crate) inner: crate::Endpoint,
 }
 
 #[wasm_bindgen]
-impl EndpointConfig {
-    /// Create a new, empty endpoint configuration.
+impl Endpoint {
+    /// Create a new endpoint with a URL.
     #[wasm_bindgen(constructor)]
-    pub fn new() -> Self {
-        Self {
-            inner: crate::EndpointConfig::new(),
-        }
+    pub fn new(url: String) -> Self {
+        let endpoint = crate::Endpoint::from(url);
+        Self { inner: endpoint }
     }
 
     /// Appends ASCII metadata (HTTP/2 header) to requests made to this endpoint.
     ///
-    /// Note that this method **consumes** the config and returns an updated instance.
+    /// Note that this method **consumes** the endpoint and returns an updated instance.
     #[wasm_bindgen(js_name = "withMetadata")]
     pub fn with_metadata(self, key: String, value: String) -> Self {
         Self {
@@ -56,7 +65,7 @@ impl EndpointConfig {
     ///
     /// Keys must have `-bin` suffix.
     ///
-    /// Note that this method **consumes** the config and returns an updated instance.
+    /// Note that this method **consumes** the endpoint and returns an updated instance.
     #[wasm_bindgen(js_name = "withMetadataBin")]
     pub fn with_metadata_bin(self, key: String, value: Uint8Array) -> Self {
         Self {
@@ -66,55 +75,11 @@ impl EndpointConfig {
 
     /// Sets the request timeout in milliseconds for this endpoint.
     ///
-    /// Note that this method **consumes** the config and returns an updated instance.
+    /// Note that this method **consumes** the endpoint and returns an updated instance.
     #[wasm_bindgen(js_name = "withTimeout")]
     pub fn with_timeout(self, timeout_ms: u64) -> Self {
         Self {
             inner: self.inner.timeout(Duration::from_millis(timeout_ms)),
-        }
-    }
-}
-
-impl Default for EndpointConfig {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-/// A URL endpoint paired with its configuration.
-///
-/// Use this with `withUrls` to configure multiple endpoints with different settings.
-///
-/// # Example
-///
-/// ```js
-/// const primary = new EndpointEntry(
-///   "http://primary:9090",
-///   new EndpointConfig().withMetadata("auth", "token1")
-/// );
-/// const fallback = new EndpointEntry(
-///   "http://fallback:9090",
-///   new EndpointConfig().withTimeout(10000)
-/// );
-///
-/// const client = await new GrpcClientBuilder()
-///   .withUrls([primary, fallback])
-///   .build();
-/// ```
-#[wasm_bindgen]
-pub struct EndpointEntry {
-    pub(crate) url: String,
-    pub(crate) config: crate::EndpointConfig,
-}
-
-#[wasm_bindgen]
-impl EndpointEntry {
-    /// Create a new endpoint entry with a URL and optional configuration.
-    #[wasm_bindgen(constructor)]
-    pub fn new(url: String, config: Option<EndpointConfig>) -> Self {
-        Self {
-            url,
-            config: config.map(|c| c.inner).unwrap_or_default(),
         }
     }
 }
@@ -131,9 +96,9 @@ impl EndpointEntry {
 ///   .build()
 ///
 /// // With config:
-/// const config = new EndpointConfig().withTimeout(5000);
+/// const endpoint = new Endpoint("http://127.0.0.1:18080").withTimeout(5000);
 /// const client = await new GrpcClientBuilder()
-///   .withUrlWithConfig("http://127.0.0.1:18080", config)
+///   .withUrl(endpoint)
 ///   .build()
 /// ```
 ///
@@ -182,27 +147,24 @@ pub struct GrpcClientBuilder {
 impl GrpcClientBuilder {
     /// Set the `url` of the grpc-web server to connect to.
     ///
-    /// Note that this method **consumes** builder and returns updated instance of it.
-    /// Make sure to re-assign it if you keep builder in a variable.
-    #[wasm_bindgen(js_name = "withUrl")]
-    pub fn with_url(self, url: String) -> Self {
-        Self {
-            inner: self.inner.url(url),
-        }
-    }
-
-    /// Set the `url` of the grpc-web server to connect to with configuration.
+    /// Accepts a string, an `Endpoint`, or an array of strings/endpoints.
     ///
     /// Note that this method **consumes** builder and returns updated instance of it.
     /// Make sure to re-assign it if you keep builder in a variable.
-    #[wasm_bindgen(js_name = "withUrlWithConfig")]
-    pub fn with_url_with_config(self, url: String, config: EndpointConfig) -> Self {
+    #[wasm_bindgen(js_name = "withUrl")]
+    pub fn with_url(
+        self,
+        #[wasm_bindgen(unchecked_param_type = "UrlsOrEndpoints")] url: JsValue,
+    ) -> Self {
+        let endpoints = endpoints_from_js_or_throw(url);
         Self {
-            inner: self.inner.url_with_config(url, config.inner),
+            inner: self.inner.endpoints(endpoints),
         }
     }
 
     /// Add multiple URL endpoints at once for fallback support.
+    ///
+    /// Accepts a string, an `Endpoint`, or an array of strings/endpoints.
     ///
     /// When multiple endpoints are configured, the client will automatically
     /// fall back to the next endpoint if a network-related error occurs.
@@ -218,36 +180,13 @@ impl GrpcClientBuilder {
     /// Note that this method **consumes** builder and returns updated instance of it.
     /// Make sure to re-assign it if you keep builder in a variable.
     #[wasm_bindgen(js_name = "withUrls")]
-    pub fn with_urls(self, urls: Vec<String>) -> Self {
+    pub fn with_urls(
+        self,
+        #[wasm_bindgen(unchecked_param_type = "UrlsOrEndpoints")] urls: JsValue,
+    ) -> Self {
+        let endpoints = endpoints_from_js_or_throw(urls);
         Self {
-            inner: self.inner.urls(urls),
-        }
-    }
-
-    /// Add multiple URL endpoints with configurations for fallback support.
-    ///
-    /// When multiple endpoints are configured, the client will automatically
-    /// fall back to the next endpoint if a network-related error occurs.
-    ///
-    /// # Example
-    ///
-    /// ```js
-    /// const client = await new GrpcClientBuilder()
-    ///   .withUrlsAndConfig([
-    ///     new EndpointEntry("http://primary:9090", new EndpointConfig().withMetadata("auth", "token1")),
-    ///     new EndpointEntry("http://fallback:9090", new EndpointConfig().withTimeout(10000)),
-    ///   ])
-    ///   .build();
-    /// ```
-    ///
-    /// Note that this method **consumes** builder and returns updated instance of it.
-    /// Make sure to re-assign it if you keep builder in a variable.
-    #[wasm_bindgen(js_name = "withUrlsAndConfig")]
-    pub fn with_urls_and_config(self, endpoints: Vec<EndpointEntry>) -> Self {
-        let urls_with_configs: Vec<(String, crate::EndpointConfig)> =
-            endpoints.into_iter().map(|e| (e.url, e.config)).collect();
-        Self {
-            inner: self.inner.urls_with_config(urls_with_configs),
+            inner: self.inner.endpoints(endpoints),
         }
     }
 
@@ -272,6 +211,37 @@ impl GrpcClientBuilder {
     /// build gRPC client
     pub fn build(self) -> Result<GrpcClient, GrpcClientBuilderError> {
         Ok(self.inner.build()?.into())
+    }
+}
+
+pub(crate) fn endpoint_from_js(value: JsValue) -> Result<crate::Endpoint, JsValue> {
+    if let Some(url) = value.as_string() {
+        return Ok(crate::Endpoint::from(url));
+    }
+
+    Err(JsValue::from_str("Expected a string URL"))
+}
+
+pub(crate) fn endpoints_from_js(value: JsValue) -> Result<Vec<crate::Endpoint>, JsValue> {
+    if Array::is_array(&value) {
+        let array = Array::from(&value);
+        return array
+            .iter()
+            .map(endpoint_from_js)
+            .collect::<Result<Vec<_>, _>>();
+    }
+    Ok(vec![endpoint_from_js(value)?])
+}
+
+fn endpoints_from_js_or_throw(value: JsValue) -> Vec<crate::Endpoint> {
+    match endpoints_from_js(value) {
+        Ok(endpoints) => endpoints,
+        Err(err) => {
+            let message = err
+                .as_string()
+                .unwrap_or_else(|| "Invalid endpoint input".to_string());
+            wasm_bindgen::throw_str(&message);
+        }
     }
 }
 

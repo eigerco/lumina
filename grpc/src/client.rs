@@ -283,7 +283,7 @@ impl GrpcClient {
     /// # Example
     /// ```no_run
     /// # async fn docs() {
-    /// use celestia_grpc::{EndpointConfig, GrpcClient, TxConfig};
+    /// use celestia_grpc::{GrpcClient, TxConfig};
     /// use celestia_proto::cosmos::bank::v1beta1::MsgSend;
     /// use celestia_types::state::{Address, Coin};
     /// use tendermint::crypto::default::ecdsa_secp256k1::SigningKey;
@@ -329,7 +329,7 @@ impl GrpcClient {
     /// # Example
     /// ```no_run
     /// # async fn docs() {
-    /// use celestia_grpc::{EndpointConfig, GrpcClient, TxConfig};
+    /// use celestia_grpc::{GrpcClient, TxConfig};
     /// use celestia_proto::cosmos::bank::v1beta1::MsgSend;
     /// use celestia_types::state::{Address, Coin};
     /// use tendermint::crypto::default::ecdsa_secp256k1::SigningKey;
@@ -382,7 +382,7 @@ impl GrpcClient {
     /// # Example
     /// ```no_run
     /// # async fn docs() {
-    /// use celestia_grpc::{EndpointConfig, GrpcClient, TxConfig};
+    /// use celestia_grpc::{GrpcClient, TxConfig};
     /// use celestia_types::state::{Address, Coin};
     /// use celestia_types::{AppVersion, Blob};
     /// use celestia_types::nmt::Namespace;
@@ -424,7 +424,7 @@ impl GrpcClient {
     /// # Example
     /// ```no_run
     /// # async fn docs() {
-    /// use celestia_grpc::{EndpointConfig, GrpcClient, TxConfig};
+    /// use celestia_grpc::{GrpcClient, TxConfig};
     /// use celestia_types::state::{Address, Coin};
     /// use celestia_types::{AppVersion, Blob};
     /// use celestia_types::nmt::Namespace;
@@ -1041,13 +1041,10 @@ mod tests {
 
     #[async_test]
     async fn per_call_context_works() {
-        use crate::EndpointConfig;
+        use crate::Endpoint;
 
         let client = GrpcClient::builder()
-            .url_with_config(
-                "http://foo",
-                EndpointConfig::new().metadata("x-token", "secret-token"),
-            )
+            .endpoint(Endpoint::from("http://foo").metadata("x-token", "secret-token"))
             .build()
             .unwrap();
 
@@ -1550,10 +1547,7 @@ mod tests {
 
         // too short timeout set in endpoint config
         let client = GrpcClient::builder()
-            .url_with_config(
-                CELESTIA_GRPC_URL,
-                crate::EndpointConfig::new().timeout(Duration::from_nanos(1)),
-            )
+            .endpoint(crate::Endpoint::from(CELESTIA_GRPC_URL).timeout(Duration::from_nanos(1)))
             .build()
             .unwrap();
 
@@ -1659,7 +1653,7 @@ mod tests {
     #[cfg(not(target_arch = "wasm32"))]
     #[tokio::test]
     async fn auth_proxy_with_valid_token() {
-        use crate::EndpointConfig;
+        use crate::Endpoint;
         use crate::test_utils::{CELESTIA_GRPC_URL, TEST_AUTH_TOKEN, spawn_grpc_auth_proxy};
 
         // Spawn the auth proxy
@@ -1668,9 +1662,8 @@ mod tests {
 
         // Connect with correct authorization token - should succeed
         let client = GrpcClient::builder()
-            .url_with_config(
-                &proxy_url,
-                EndpointConfig::new()
+            .endpoint(
+                Endpoint::from(proxy_url.as_str())
                     .metadata("authorization", format!("Bearer {}", TEST_AUTH_TOKEN)),
             )
             .build()
@@ -1690,7 +1683,10 @@ mod tests {
         let proxy_url = format!("http://{}", addr);
 
         // Connect without authorization token - should fail with Unauthenticated
-        let client = GrpcClient::builder().url(&proxy_url).build().unwrap();
+        let client = GrpcClient::builder()
+            .url(proxy_url.as_str())
+            .build()
+            .unwrap();
 
         let result = client.get_auth_params().await;
         let Error::TonicError(status) = result.unwrap_err() else {
@@ -1707,7 +1703,7 @@ mod tests {
     #[cfg(not(target_arch = "wasm32"))]
     #[tokio::test]
     async fn auth_proxy_with_wrong_token() {
-        use crate::EndpointConfig;
+        use crate::Endpoint;
         use crate::test_utils::{CELESTIA_GRPC_URL, TEST_AUTH_TOKEN, spawn_grpc_auth_proxy};
 
         // Spawn the auth proxy
@@ -1716,9 +1712,8 @@ mod tests {
 
         // Connect with wrong authorization token - should fail with Unauthenticated
         let client = GrpcClient::builder()
-            .url_with_config(
-                &proxy_url,
-                EndpointConfig::new().metadata("authorization", "Bearer wrong-token"),
+            .endpoint(
+                Endpoint::from(proxy_url.as_str()).metadata("authorization", "Bearer wrong-token"),
             )
             .build()
             .unwrap();
@@ -1738,7 +1733,7 @@ mod tests {
     #[cfg(not(target_arch = "wasm32"))]
     #[tokio::test]
     async fn auth_proxy_failover_unreachable_then_authenticated() {
-        use crate::EndpointConfig;
+        use crate::Endpoint;
         use crate::test_utils::{CELESTIA_GRPC_URL, TEST_AUTH_TOKEN, spawn_grpc_auth_proxy};
 
         // Spawn the auth proxy
@@ -1750,16 +1745,10 @@ mod tests {
         // 2. Second endpoint is auth proxy with correct token
         // This tests that per-endpoint metadata is correctly applied during failover
         let client = GrpcClient::builder()
-            .urls_with_config([
-                (
-                    "http://localhost:19999", // unreachable
-                    EndpointConfig::default(),
-                ),
-                (
-                    &proxy_url as &str,
-                    EndpointConfig::new()
-                        .metadata("authorization", format!("Bearer {}", TEST_AUTH_TOKEN)),
-                ),
+            .endpoints([
+                Endpoint::from("http://localhost:19999"),
+                Endpoint::from(proxy_url.as_str())
+                    .metadata("authorization", format!("Bearer {}", TEST_AUTH_TOKEN)),
             ])
             .build()
             .unwrap();
@@ -1772,7 +1761,7 @@ mod tests {
     #[cfg(not(target_arch = "wasm32"))]
     #[tokio::test]
     async fn multiple_endpoints_different_configs() {
-        use crate::EndpointConfig;
+        use crate::Endpoint;
         use crate::test_utils::{CELESTIA_GRPC_URL, TEST_AUTH_TOKEN, spawn_grpc_auth_proxy};
         use std::time::Duration;
 
@@ -1785,17 +1774,11 @@ mod tests {
         // - Second: auth proxy (needs auth token) with longer timeout
         // Both should be valid configurations
         let client = GrpcClient::builder()
-            .urls_with_config([
-                (
-                    CELESTIA_GRPC_URL,
-                    EndpointConfig::new().timeout(Duration::from_secs(5)),
-                ),
-                (
-                    &proxy_url as &str,
-                    EndpointConfig::new()
-                        .metadata("authorization", format!("Bearer {}", TEST_AUTH_TOKEN))
-                        .timeout(Duration::from_secs(10)),
-                ),
+            .endpoints([
+                Endpoint::from(CELESTIA_GRPC_URL).timeout(Duration::from_secs(5)),
+                Endpoint::from(proxy_url.as_str())
+                    .metadata("authorization", format!("Bearer {}", TEST_AUTH_TOKEN))
+                    .timeout(Duration::from_secs(10)),
             ])
             .build()
             .unwrap();

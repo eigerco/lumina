@@ -21,7 +21,7 @@ use crate::{DocSigner, GrpcClient, GrpcClientBuilderError};
 
 use imp::build_transport;
 
-/// Configuration specific to a single URL endpoint.
+/// A URL endpoint with per-endpoint configuration.
 ///
 /// This includes HTTP/2 headers (metadata) and timeout that will be applied
 /// to all requests made to this endpoint.
@@ -30,31 +30,36 @@ use imp::build_transport;
 ///
 /// ```no_run
 /// use std::time::Duration;
-/// use celestia_grpc::{GrpcClient, EndpointConfig};
+/// use celestia_grpc::{Endpoint, GrpcClient};
 ///
 /// let client = GrpcClient::builder()
-///     .url_with_config("http://localhost:9090", EndpointConfig::new()
+///     .url(Endpoint::from("http://localhost:9090")
 ///         .metadata("authorization", "Bearer token")
 ///         .timeout(Duration::from_secs(30)))
 ///     .build();
 /// ```
-#[derive(Debug, Default, Clone)]
-pub struct EndpointConfig {
+#[derive(Debug, Clone)]
+pub struct Endpoint {
+    pub url: String,
     ascii_metadata: Vec<(String, String)>,
     binary_metadata: Vec<(String, Vec<u8>)>,
     metadata_map: Option<MetadataMap>,
     timeout: Option<Duration>,
 }
 
-impl EndpointConfig {
-    /// Create a new, empty endpoint configuration.
-    pub fn new() -> Self {
-        Self::default()
+impl Endpoint {
+    /// Create a new endpoint with a default configuration.
+    pub fn new(url: impl Into<String>) -> Self {
+        Self {
+            url: url.into(),
+            ascii_metadata: Vec::new(),
+            binary_metadata: Vec::new(),
+            metadata_map: None,
+            timeout: None,
+        }
     }
 
     /// Appends ASCII metadata (HTTP/2 header) to requests made to this endpoint.
-    ///
-    /// Use this for auth tokens, request IDs, and other text headers.
     pub fn metadata(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
         self.ascii_metadata.push((key.into(), value.into()));
         self
@@ -63,15 +68,12 @@ impl EndpointConfig {
     /// Appends binary metadata to requests made to this endpoint.
     ///
     /// Keys must have `-bin` suffix. Values are base64-encoded on the wire.
-    /// Use this for signatures, serialized protos, and other binary data.
     pub fn metadata_bin(mut self, key: impl Into<String>, value: impl Into<Vec<u8>>) -> Self {
         self.binary_metadata.push((key.into(), value.into()));
         self
     }
 
     /// Sets a metadata map for this endpoint.
-    ///
-    /// Use this when you have a pre-built MetadataMap to attach.
     pub fn metadata_map(mut self, metadata: MetadataMap) -> Self {
         self.metadata_map = Some(metadata);
         self
@@ -82,31 +84,39 @@ impl EndpointConfig {
         self.timeout = Some(timeout);
         self
     }
-}
 
-impl TryFrom<EndpointConfig> for Context {
-    type Error = GrpcClientBuilderError;
-
-    fn try_from(config: EndpointConfig) -> Result<Self, Self::Error> {
+    pub(crate) fn into_parts(self) -> Result<(String, Context), GrpcClientBuilderError> {
         let mut context = Context {
-            timeout: config.timeout,
+            timeout: self.timeout,
             ..Default::default()
         };
-        for (key, value) in config.ascii_metadata {
+        for (key, value) in self.ascii_metadata {
             context.append_metadata(&key, &value)?;
         }
-        for (key, value) in config.binary_metadata {
+        for (key, value) in self.binary_metadata {
             context.append_metadata_bin(&key, &value)?;
         }
-        if let Some(metadata) = config.metadata_map {
+        if let Some(metadata) = self.metadata_map {
             context.append_metadata_map(&metadata);
         }
-        Ok(context)
+        Ok((self.url, context))
+    }
+}
+
+impl From<String> for Endpoint {
+    fn from(url: String) -> Self {
+        Endpoint::new(url)
+    }
+}
+
+impl From<&str> for Endpoint {
+    fn from(url: &str) -> Self {
+        Endpoint::new(url)
     }
 }
 
 enum TransportEntry {
-    EndpointUrl(String, EndpointConfig),
+    Endpoint(Endpoint),
     BoxedTransport(BoxedTransport),
 }
 
@@ -133,6 +143,8 @@ impl GrpcClientBuilder {
 
     /// Add a URL endpoint. Multiple calls add multiple fallback endpoints.
     ///
+    /// This is an alias of [`GrpcClientBuilder::endpoint`].
+    ///
     /// When multiple endpoints are configured, the client will automatically
     /// fall back to the next endpoint if a network-related error occurs.
     ///
@@ -146,37 +158,14 @@ impl GrpcClientBuilder {
     ///     .url("http://fallback:9090")
     ///     .build();
     /// ```
-    pub fn url(mut self, url: impl Into<String>) -> Self {
-        self.transports.push(TransportEntry::EndpointUrl(
-            url.into(),
-            EndpointConfig::default(),
-        ));
-        self
+    pub fn url(self, endpoint: impl Into<Endpoint>) -> Self {
+        self.endpoint(endpoint)
     }
 
-    /// Add a URL endpoint with specific configuration. Multiple calls add multiple fallback endpoints.
-    ///
-    /// When multiple endpoints are configured, the client will automatically
-    /// fall back to the next endpoint if a network-related error occurs.
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// use std::time::Duration;
-    /// use celestia_grpc::{GrpcClient, EndpointConfig};
-    ///
-    /// let client = GrpcClient::builder()
-    ///     .url_with_config("http://primary:9090", EndpointConfig::new()
-    ///         .metadata("authorization", "Bearer token1")
-    ///         .timeout(Duration::from_secs(5)))
-    ///     .url_with_config("http://fallback:9090", EndpointConfig::new()
-    ///         .metadata("authorization", "Bearer token2")
-    ///         .timeout(Duration::from_secs(10)))
-    ///     .build();
-    /// ```
-    pub fn url_with_config(mut self, url: impl Into<String>, config: EndpointConfig) -> Self {
+    /// Add a URL endpoint. This is the primary entry point for endpoints.
+    pub fn endpoint(mut self, endpoint: impl Into<Endpoint>) -> Self {
         self.transports
-            .push(TransportEntry::EndpointUrl(url.into(), config));
+            .push(TransportEntry::Endpoint(endpoint.into()));
         self
     }
 
@@ -194,42 +183,24 @@ impl GrpcClientBuilder {
     ///     .urls(["http://primary:9090", "http://fallback:9090"])
     ///     .build();
     /// ```
-    pub fn urls<S: AsRef<str>>(mut self, urls: impl IntoIterator<Item = S>) -> Self {
-        for url in urls {
-            self = self.url(url.as_ref());
+    pub fn endpoints<I, E>(mut self, endpoints: I) -> Self
+    where
+        I: IntoIterator<Item = E>,
+        E: Into<Endpoint>,
+    {
+        for endpoint in endpoints {
+            self = self.endpoint(endpoint);
         }
         self
     }
 
-    /// Add multiple URL endpoints with their configurations.
-    ///
-    /// When multiple endpoints are configured, the client will automatically
-    /// fall back to the next endpoint if a network-related error occurs.
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// use std::time::Duration;
-    /// use celestia_grpc::{GrpcClient, EndpointConfig};
-    ///
-    /// let client = GrpcClient::builder()
-    ///     .urls_with_config([
-    ///         ("http://primary:9090", EndpointConfig::new()
-    ///             .metadata("auth", "token1")
-    ///             .timeout(Duration::from_secs(5))),
-    ///         ("http://fallback:9090", EndpointConfig::new()
-    ///             .metadata("auth", "token2")),
-    ///     ])
-    ///     .build();
-    /// ```
-    pub fn urls_with_config<S: AsRef<str>>(
-        mut self,
-        urls: impl IntoIterator<Item = (S, EndpointConfig)>,
-    ) -> Self {
-        for (url, config) in urls {
-            self = self.url_with_config(url.as_ref(), config);
-        }
-        self
+    /// Add multiple URL endpoints. This is an alias of [`GrpcClientBuilder::endpoints`].
+    pub fn urls<I, E>(self, urls: I) -> Self
+    where
+        I: IntoIterator<Item = E>,
+        E: Into<Endpoint>,
+    {
+        self.endpoints(urls)
     }
 
     /// Add a custom transport endpoint. Multiple calls add multiple fallback endpoints.
@@ -302,8 +273,8 @@ impl GrpcClientBuilder {
             .transports
             .into_iter()
             .map(|entry| match entry {
-                TransportEntry::EndpointUrl(url, config) => {
-                    let context = config.try_into()?;
+                TransportEntry::Endpoint(endpoint) => {
+                    let (url, context) = endpoint.into_parts()?;
                     build_transport(url, context)
                 }
                 TransportEntry::BoxedTransport(t) => Ok(t),
@@ -366,7 +337,7 @@ impl fmt::Debug for GrpcClientBuilder {
 mod imp {
     use super::*;
 
-    use tonic::transport::{ClientTlsConfig, Endpoint};
+    use tonic::transport::{ClientTlsConfig, Endpoint as TonicEndpoint};
 
     pub(super) fn build_transport(
         url: String,
@@ -374,7 +345,7 @@ mod imp {
     ) -> Result<BoxedTransport, GrpcClientBuilderError> {
         let tls_config = ClientTlsConfig::new().with_enabled_roots();
 
-        let channel = Endpoint::from_shared(url.clone())?
+        let channel = TonicEndpoint::from_shared(url.clone())?
             .user_agent("celestia-grpc")?
             .tls_config(tls_config)?
             .connect_lazy();
@@ -391,7 +362,7 @@ mod imp {
 mod imp {
     use super::*;
 
-    use tonic::transport::Endpoint;
+    use tonic::transport::Endpoint as TonicEndpoint;
 
     pub(super) fn build_transport(
         url: String,
@@ -404,7 +375,7 @@ mod imp {
             return Err(GrpcClientBuilderError::TlsNotSupported);
         }
 
-        let channel = Endpoint::from_shared(url.clone())?
+        let channel = TonicEndpoint::from_shared(url.clone())?
             .user_agent("celestia-grpc")?
             .connect_lazy();
 
@@ -466,11 +437,10 @@ mod tests {
     }
 
     #[async_test]
-    async fn url_with_config_builds_successfully() {
+    async fn endpoint_with_config_builds_successfully() {
         let result = GrpcClientBuilder::new()
-            .url_with_config(
-                "http://localhost:9090",
-                EndpointConfig::new()
+            .endpoint(
+                Endpoint::from("http://localhost:9090")
                     .metadata("authorization", "Bearer token")
                     .timeout(Duration::from_secs(30)),
             )
@@ -489,14 +459,36 @@ mod tests {
     }
 
     #[async_test]
-    async fn urls_with_config_helper_builds_successfully() {
+    async fn endpoints_helper_builds_successfully() {
         let result = GrpcClientBuilder::new()
-            .urls_with_config([
-                ("http://localhost:9090", EndpointConfig::default()),
-                ("http://localhost:9091", EndpointConfig::default()),
+            .endpoints([
+                Endpoint::from("http://localhost:9090"),
+                Endpoint::from("http://localhost:9091"),
             ])
             .build();
 
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn endpoint_from_str_uses_default_config() {
+        let endpoint: Endpoint = "http://localhost:9090".into();
+
+        assert_eq!(endpoint.url, "http://localhost:9090");
+        assert!(endpoint.ascii_metadata.is_empty());
+        assert!(endpoint.binary_metadata.is_empty());
+        assert!(endpoint.metadata_map.is_none());
+        assert!(endpoint.timeout.is_none());
+    }
+
+    #[test]
+    fn endpoint_from_string_uses_default_config() {
+        let endpoint: Endpoint = String::from("http://localhost:9090").into();
+
+        assert_eq!(endpoint.url, "http://localhost:9090");
+        assert!(endpoint.ascii_metadata.is_empty());
+        assert!(endpoint.binary_metadata.is_empty());
+        assert!(endpoint.metadata_map.is_none());
+        assert!(endpoint.timeout.is_none());
     }
 }
