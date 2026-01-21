@@ -93,7 +93,7 @@ pub(crate) struct ClientInner {
 pub struct ClientBuilder {
     rpc_url: Option<String>,
     rpc_auth_token: Option<String>,
-    rpc_timeout: Option<Duration>,
+    timeout: Option<Duration>,
     grpc_builder: Option<GrpcClientBuilder>,
 }
 
@@ -224,7 +224,7 @@ impl ClientBuilder {
 
     /// Set the request timeout for RPC endpoints.
     pub fn rpc_timeout(mut self, timeout: Duration) -> ClientBuilder {
-        self.rpc_timeout = Some(timeout);
+        self.timeout = Some(timeout);
         self
     }
 
@@ -302,7 +302,10 @@ impl ClientBuilder {
         let rpc_url = self.rpc_url.as_ref().ok_or(Error::RpcEndpointNotSet)?;
         let rpc_auth_token = self.rpc_auth_token.as_deref();
 
-        let (grpc, pubkey) = if let Some(grpc_builder) = self.grpc_builder {
+        let (grpc, pubkey) = if let Some(mut grpc_builder) = self.grpc_builder {
+            if let Some(timeout) = self.timeout {
+                grpc_builder = grpc_builder.timeout(timeout)
+            };
             let client = grpc_builder.build()?;
             let pubkey = client.get_account_pubkey();
             (Some(client), pubkey)
@@ -310,8 +313,7 @@ impl ClientBuilder {
             (None, None)
         };
 
-        let rpc =
-            RpcClient::new(rpc_url, rpc_auth_token, self.rpc_timeout, self.rpc_timeout).await?;
+        let rpc = RpcClient::new(rpc_url, rpc_auth_token, self.timeout, self.timeout).await?;
 
         let head = rpc.header_network_head().await?;
         head.validate()?;

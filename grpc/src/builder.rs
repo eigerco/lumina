@@ -40,10 +40,15 @@ use imp::build_transport;
 /// ```
 #[derive(Debug, Clone)]
 pub struct Endpoint {
+    /// The endpoint URL.
     pub url: String,
+    /// ASCII metadata (HTTP/2 headers) as key-value pairs.
     ascii_metadata: Vec<(String, String)>,
+    /// Binary metadata as key-value pairs (keys must have `-bin` suffix).
     binary_metadata: Vec<(String, Vec<u8>)>,
+    /// Pre-built metadata map.
     metadata_map: Option<MetadataMap>,
+    /// Request timeout for this endpoint.
     timeout: Option<Duration>,
 }
 
@@ -126,6 +131,7 @@ enum TransportEntry {
 #[derive(Default)]
 pub struct GrpcClientBuilder {
     transports: Vec<TransportEntry>,
+    timeout: Option<Duration>,
     signer_kind: Option<SignerKind>,
 }
 
@@ -261,6 +267,12 @@ impl GrpcClientBuilder {
         self
     }
 
+    /// Sets the request timeout, overriding default one from the transport.
+    pub fn timeout(mut self, timeout: Duration) -> GrpcClientBuilder {
+        self.timeout = Some(timeout);
+        self
+    }
+
     /// Build [`GrpcClient`]
     ///
     /// Returns error if no transports were configured.
@@ -269,15 +281,30 @@ impl GrpcClientBuilder {
             return Err(GrpcClientBuilderError::TransportNotSet);
         }
 
+        let base_context = Context {
+            timeout: self.timeout,
+            ..Default::default()
+        };
+
         let transports: Vec<BoxedTransport> = self
             .transports
             .into_iter()
             .map(|entry| match entry {
                 TransportEntry::Endpoint(endpoint) => {
-                    let (url, context) = endpoint.into_parts()?;
+                    let (url, endpoint_context) = endpoint.into_parts()?;
+                    let mut context = base_context.clone();
+                    context.extend(&endpoint_context);
                     build_transport(url, context)
                 }
-                TransportEntry::BoxedTransport(t) => Ok(t),
+                TransportEntry::BoxedTransport(mut transport) => {
+                    let mut context = base_context.clone();
+                    context.extend(&transport.metadata.context);
+                    transport.metadata = Arc::new(TransportMetadata {
+                        url: transport.metadata.url.clone(),
+                        context,
+                    });
+                    Ok(transport)
+                }
             })
             .collect::<Result<Vec<_>, _>>()?;
 
