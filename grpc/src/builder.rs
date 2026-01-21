@@ -108,14 +108,11 @@ impl Endpoint {
     }
 }
 
-impl From<String> for Endpoint {
-    fn from(url: String) -> Self {
-        Endpoint::new(url)
-    }
-}
-
-impl From<&str> for Endpoint {
-    fn from(url: &str) -> Self {
+impl<S> From<S> for Endpoint
+where
+    S: Into<String>,
+{
+    fn from(url: S) -> Self {
         Endpoint::new(url)
     }
 }

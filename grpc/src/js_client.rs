@@ -34,7 +34,7 @@ export type UrlsOrEndpoints = UrlOrEndpoint | UrlOrEndpoint[];
 /// );
 /// fallback = fallback.withTimeout(10000);
 ///
-/// const client = await new GrpcClientBuilder()
+/// const client = await GrpcClient
 ///   .withUrls([primary, fallback])
 ///   .build();
 /// ```
@@ -92,13 +92,13 @@ impl Endpoint {
 /// # Keyless client example
 ///
 /// ```js
-/// const client = await new GrpcClientBuilder()
+/// const client = await GrpcClient
 ///   .withUrl("http://127.0.0.1:18080")
 ///   .build()
 ///
 /// // With config:
-/// const endpoint = new Endpoint("http://127.0.0.1:18080").withTimeout(5000);
-/// const client = await new GrpcClientBuilder()
+/// const endpoint = new Endpoint("http://127.0.0.1:18080").withTimeout(BigInt(5000));
+/// const client = await GrpcClient
 ///   .withUrl(endpoint)
 ///   .build()
 /// ```
@@ -118,7 +118,7 @@ impl Endpoint {
 ///   return sig.toCompactRawBytes();
 /// };
 ///
-/// const client = await new GrpcClientBuilder()
+/// const client = await GrpcClient
 ///   .withUrl("http://127.0.0.1:18080")
 ///   .withPubkeyAndSigner(pubKey, signer)
 ///   .build();
@@ -134,7 +134,7 @@ impl Endpoint {
 ///     .then(sig => Uint8Array.from(atob(sig.signature.signature), c => c.charCodeAt(0)))
 /// }
 ///
-/// const client = await new GrpcClientBuilder()
+/// const client = await GrpcClient
 ///   .withUrl("http://127.0.0.1:18080")
 ///   .withPubkeyAndSigner(keys.pubKey, signer)
 ///   .build()
@@ -156,11 +156,12 @@ impl GrpcClientBuilder {
     pub fn with_url(
         self,
         #[wasm_bindgen(unchecked_param_type = "UrlsOrEndpoints")] url: JsValue,
-    ) -> Self {
-        let endpoints = endpoints_from_js_or_throw(url);
-        Self {
+    ) -> Result<Self, JsValue> {
+        let endpoints = endpoints_from_js(url)?;
+        let ret = Self {
             inner: self.inner.endpoints(endpoints),
-        }
+        };
+        Ok(ret)
     }
 
     /// Add multiple URL endpoints at once for fallback support.
@@ -170,25 +171,18 @@ impl GrpcClientBuilder {
     /// When multiple endpoints are configured, the client will automatically
     /// fall back to the next endpoint if a network-related error occurs.
     ///
-    /// # Example
-    ///
-    /// ```js
-    /// const client = await new GrpcClientBuilder()
-    ///   .withUrls(["http://primary:9090", "http://fallback:9090"])
-    ///   .build();
-    /// ```
-    ///
     /// Note that this method **consumes** builder and returns updated instance of it.
     /// Make sure to re-assign it if you keep builder in a variable.
     #[wasm_bindgen(js_name = "withUrls")]
     pub fn with_urls(
         self,
         #[wasm_bindgen(unchecked_param_type = "UrlsOrEndpoints")] urls: JsValue,
-    ) -> Self {
-        let endpoints = endpoints_from_js_or_throw(urls);
-        Self {
+    ) -> Result<Self, JsValue> {
+        let endpoints = endpoints_from_js(urls)?;
+        let ret = Self {
             inner: self.inner.endpoints(endpoints),
-        }
+        };
+        Ok(ret)
     }
 
     /// Add public key and signer to the client being built
@@ -238,18 +232,6 @@ pub(crate) fn endpoints_from_js(value: JsValue) -> Result<Vec<crate::Endpoint>, 
             .collect::<Result<Vec<_>, _>>();
     }
     Ok(vec![endpoint_from_js(value)?])
-}
-
-fn endpoints_from_js_or_throw(value: JsValue) -> Vec<crate::Endpoint> {
-    match endpoints_from_js(value) {
-        Ok(endpoints) => endpoints,
-        Err(err) => {
-            let message = err
-                .as_string()
-                .unwrap_or_else(|| "Invalid endpoint input".to_string());
-            wasm_bindgen::throw_str(&message);
-        }
-    }
 }
 
 impl From<crate::GrpcClientBuilder> for GrpcClientBuilder {

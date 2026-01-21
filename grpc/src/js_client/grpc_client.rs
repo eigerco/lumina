@@ -37,9 +37,9 @@ impl GrpcClient {
     #[wasm_bindgen(js_name = withUrl)]
     pub fn with_url(
         #[wasm_bindgen(unchecked_param_type = "UrlsOrEndpoints")] url: JsValue,
-    ) -> GrpcClientBuilder {
-        let endpoints = endpoints_from_js_or_throw(url);
-        crate::GrpcClientBuilder::new().endpoints(endpoints).into()
+    ) -> Result<GrpcClientBuilder, JsValue> {
+        let endpoints = endpoints_from_js(url)?;
+        Ok(crate::GrpcClientBuilder::new().endpoints(endpoints).into())
     }
 
     /// Create a builder for [`GrpcClient`] with multiple URL endpoints for fallback support.
@@ -57,9 +57,9 @@ impl GrpcClient {
     #[wasm_bindgen(js_name = withUrls)]
     pub fn with_urls(
         #[wasm_bindgen(unchecked_param_type = "UrlsOrEndpoints")] urls: JsValue,
-    ) -> GrpcClientBuilder {
-        let endpoints = endpoints_from_js_or_throw(urls);
-        crate::GrpcClientBuilder::new().endpoints(endpoints).into()
+    ) -> Result<GrpcClientBuilder, JsValue> {
+        let endpoints = endpoints_from_js(urls)?;
+        Ok(crate::GrpcClientBuilder::new().endpoints(endpoints).into())
     }
 
     /// Get auth params
@@ -402,18 +402,6 @@ impl GrpcClient {
             .confirm_broadcasted_tx(broadcasted_tx.try_into()?, tx_config)
             .await?;
         Ok(tx_info.into())
-    }
-}
-
-fn endpoints_from_js_or_throw(value: JsValue) -> Vec<crate::Endpoint> {
-    match endpoints_from_js(value) {
-        Ok(endpoints) => endpoints,
-        Err(err) => {
-            let message = err
-                .as_string()
-                .unwrap_or_else(|| "Invalid endpoint input".to_string());
-            wasm_bindgen::throw_str(&message);
-        }
     }
 }
 
