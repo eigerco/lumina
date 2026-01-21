@@ -180,29 +180,6 @@ impl GrpcClientBuilder {
         GrpcClientBuilder(Mutex::new(Some(builder)))
     }
 
-    /// Add another URL endpoint.
-    #[uniffi::method(name = "addUrl")]
-    pub fn add_url(self: Arc<Self>, url: String) -> Arc<Self> {
-        self.map_builder(move |builder| builder.url(url));
-        self
-    }
-
-    /// Add another endpoint.
-    #[uniffi::method(name = "endpoint")]
-    pub fn endpoint(self: Arc<Self>, endpoint: Arc<Endpoint>) -> Arc<Self> {
-        let endpoint = endpoint.take();
-        self.map_builder(move |builder| builder.endpoint(endpoint));
-        self
-    }
-
-    /// Add multiple endpoints.
-    #[uniffi::method(name = "endpoints")]
-    pub fn endpoints(self: Arc<Self>, endpoints: Vec<Arc<Endpoint>>) -> Arc<Self> {
-        let endpoints = endpoints.into_iter().map(|e| e.take()).collect::<Vec<_>>();
-        self.map_builder(move |builder| builder.endpoints(endpoints));
-        self
-    }
-
     /// Add public key and signer to the client being built
     #[uniffi::method(name = "withPubkeyAndSigner")]
     pub fn pubkey_and_signer(
