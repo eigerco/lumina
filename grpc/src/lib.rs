@@ -12,6 +12,8 @@ pub mod signer;
 #[cfg(test)]
 mod test_utils;
 mod tx;
+mod tx_client_impl;
+mod tx_client_v2;
 #[cfg(all(not(target_arch = "wasm32"), feature = "uniffi"))]
 pub mod uniffi_client;
 mod utils;
@@ -21,6 +23,8 @@ pub use crate::client::GrpcClient;
 pub use crate::error::{Error, GrpcClientBuilderError, Result};
 pub use crate::signer::DocSigner;
 pub use crate::tx::{SignDoc, TxConfig, TxInfo};
+pub use crate::tx_client_impl::TransactionService;
+pub use crate::tx_client_v2::{TxHandle, TxRequest};
 pub use celestia_types::any::IntoProtobufAny;
 
 #[cfg(feature = "uniffi")]

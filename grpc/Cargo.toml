@@ -26,10 +26,10 @@ crate-type = ["cdylib", "lib"]
 celestia-grpc-macros.workspace = true
 celestia-proto = { workspace = true, features = ["tonic"] }
 celestia-types.workspace = true
-lumina-utils = { workspace = true, features = ["time"] }
+lumina-utils = { workspace = true, features = ["time", "executor"] }
 
 arc-swap = "1"
-async-trait = { workspace = true, optional = true }
+async-trait = { workspace = true }
 bytes.workspace = true
 dyn-clone = "1"
 futures.workspace = true
@@ -46,14 +46,15 @@ signature = "2"
 tendermint.workspace = true
 tendermint-proto.workspace = true
 thiserror.workspace = true
-tokio = { workspace = true, features = ["sync"] }
+tokio = { workspace = true, features = ["sync", "macros"] }
+tokio-util.workspace = true
 tonic = { workspace = true, features = ["codegen"] }
 tracing.workspace = true
 uniffi = { workspace = true, optional = true, features = ["tokio"] }
 zeroize = "1.8"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-tokio = { workspace = true, features = ["time"] }
+tokio = { workspace = true, features = ["rt", "time"] }
 tonic = { workspace = true, features = ["transport"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
@@ -72,7 +73,7 @@ lumina-utils = { workspace = true, features = ["test-utils"] }
 rand.workspace = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
-tokio = { workspace = true, features = ["rt", "macros"] }
+tokio = { workspace = true, features = ["rt", "macros", "test-util"] }
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 celestia-rpc = { workspace = true, features = ["wasm-bindgen"] }
@@ -82,7 +83,7 @@ wasm-bindgen-test.workspace = true
 [features]
 default = ['tls-native-roots']
 wasm-bindgen = ["celestia-types/wasm-bindgen", "dep:js-sys", "dep:wasm-bindgen", "dep:wasm-bindgen-futures"]
-uniffi = ["dep:async-trait", "dep:uniffi", "dep:serde_json", "celestia-types/uniffi"]
+uniffi = ["dep:uniffi", "dep:serde_json", "celestia-types/uniffi"]
 # Add system trust roots to `rustls` in `tonic`.
 #
 # Selecting this feature enables TLS support in grpc client.
