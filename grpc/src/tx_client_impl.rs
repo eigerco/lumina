@@ -355,14 +355,12 @@ impl TxServer for GrpcClient {
     type ConfirmInfo = TxConfirmInfo;
 
     async fn submit(&self, tx_bytes: Vec<u8>, _sequence: u64) -> TxSubmitResult<Self::TxId> {
-        println!("submission started!");
         let resp = self
             .broadcast_tx(tx_bytes, BroadcastMode::Sync)
             .await
             .map_err(|err| SubmitFailure::NetworkError { err: Arc::new(err) })?;
 
         if resp.code == ErrorCode::Success {
-            println!("transaction submission successful!");
             return Ok(resp.txhash);
         }
 
@@ -437,7 +435,6 @@ async fn map_status_response(
             },
         }),
         GrpcTxStatus::Rejected => {
-            println!("rejected!");
             if is_wrong_sequence(response.execution_code) {
                 let expected = ensure_expected_sequence(expected_sequence, client).await?;
                 Ok(TxStatus::Rejected {
