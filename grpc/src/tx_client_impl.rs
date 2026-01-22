@@ -105,7 +105,7 @@ impl SignFnBuilder {
         }
     }
 
-    pub(crate) fn build(self) -> Arc<dyn SignFn<Hash, TxInfo>> {
+    pub(crate) fn build(self) -> Arc<dyn SignFn<Hash, TxConfirmInfo>> {
         Arc::new(BuiltSignFn {
             context: self.context,
             pubkey: self.pubkey,
@@ -121,10 +121,10 @@ pub struct TransactionService {
 }
 
 struct TransactionServiceInner {
-    manager: RwLock<TransactionManager<Hash, TxInfo>>,
+    manager: RwLock<TransactionManager<Hash, TxConfirmInfo>>,
     worker: Mutex<Option<WorkerHandle>>,
     client: GrpcClient,
-    sign_fn: Arc<dyn SignFn<Hash, TxInfo>>,
+    sign_fn: Arc<dyn SignFn<Hash, TxConfirmInfo>>,
     confirm_interval: Duration,
     max_status_batch: usize,
     queue_capacity: usize,
@@ -170,7 +170,7 @@ impl TransactionService {
         &self,
         request: TxRequest,
         cfg: TxConfig,
-    ) -> Result<TxHandle<Hash, TxInfo>> {
+    ) -> Result<TxHandle<Hash, TxConfirmInfo>> {
         let manager = self.inner.manager.read().await.clone();
         manager.add_tx(request, cfg).await
     }
@@ -200,11 +200,11 @@ impl TransactionService {
 
     async fn spawn_worker(
         client: &GrpcClient,
-        sign_fn: Arc<dyn SignFn<Hash, TxInfo>>,
+        sign_fn: Arc<dyn SignFn<Hash, TxConfirmInfo>>,
         confirm_interval: Duration,
         max_status_batch: usize,
         queue_capacity: usize,
-    ) -> Result<(TransactionManager<Hash, TxInfo>, WorkerHandle)> {
+    ) -> Result<(TransactionManager<Hash, TxConfirmInfo>, WorkerHandle)> {
         let start_sequence = client.current_sequence().await?;
         let nodes = HashMap::from([(Arc::from("default"), Arc::new(client.clone()))]);
         let (manager, mut worker) = TransactionWorker::new(
@@ -243,13 +243,13 @@ struct BuiltSignFn {
 }
 
 #[async_trait]
-impl SignFn<Hash, TxInfo> for BuiltSignFn {
+impl SignFn<Hash, TxConfirmInfo> for BuiltSignFn {
     async fn sign(
         &self,
         sequence: u64,
         request: &TxRequest,
         cfg: &TxConfig,
-    ) -> Result<Transaction<Hash, TxInfo>> {
+    ) -> Result<Transaction<Hash, TxConfirmInfo>> {
         let chain_id = self
             .cached_chain_id
             .get_or_try_init(|| async { self.context.chain_id().await })
@@ -339,12 +339,12 @@ impl SignFn<Hash, TxInfo> for BuiltSignFn {
             }
             None => tx.encode_to_vec(),
         };
-        let id = Hash::Sha256(tendermint::crypto::default::Sha256::digest(&bytes));
+        // id is set later after submission succeeds (with server's hash)
         Ok(Transaction {
             sequence,
             bytes,
             callbacks: TxCallbacks::default(),
-            id,
+            id: None,
         })
     }
 }
@@ -352,15 +352,17 @@ impl SignFn<Hash, TxInfo> for BuiltSignFn {
 #[async_trait]
 impl TxServer for GrpcClient {
     type TxId = Hash;
-    type ConfirmInfo = TxInfo;
+    type ConfirmInfo = TxConfirmInfo;
 
     async fn submit(&self, tx_bytes: Vec<u8>, _sequence: u64) -> TxSubmitResult<Self::TxId> {
+        println!("submission started!");
         let resp = self
             .broadcast_tx(tx_bytes, BroadcastMode::Sync)
             .await
             .map_err(|err| SubmitFailure::NetworkError { err: Arc::new(err) })?;
 
         if resp.code == ErrorCode::Success {
+            println!("transaction submission successful!");
             return Ok(resp.txhash);
         }
 
@@ -411,33 +413,31 @@ impl TxServer for GrpcClient {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct TxConfirmInfo {
+    pub info: TxInfo,
+    pub execution_code: ErrorCode,
+}
+
 async fn map_status_response(
     hash: Hash,
     response: TxStatusResponse,
     expected_sequence: &mut Option<u64>,
     client: &GrpcClient,
     node_id: &str,
-) -> Result<TxStatus<TxInfo>> {
+) -> Result<TxStatus<TxConfirmInfo>> {
     match response.status {
-        GrpcTxStatus::Committed => {
-            if response.execution_code == ErrorCode::Success {
-                Ok(TxStatus::Confirmed {
-                    info: TxInfo {
-                        hash,
-                        height: response.height.value(),
-                    },
-                })
-            } else {
-                Ok(TxStatus::Rejected {
-                    reason: RejectionReason::OtherReason {
-                        error_code: response.execution_code,
-                        message: response.error.clone(),
-                        node_id: Arc::from(node_id),
-                    },
-                })
-            }
-        }
+        GrpcTxStatus::Committed => Ok(TxStatus::Confirmed {
+            info: TxConfirmInfo {
+                info: TxInfo {
+                    hash,
+                    height: response.height.value(),
+                },
+                execution_code: response.execution_code,
+            },
+        }),
         GrpcTxStatus::Rejected => {
+            println!("rejected!");
             if is_wrong_sequence(response.execution_code) {
                 let expected = ensure_expected_sequence(expected_sequence, client).await?;
                 Ok(TxStatus::Rejected {
@@ -632,7 +632,7 @@ mod tests {
 
     #[test]
     fn txserver_impl_compiles_with_grpc_client() {
-        fn assert_txserver<T: TxServer<TxId = Hash, ConfirmInfo = TxInfo>>() {}
+        fn assert_txserver<T: TxServer<TxId = Hash, ConfirmInfo = TxConfirmInfo>>() {}
         assert_txserver::<GrpcClient>();
     }
 
@@ -657,8 +657,8 @@ mod tests {
         let submit_hash = handle.submitted.await.unwrap().unwrap();
         let confirm_info = handle.confirmed.await.unwrap().unwrap();
 
-        assert_eq!(submit_hash, confirm_info.hash);
-        assert!(confirm_info.height > 0);
+        assert_eq!(submit_hash, confirm_info.info.hash);
+        assert!(confirm_info.info.height > 0);
     }
 
     fn random_blob(size: RangeInclusive<usize>) -> Blob {

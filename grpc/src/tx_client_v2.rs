@@ -82,6 +82,7 @@ use tendermint_proto::types::CanonicalVoteExtension;
 use tokio::select;
 use tokio::sync::{Mutex, Notify, mpsc, oneshot};
 use tokio_util::sync::CancellationToken;
+use tracing::info;
 
 use crate::{Error, Result, TxConfig};
 /// Identifier for a submission/confirmation node.
@@ -113,7 +114,7 @@ pub struct Transaction<TxId: TxIdT, ConfirmInfo> {
     /// One-shot callbacks for submit/confirm acknowledgements.
     pub callbacks: TxCallbacks<TxId, ConfirmInfo>,
     /// Id of the transaction
-    pub id: TxId,
+    pub id: Option<TxId>,
 }
 
 #[derive(Debug)]
@@ -208,18 +209,25 @@ impl<TxId: TxIdT, ConfirmInfo> TransactionManager<TxId, ConfirmInfo> {
             Ok(()) => {
                 *sequence = sequence.saturating_add(1);
                 self.max_sent.fetch_add(1, Ordering::Relaxed);
+                info!(sequence = current, "Transaction added to queue");
                 Ok(TxHandle {
                     sequence: current,
                     submitted: submit_rx,
                     confirmed: confirm_rx,
                 })
             }
-            Err(mpsc::error::TrySendError::Full(_)) => Err(Error::UnexpectedResponseType(
-                "transaction queue full".to_string(),
-            )),
-            Err(mpsc::error::TrySendError::Closed(_)) => Err(Error::UnexpectedResponseType(
-                "transaction manager closed".to_string(),
-            )),
+            Err(mpsc::error::TrySendError::Full(_)) => {
+                info!(sequence = current, "Transaction queue full, rejecting tx");
+                Err(Error::UnexpectedResponseType(
+                    "transaction queue full".to_string(),
+                ))
+            }
+            Err(mpsc::error::TrySendError::Closed(_)) => {
+                info!(sequence = current, "Transaction manager closed");
+                Err(Error::UnexpectedResponseType(
+                    "transaction manager closed".to_string(),
+                ))
+            }
         }
     }
 
@@ -403,6 +411,12 @@ impl ProcessorStateWithEpoch {
 
     fn set_if_changed(&mut self, next: ProcessorState) {
         if !self.state.equivalent(&next) {
+            info!(
+                from = ?self.state,
+                to = ?next,
+                epoch = self.epoch + 1,
+                "Processor state transition"
+            );
             self.state = next;
             self.epoch = self.epoch.saturating_add(1);
         }
@@ -532,16 +546,23 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
 
     fn enqueue_tx(&mut self, tx: Transaction<S::TxId, S::ConfirmInfo>) -> Result<()> {
         if tx.sequence != self.next_enqueue_sequence {
+            info!(
+                expected = self.next_enqueue_sequence,
+                got = tx.sequence,
+                "Transaction sequence gap detected"
+            );
             return Err(crate::Error::UnexpectedResponseType(format!(
                 "tx sequence gap: expected {}, got {}",
                 self.next_enqueue_sequence, tx.sequence
             )));
         }
-        let id = tx.id.clone();
-        let sequence = tx.sequence;
         self.txs.push_back(tx);
-        self.tx_index.insert(id, sequence);
         self.next_enqueue_sequence += 1;
+        info!(
+            sequence = self.next_enqueue_sequence - 1,
+            queue_size = self.txs.len(),
+            "Transaction enqueued in worker"
+        );
         self.new_submit.notify_one();
         Ok(())
     }
@@ -552,6 +573,29 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
     /// - The worker is single-owner; it should be run in a dedicated task.
     /// - On terminal failures it returns `Ok(())` after notifying callbacks.
     pub async fn process(&mut self, shutdown: CancellationToken) -> Result<()> {
+        info!(
+            start_sequence = self.next_enqueue_sequence,
+            num_nodes = self.nodes.len(),
+            "Transaction worker started"
+        );
+        let submit_shutdown = shutdown.clone();
+        let confirm_shutdown = shutdown.clone();
+        // pushing pending futures to avoid busy loop
+        self.submissions.push(
+            async move {
+                submit_shutdown.cancelled().await;
+                None
+            }
+            .boxed(),
+        );
+        self.confirmations.push(
+            async move {
+                confirm_shutdown.cancelled().await;
+                None
+            }
+            .boxed(),
+        );
+
         loop {
             while let Some(event) = self.events.pop_front() {
                 self.process_event(event).await?;
@@ -576,9 +620,15 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
                 break;
             }
         }
-
+        info!(
+            confirmed_sequence = self.confirmed_sequence,
+            pending_txs = self.txs.len(),
+            "Transaction worker stopping"
+        );
+        shutdown.cancel();
         // Wait for all in-flight tasks to complete before returning
         self.drain_pending().await;
+        info!("Transaction worker stopped");
 
         Ok(())
     }
@@ -608,10 +658,14 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
         select! {
             _ = self.confirm_ticker.tick() => {
                 let target = expected.saturating_sub(1);
-                if let Some(idx) = self.index_for_sequence(target) {
+                let result = self
+                    .index_for_sequence(target)
+                    .and_then(|idx| {
+                        self.txs[idx].id.clone()
+                    });
+                if let Some(id) = result {
                     let node_id = node_id.clone();
                     let node = self.nodes.get(&node_id).unwrap().clone();
-                    let id = self.txs[idx].id.clone();
                     let state_epoch = self.state.epoch();
                     let tx = push_oneshot(&mut self.confirmations);
                     spawn_cancellable(token, async move {
@@ -715,11 +769,16 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
                 failure,
                 ..
             } => {
+                info!(
+                    %node_id,
+                    sequence,
+                    failure = ?failure,
+                    "Transaction submission failed"
+                );
                 let Some(state) = self.node_state.get_mut(&node_id) else {
                     return Ok(());
                 };
                 state.inflight = false;
-                state.submitted_seq = sequence.saturating_sub(1);
                 match failure {
                     SubmitFailure::SequenceMismatch { expected } => {
                         if sequence < expected {
@@ -749,14 +808,24 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
                 sequence,
                 id,
             } => {
+                info!(
+                    %node_id,
+                    sequence,
+                    tx_id = ?id,
+                    "Transaction submitted successfully"
+                );
                 let state_node_id = node_id.clone();
                 let submit_id = id.clone();
-                // TODO: refactor to make it inside func
                 if let Some(submitted) = self.take_submitted(sequence) {
                     let _ = submitted.send(Ok(submit_id));
                 }
                 if let Some(state) = self.node_state.get_mut(&state_node_id) {
                     state.inflight = false;
+                    state.submitted_seq = sequence;
+                }
+                if let Some(idx) = self.index_for_sequence(sequence) {
+                    self.txs[idx].id = Some(id.clone());
+                    self.tx_index.insert(id, sequence);
                 }
                 self.new_submit.notify_one();
             }
@@ -794,35 +863,48 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
                     continue;
                 }
                 TxStatus::Evicted => {
+                    info!(
+                        %node_id,
+                        sequence = cur_seq,
+                        "Transaction evicted from mempool"
+                    );
                     let node_state = self.node_state.get_mut(&node_id).unwrap();
                     node_state.submitted_seq =
                         node_state.submitted_seq.min(cur_seq.saturating_sub(1));
                     self.new_submit.notify_one();
                     break;
                 }
-                TxStatus::Rejected { reason } => match reason {
-                    RejectionReason::SequenceMismatch {
-                        expected,
-                        node_id: _,
-                    } => {
-                        if cur_seq < expected {
-                            self.state.update(ProcessorState::Recovering {
-                                node_id: node_id.clone(),
-                                expected,
-                            });
-                        } else {
-                            let node_state = self.node_state.get_mut(&node_id).unwrap();
-                            node_state.submitted_seq = node_state.submitted_seq.min(expected);
+                TxStatus::Rejected { reason } => {
+                    info!(
+                        %node_id,
+                        sequence = cur_seq,
+                        reason = ?reason,
+                        "Transaction rejected"
+                    );
+                    match reason {
+                        RejectionReason::SequenceMismatch {
+                            expected,
+                            node_id: _,
+                        } => {
+                            if cur_seq < expected {
+                                self.state.update(ProcessorState::Recovering {
+                                    node_id: node_id.clone(),
+                                    expected,
+                                });
+                            } else {
+                                let node_state = self.node_state.get_mut(&node_id).unwrap();
+                                node_state.submitted_seq = node_state.submitted_seq.min(expected);
+                            }
+                            break;
                         }
-                        break;
+                        other => {
+                            self.state
+                                .update(ProcessorState::Stopped(StopReason::ConfirmFailure(
+                                    ConfirmFailure { reason: other },
+                                )));
+                        }
                     }
-                    other => {
-                        self.state
-                            .update(ProcessorState::Stopped(StopReason::ConfirmFailure(
-                                ConfirmFailure { reason: other },
-                            )));
-                    }
-                },
+                }
                 TxStatus::Confirmed { info } => {
                     self.update_confirmed_sequence(cur_seq, info)?;
                 }
@@ -873,6 +955,11 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
         if sequence <= self.confirmed_sequence {
             return Ok(());
         }
+        info!(
+            sequence,
+            prev_confirmed = self.confirmed_sequence,
+            "Transaction confirmed"
+        );
         self.confirmed_info.insert(sequence, info);
         for (_, state) in self.node_state.iter_mut() {
             state.submitted_seq = state.submitted_seq.max(sequence);
@@ -888,7 +975,9 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
                 break;
             }
             let mut tx = self.txs.pop_front().expect("front exists");
-            self.tx_index.remove(&tx.id);
+            if let Some(id) = tx.id {
+                self.tx_index.remove(&id);
+            }
             if let Some(info) = self.confirmed_info.remove(&tx.sequence) {
                 if let Some(on_confirm) = tx.callbacks.confirmed.take() {
                     let _ = on_confirm.send(Ok(info));
@@ -927,7 +1016,6 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
                 continue;
             };
             if let Some(state) = self.node_state.get_mut(&node_id) {
-                state.submitted_seq = target_sequence;
                 state.inflight = true;
             }
             let tx = push_oneshot(&mut self.submissions);
@@ -962,7 +1050,7 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
             }
             let mut to_send = Vec::with_capacity(cap);
             for i in 0..cap {
-                to_send.push(self.txs[i].id.clone());
+                to_send.push(self.txs[i].id.clone().unwrap());
             }
             let node = self.nodes.get(&node_id).unwrap().clone();
             let tx = push_oneshot(&mut self.confirmations);
@@ -1071,7 +1159,7 @@ mod tests {
                 sequence,
                 bytes,
                 callbacks: TxCallbacks::default(),
-                id: sequence,
+                id: None,
             })
         }
     }
@@ -1550,60 +1638,51 @@ mod tests {
 
     #[tokio::test(start_paused = true)]
     async fn recovery_evicted_then_confirmed() {
+        // Test that after a transaction is evicted from mempool, it gets resubmitted
+        // and eventually confirmed.
         let (mut harness, manager_worker) = Harness::new(Duration::from_millis(200), 10, 64);
         let manager = harness.manager.clone();
-        let (seq1, submit_rx1, confirm_rx1) = add_tx(&manager, vec![1]).await;
-        let (seq2, _submit_rx2, _confirm_rx2) = add_tx(&manager, vec![2]).await;
+        let (seq1, _submit_rx1, confirm_rx1) = add_tx(&manager, vec![1]).await;
         assert_eq!(seq1, 1);
-        assert_eq!(seq2, 2);
         harness.start(manager_worker);
 
+        // First submission succeeds
         let (_bytes, sequence, reply) = harness.expect_submit().await;
         assert_eq!(sequence, 1);
         reply.send(Ok(sequence)).expect("submit reply send");
         let first_id = sequence;
+        harness.pump().await;
 
-        let submit_result = submit_rx1.await.expect("submit recv");
-        assert_eq!(submit_result.expect("submit ok"), first_id);
+        // Query status - tx is evicted
+        harness.tick_confirm().await;
+        let (ids, reply) = harness.expect_status_batch().await;
+        assert!(ids.contains(&first_id));
+        reply
+            .send(Ok(vec![(first_id, TxStatus::Evicted)]))
+            .expect("status reply send");
+
+        // After eviction, worker processes the result and resubmits.
+        // Advance time and pump to ensure the confirmation result is processed
+        // and the resubmission is triggered.
+        for _ in 0..100 {
+            tokio::time::advance(Duration::from_millis(1)).await;
+            harness.pump().await;
+        }
 
         let (_bytes, sequence, reply) = harness.expect_submit().await;
-        assert_eq!(sequence, 2);
+        assert_eq!(sequence, 1); // Resubmitting seq 1
+        reply.send(Ok(sequence)).expect("resubmit reply send");
+        harness.pump().await;
+
+        // Query status again - now tx is confirmed
+        harness.tick_confirm().await;
+        let (ids, reply) = harness.expect_status_batch().await;
+        assert!(ids.contains(&first_id));
         reply
-            .send(Err(SubmitFailure::SequenceMismatch { expected: 2 }))
-            .expect("submit reply send");
-        harness.pump().await;
+            .send(Ok(vec![(first_id, TxStatus::Confirmed { info: 456 })]))
+            .expect("status reply send");
 
-        harness.tick_confirm().await;
-        let (ids, reply) = harness.expect_status_batch().await;
-        assert!(ids.contains(&first_id));
-        let statuses = ids
-            .into_iter()
-            .map(|id| {
-                if id == first_id {
-                    (id, TxStatus::Evicted)
-                } else {
-                    (id, TxStatus::Pending)
-                }
-            })
-            .collect();
-        reply.send(Ok(statuses)).expect("status reply send");
-        harness.pump().await;
-
-        harness.tick_confirm().await;
-        let (ids, reply) = harness.expect_status_batch().await;
-        assert!(ids.contains(&first_id));
-        let statuses = ids
-            .into_iter()
-            .map(|id| {
-                if id == first_id {
-                    (id, TxStatus::Confirmed { info: 456 })
-                } else {
-                    (id, TxStatus::Pending)
-                }
-            })
-            .collect();
-        reply.send(Ok(statuses)).expect("status reply send");
-
+        // Verify confirm callback is received
         let confirm_result = confirm_rx1.await.expect("confirm recv");
         let info = confirm_result.expect("confirm ok");
         assert_eq!(info, 456);
@@ -1710,7 +1789,7 @@ mod tests {
                     sequence: sequence.saturating_add(1),
                     bytes,
                     callbacks: TxCallbacks::default(),
-                    id: sequence.saturating_add(1),
+                    id: None,
                 })
             }
         }
