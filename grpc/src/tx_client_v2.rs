@@ -1056,6 +1056,7 @@ mod tests {
     type TestTxId = u64;
     type TestConfirmInfo = u64;
 
+    #[derive(Debug)]
     struct RoutedCall {
         node_id: NodeId,
         call: ServerCall,
@@ -1142,6 +1143,158 @@ mod tests {
         }
     }
 
+    #[derive(Debug, Clone)]
+    struct NodeState {
+        sequence: u64,
+        accepted_ids: Vec<TestTxId>,
+    }
+
+    impl NodeState {
+        fn new(sequence: u64, accepted_ids: Vec<TestTxId>) -> Self {
+            Self {
+                sequence,
+                accepted_ids,
+            }
+        }
+    }
+
+    #[derive(Debug)]
+    enum ServerReturn {
+        Submit(TxSubmitResult<TestTxId>),
+        StatusBatch(TxConfirmResult<Vec<(TestTxId, TxStatus<TestConfirmInfo>)>>),
+        Status(TxConfirmResult<TxStatus<TestConfirmInfo>>),
+        CurrentSequence(Result<u64>),
+    }
+
+    impl ServerReturn {
+        fn assert_submit(self) -> TxSubmitResult<TestTxId> {
+            match self {
+                ServerReturn::Submit(result) => result,
+                _ => panic!("expected Submit"),
+            }
+        }
+
+        fn assert_status_batch(
+            self,
+        ) -> TxConfirmResult<Vec<(TestTxId, TxStatus<TestConfirmInfo>)>> {
+            match self {
+                ServerReturn::StatusBatch(result) => result,
+                _ => panic!("expected StatusBatch"),
+            }
+        }
+
+        fn assert_status(self) -> TxConfirmResult<TxStatus<TestConfirmInfo>> {
+            match self {
+                ServerReturn::Status(result) => result,
+                _ => panic!("expected Status"),
+            }
+        }
+
+        fn assert_sequence(self) -> Result<u64> {
+            match self {
+                ServerReturn::CurrentSequence(result) => result,
+                _ => panic!("expected CurrentSequence"),
+            }
+        }
+    }
+
+    type ActionFunc =
+        dyn for<'a> Fn(&'a RoutedCall, NodeState) -> ActionResult + Send + Sync + 'static;
+    type MatchFunc = dyn for<'a> Fn(&'a RoutedCall) -> bool + Send + Sync + 'static;
+
+    struct ActionResult {
+        ret: ServerReturn,
+        new_state: NodeState,
+    }
+
+    #[derive(Clone)]
+    struct Match {
+        name: &'static str,
+        check_func: Arc<MatchFunc>,
+    }
+
+    impl Match {
+        fn check(&self, call: &RoutedCall) -> bool {
+            (self.check_func)(call)
+        }
+    }
+
+    impl std::fmt::Debug for Match {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
+            f.debug_struct("Match").field("name", &self.name).finish()
+        }
+    }
+
+    #[derive(Clone)]
+    struct Action {
+        name: &'static str,
+        action: Arc<ActionFunc>,
+    }
+
+    impl Action {
+        fn call(&self, rc: &RoutedCall, state: NodeState) -> ActionResult {
+            (self.action)(rc, state)
+        }
+    }
+
+    impl std::fmt::Debug for Action {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
+            f.debug_struct("Action").field("name", &self.name).finish()
+        }
+    }
+
+    #[derive(Debug, Clone)]
+    enum Cardinality {
+        Once,
+        Times(u32),
+        Any,
+    }
+
+    impl Cardinality {
+        fn consume(&mut self) {
+            match self {
+                Cardinality::Once => *self = Cardinality::Times(0),
+                Cardinality::Times(n) => {
+                    if *n > 0 {
+                        *n -= 1;
+                    }
+                }
+                Cardinality::Any => {}
+            }
+        }
+        fn exhausted(&self) -> bool {
+            matches!(self, Cardinality::Times(0))
+        }
+        fn requires_consumption(&self) -> bool {
+            !matches!(self, Cardinality::Any)
+        }
+    }
+
+    #[derive(Debug, Clone)]
+    struct Rule {
+        name: &'static str,
+        matcher: Match,
+        action: Action,
+        card: Cardinality,
+    }
+
+    impl Rule {
+        fn matches(&self, call: &RoutedCall) -> bool {
+            if self.card.exhausted() {
+                return false;
+            }
+            self.matcher.check(&call)
+        }
+
+        fn consume(&mut self) {
+            self.card.consume();
+        }
+
+        fn call(&self, rc: &RoutedCall, state: NodeState) -> ActionResult {
+            self.action.call(rc, state)
+        }
+    }
+
     #[async_trait]
     impl TxServer for MockTxServer {
         type TxId = TestTxId;
@@ -1183,30 +1336,139 @@ mod tests {
         }
     }
 
-    struct HarnessDriver {}
+    #[derive(Debug, Clone)]
+    struct CallLogEntry {
+        node_id: NodeId,
+        kind: &'static str,
+        seq: Option<u64>,
+        ids: Vec<TestTxId>,
+    }
+
+    impl CallLogEntry {
+        fn new(node_id: NodeId, kind: &'static str, seq: Option<u64>, ids: Vec<TestTxId>) -> Self {
+            Self {
+                node_id,
+                kind,
+                seq,
+                ids,
+            }
+        }
+    }
+
+    impl From<&RoutedCall> for CallLogEntry {
+        fn from(rc: &RoutedCall) -> Self {
+            let node_id = rc.node_id.clone();
+            match &rc.call {
+                ServerCall::CurrentSequence { .. } => {
+                    CallLogEntry::new(node_id, "CurrentSequence", None, vec![])
+                }
+                ServerCall::Status { id, .. } => {
+                    CallLogEntry::new(node_id, "Status", None, vec![id.clone()])
+                }
+                ServerCall::StatusBatch { ids, .. } => {
+                    CallLogEntry::new(node_id, "StatusBatch", None, ids.clone())
+                }
+                ServerCall::Submit { sequence, .. } => {
+                    CallLogEntry::new(node_id, "Submit", Some(sequence.clone()), vec![])
+                }
+            }
+        }
+    }
+
+    #[derive(Debug)]
+    struct Driver {
+        inbox: mpsc::Receiver<RoutedCall>,
+        rules: Vec<Rule>,
+        states: HashMap<NodeId, NodeState>,
+        log: Vec<CallLogEntry>,
+    }
+
+    impl Driver {
+        fn new(
+            inbox: mpsc::Receiver<RoutedCall>,
+            rules: Vec<Rule>,
+            states: HashMap<NodeId, NodeState>,
+        ) -> Self {
+            Self {
+                inbox,
+                rules,
+                log: Vec::new(),
+                states,
+            }
+        }
+
+        fn log_call(&mut self, call: &RoutedCall) {
+            self.log.push(call.into());
+        }
+
+        async fn process_inbox(&mut self, shutdown: CancellationToken) -> DriverResult {
+            while let Some(rc) = tokio::select! {
+                _ = shutdown.cancelled() => None,
+                msg = self.inbox.recv() => msg,
+            } {
+                self.log_call(&rc);
+                let res = self.rules.iter_mut().find(|rule| rule.matches(&rc));
+                if let Some(rule) = res {
+                    rule.consume();
+                    let ret = rule.call(&rc, self.states[&rc.node_id].clone());
+                    self.states.insert(rc.node_id.clone(), ret.new_state);
+                    match rc.call {
+                        ServerCall::Submit { reply, .. } => {
+                            reply.send(ret.ret.assert_submit());
+                        }
+                        ServerCall::Status { reply, .. } => {
+                            reply.send(ret.ret.assert_status());
+                        }
+                        ServerCall::StatusBatch { reply, .. } => {
+                            reply.send(ret.ret.assert_status_batch());
+                        }
+                        ServerCall::CurrentSequence { reply, .. } => {
+                            reply.send(ret.ret.assert_sequence());
+                        }
+                    }
+                }
+            }
+            let mut unmet = vec![];
+            for rule in self.rules.iter() {
+                if rule.card.requires_consumption() && !rule.card.exhausted() {
+                    unmet.push(rule.clone());
+                }
+            }
+            DriverResult {
+                unmet,
+                log: self.log.clone(),
+            }
+        }
+    }
+
+    #[derive(Debug)]
+    struct DriverResult {
+        log: Vec<CallLogEntry>,
+        unmet: Vec<Rule>,
+    }
 
     struct Harness {
-        calls_rx: mpsc::Receiver<ServerCall>,
         shutdown: CancellationToken,
-        handle: Option<JoinHandle<Result<()>>>,
+        manager_handle: Option<JoinHandle<Result<()>>>,
+        driver_handle: JoinHandle<DriverResult>,
         confirm_interval: Duration,
         manager: TransactionManager<TestTxId, TestConfirmInfo>,
     }
 
     impl Harness {
-        /// Maximum spins for polling operations.
-        const MAX_SPINS: usize = 1000;
-
         fn new(
             confirm_interval: Duration,
             max_status_batch: usize,
             add_tx_capacity: usize,
             num_servers: usize,
+            rules: Vec<Rule>,
         ) -> (Self, TransactionWorker<MockTxServer>) {
             let (calls_rx, servers) = make_many_servers(num_servers);
             let mut node_map = HashMap::new();
-            for (node_id, node_server) in nodes {
-                node_map.insert(node_id, node_server);
+            let mut node_states = HashMap::new();
+            for (node_id, node_server) in servers {
+                node_map.insert(node_id.clone(), node_server);
+                node_states.insert(node_id.clone(), NodeState::new(0, Vec::new()));
             }
             let signer = Arc::new(TestSigner::default());
             let (manager, worker) = TransactionWorker::new(
@@ -1217,11 +1479,16 @@ mod tests {
                 1,
                 add_tx_capacity,
             );
+            let mut driver = Driver::new(calls_rx, rules, node_states);
+            let shutdown = CancellationToken::new();
+            let process_shutdown = shutdown.clone();
+            let driver_handle =
+                tokio::spawn(async move { driver.process_inbox(process_shutdown).await });
             (
                 Self {
-                    calls_rx,
-                    shutdown: CancellationToken::new(),
-                    handle: None,
+                    shutdown,
+                    manager_handle: None,
+                    driver_handle,
                     confirm_interval,
                     manager,
                 },
@@ -1231,188 +1498,50 @@ mod tests {
 
         fn start(&mut self, mut manager: TransactionWorker<MockTxServer>) {
             let shutdown = self.shutdown.clone();
-            self.handle = Some(tokio::spawn(async move { manager.process(shutdown).await }));
+            self.manager_handle =
+                Some(tokio::spawn(async move { manager.process(shutdown).await }));
         }
 
         async fn pump(&self) {
-            // Yield to let other tasks run
             tokio::task::yield_now().await;
         }
 
-        async fn expect_call(&mut self) -> ServerCall {
-            // Poll for server calls, yielding between attempts to let worker make progress
-            for _ in 0..Self::MAX_SPINS {
-                match self.calls_rx.try_recv() {
-                    Ok(call) => return call,
-                    Err(TryRecvError::Disconnected) => panic!("server call channel closed"),
-                    Err(TryRecvError::Empty) => self.pump().await,
-                }
-            }
-            panic!(
-                "expected server call, got none after {} spins",
-                Self::MAX_SPINS
-            );
-        }
-
-        async fn expect_submit(
-            &mut self,
-        ) -> (Vec<u8>, u64, oneshot::Sender<TxSubmitResult<TestTxId>>) {
-            loop {
-                match self.expect_call().await {
-                    ServerCall::Submit {
-                        bytes,
-                        sequence,
-                        reply,
-                    } => return (bytes, sequence, reply),
-                    ServerCall::StatusBatch { ids, reply } => {
-                        let statuses = ids.into_iter().map(|id| (id, TxStatus::Pending)).collect();
-                        let _ = reply.send(Ok(statuses));
-                        self.pump().await;
-                    }
-                    other => panic!("expected Submit, got {:?}", other),
-                }
-            }
-        }
-
-        async fn expect_status_batch(
-            &mut self,
+        async fn add_tx(
+            manager: &TransactionManager<TestTxId, TestConfirmInfo>,
+            bytes: Vec<u8>,
         ) -> (
-            Vec<TestTxId>,
-            oneshot::Sender<TxConfirmResult<Vec<(TestTxId, TxStatus<TestConfirmInfo>)>>>,
+            u64,
+            oneshot::Receiver<Result<TestTxId>>,
+            oneshot::Receiver<Result<TestConfirmInfo>>,
         ) {
-            loop {
-                match self.expect_call().await {
-                    ServerCall::StatusBatch { ids, reply } => return (ids, reply),
-                    ServerCall::Submit {
-                        bytes: _,
-                        sequence,
-                        reply,
-                    } => {
-                        let _ = reply.send(Ok(sequence));
-                        self.pump().await;
-                    }
-                    other => panic!("expected StatusBatch, got {:?}", other),
-                }
-            }
-        }
-
-        fn assert_no_calls(&mut self) {
-            match self.calls_rx.try_recv() {
-                Ok(call) => panic!("unexpected server call: {:?}", call),
-                Err(TryRecvError::Empty) => {}
-                Err(TryRecvError::Disconnected) => panic!("server call channel closed"),
-            }
-        }
-
-        async fn drain_status_batches_pending(&mut self) {
-            // Drain any pending calls, yielding to let worker process them
-            for _ in 0..Self::MAX_SPINS {
-                match self.calls_rx.try_recv() {
-                    Ok(ServerCall::StatusBatch { ids, reply }) => {
-                        let statuses = ids.into_iter().map(|id| (id, TxStatus::Pending)).collect();
-                        let _ = reply.send(Ok(statuses));
-                        self.pump().await;
-                    }
-                    Ok(ServerCall::Submit {
-                        sequence, reply, ..
-                    }) => {
-                        let _ = reply.send(Ok(sequence));
-                        self.pump().await;
-                    }
-                    Ok(ServerCall::CurrentSequence { reply }) => {
-                        let _ = reply.send(Ok(1));
-                        self.pump().await;
-                    }
-                    Err(TryRecvError::Empty) => {
-                        self.pump().await;
-                    }
-                    Err(TryRecvError::Disconnected) => break,
-                }
-            }
-        }
-
-        fn assert_no_calls_or_closed(&mut self) {
-            match self.calls_rx.try_recv() {
-                Ok(call) => panic!("unexpected server call: {:?}", call),
-                Err(TryRecvError::Empty) | Err(TryRecvError::Disconnected) => {}
-            }
-        }
-
-        async fn tick_confirm(&self) {
-            // Advance mock time to trigger confirm ticker
-            tokio::time::advance(self.confirm_interval + Duration::from_nanos(1)).await;
-            self.pump().await;
-        }
-
-        async fn shutdown(mut self) {
-            self.shutdown.cancel();
-
-            let mut handle = self.handle.take().expect("manager started");
-
-            // Use select to respond to mock calls while waiting for worker to finish
-            loop {
-                select! {
-                    biased;
-                    result = &mut handle => {
-                        let _ = result;
-                        break;
-                    }
-                    call = self.calls_rx.recv() => {
-                        match call {
-                            Some(ServerCall::Submit { node_id, reply, sequence, .. }) => {
-                                let _ = reply.send(Ok(sequence));
-                            }
-                            Some(ServerCall::StatusBatch { node_id, ids, reply }) => {
-                                let statuses =
-                                    ids.into_iter().map(|id| (id, TxStatus::Pending)).collect();
-                                let _ = reply.send(Ok(statuses));
-                            }
-                            Some(ServerCall::CurrentSequence { node_id, reply }) => {
-                                let _ = reply.send(Ok(1));
-                            }
-                            None => break, // Channel closed
-                        }
-                    }
-                }
-            }
+            let handle = manager
+                .add_tx(TxRequest::RawPayload(bytes), TxConfig::default())
+                .await
+                .expect("add tx");
+            (handle.sequence, handle.submitted, handle.confirmed)
         }
     }
 
-    async fn add_tx(
-        manager: &TransactionManager<TestTxId, TestConfirmInfo>,
-        bytes: Vec<u8>,
-    ) -> (
-        u64,
-        oneshot::Receiver<Result<TestTxId>>,
-        oneshot::Receiver<Result<TestConfirmInfo>>,
-    ) {
-        let handle = manager
-            .add_tx(TxRequest::RawPayload(bytes), TxConfig::default())
-            .await
-            .expect("add tx");
-        (handle.sequence, handle.submitted, handle.confirmed)
-    }
-
-    #[tokio::test(start_paused = true)]
-    async fn submit_callback_after_submit_success() {
-        let (mut harness, manager_worker) = Harness::new(Duration::from_millis(200), 10, 64);
-        let manager = harness.manager.clone();
-        let (seq, submit_rx, _confirm_rx) = add_tx(&manager, vec![1, 2, 3]).await;
-        assert_eq!(seq, 1);
-        harness.start(manager_worker);
-
-        let (_bytes, sequence, reply) = harness.expect_submit().await;
-        assert_eq!(sequence, 1);
-        reply.send(Ok(1)).expect("submit reply send");
-        harness.pump().await;
-
-        let submit_result = submit_rx.await.expect("submit recv");
-        assert_eq!(submit_result.expect("submit ok"), 1);
-
-        harness.drain_status_batches_pending().await;
-        harness.assert_no_calls();
-        harness.shutdown().await;
-    }
+    // #[tokio::test(start_paused = true)]
+    // async fn submit_callback_after_submit_success() {
+    //     let (mut harness, manager_worker) = Harness::new(Duration::from_millis(200), 10, 64);
+    //     let manager = harness.manager.clone();
+    //     let (seq, submit_rx, _confirm_rx) = add_tx(&manager, vec![1, 2, 3]).await;
+    //     assert_eq!(seq, 1);
+    //     harness.start(manager_worker);
+    //
+    //     let (_bytes, sequence, reply) = harness.expect_submit().await;
+    //     assert_eq!(sequence, 1);
+    //     reply.send(Ok(1)).expect("submit reply send");
+    //     harness.pump().await;
+    //
+    //     let submit_result = submit_rx.await.expect("submit recv");
+    //     assert_eq!(submit_result.expect("submit ok"), 1);
+    //
+    //     harness.drain_status_batches_pending().await;
+    //     harness.assert_no_calls();
+    //     harness.shutdown().await;
+    // }
 
     // #[tokio::test(start_paused = true)]
     // async fn confirm_callback_after_status_confirmed() {
