@@ -1054,7 +1054,7 @@ mod tests {
     use tokio::task::JoinHandle;
 
     type TestTxId = u64;
-    type TestConfirmInfo = u64;
+    type TestConfirmInfo = ();
 
     #[derive(Debug)]
     struct RoutedCall {
@@ -1214,6 +1214,16 @@ mod tests {
     }
 
     impl Match {
+        fn new<F>(name: &'static str, f: F) -> Self
+        where
+            F: for<'a> Fn(&'a RoutedCall) -> bool + Send + Sync + 'static,
+        {
+            Self {
+                name,
+                check_func: Arc::new(f),
+            }
+        }
+
         fn check(&self, call: &RoutedCall) -> bool {
             (self.check_func)(call)
         }
@@ -1232,6 +1242,15 @@ mod tests {
     }
 
     impl Action {
+        fn new<F>(name: &'static str, f: F) -> Self
+        where
+            F: for<'a> Fn(&'a RoutedCall, NodeState) -> ActionResult + Send + Sync + 'static,
+        {
+            Self {
+                name,
+                action: Arc::new(f),
+            }
+        }
         fn call(&self, rc: &RoutedCall, state: NodeState) -> ActionResult {
             (self.action)(rc, state)
         }
@@ -1279,6 +1298,15 @@ mod tests {
     }
 
     impl Rule {
+        fn new(name: &'static str, matcher: Match, action: Action, card: Cardinality) -> Self {
+            Self {
+                name,
+                matcher,
+                action,
+                card,
+            }
+        }
+
         fn matches(&self, call: &RoutedCall) -> bool {
             if self.card.exhausted() {
                 return false;
@@ -1352,6 +1380,10 @@ mod tests {
                 seq,
                 ids,
             }
+        }
+
+        fn println(&self) {
+            println!("logging call: {}, {:?}, {:?}", self.kind, self.seq, &self.ids);
         }
     }
 
@@ -1506,15 +1538,22 @@ mod tests {
             tokio::task::yield_now().await;
         }
 
+        async fn stop(self) -> DriverResult {
+            self.shutdown.cancel();
+            let handle = self.manager_handle.unwrap();
+            _ = handle.await;
+            self.driver_handle.await.unwrap()
+        }
+
         async fn add_tx(
-            manager: &TransactionManager<TestTxId, TestConfirmInfo>,
+            &self,
             bytes: Vec<u8>,
         ) -> (
             u64,
             oneshot::Receiver<Result<TestTxId>>,
             oneshot::Receiver<Result<TestConfirmInfo>>,
         ) {
-            let handle = manager
+            let handle = self.manager
                 .add_tx(TxRequest::RawPayload(bytes), TxConfig::default())
                 .await
                 .expect("add tx");
@@ -1522,9 +1561,118 @@ mod tests {
         }
     }
 
-    // #[tokio::test(start_paused = true)]
+    #[tokio::test]
+    async fn first_test() {
+        let submit_matcher = Match::new("match submit", |rc: &RoutedCall| match &rc.call {
+            ServerCall::Submit { .. } => true,
+            _ => false,
+        });
+        let status_matcher = Match::new("match status", |rc: &RoutedCall| match &rc.call {
+            ServerCall::Status { .. } => true,
+            _ => false,
+        });
+        let status_batch_matcher =
+            Match::new("match status batch", |rc: &RoutedCall| match &rc.call {
+                ServerCall::StatusBatch { .. } => true,
+                _ => false,
+            });
+        let sequence_matcher = Match::new("match sequence", |rc: &RoutedCall| match &rc.call {
+            ServerCall::CurrentSequence { .. } => true,
+            _ => false,
+        });
+        let sequence_action = Action::new(
+            "sequence_action",
+            |rc: &RoutedCall, state: NodeState| match rc.call {
+                ServerCall::CurrentSequence { .. } => {
+                    let exp_seq = state.sequence.saturating_add(1);
+                    ActionResult {
+                        new_state: state,
+                        ret: ServerReturn::CurrentSequence(Ok(exp_seq)),
+                    }
+                }
+                _ => panic!("unexpected call"),
+            },
+        );
+        let status_action =
+            Action::new(
+                "status_action",
+                |rc: &RoutedCall, state: NodeState| match rc.call {
+                    ServerCall::Status { id, .. } => {
+                        let status = if id <= state.sequence {
+                            TxStatus::Confirmed { info: () }
+                        } else {
+                            TxStatus::Pending
+                        };
+                        ActionResult {
+                            new_state: state,
+                            ret: ServerReturn::Status(TxConfirmResult::Ok(status)),
+                        }
+                    }
+                    _ => panic!("unexpected call"),
+                },
+            );
+        let status_batch_action = Action::new(
+            "status_action",
+            |rc: &RoutedCall, state: NodeState| match &rc.call {
+                ServerCall::StatusBatch { ids, .. } => {
+                    let results = ids
+                        .iter()
+                        .map(|it| {
+                            let status = if *it <= state.sequence {
+                                TxStatus::Confirmed { info: () }
+                            } else {
+                                TxStatus::Pending
+                            };
+                            (*it, status)
+                        })
+                        .collect::<Vec<_>>();
+                    ActionResult {
+                        new_state: state,
+                        ret: ServerReturn::StatusBatch(TxConfirmResult::Ok(results)),
+                    }
+                }
+                _ => panic!("unexpected call"),
+            },
+        );
+        let submit_action = Action::new(
+            "status_action",
+            |rc: &RoutedCall, mut state: NodeState| match rc.call {
+                ServerCall::Submit { sequence, .. } => {
+                    let result = if state.sequence == sequence - 1 {
+                        state.sequence += 1;
+                        Ok(sequence)
+                    } else {
+                        Err(SubmitFailure::InvalidTx {
+                            error_code: ErrorCode::TxTooLarge
+                        })
+                    };
+                    ActionResult {
+                        new_state: state,
+                        ret: ServerReturn::Submit(result),
+                    }
+                }
+                _ => panic!("unexpected call"),
+            },
+        );
+        let rules: Vec<Rule> = vec![
+            Rule::new("submit", submit_matcher, submit_action, Cardinality::Any),
+            Rule::new("status", status_matcher, status_action, Cardinality::Any),
+            Rule::new("status batch", status_batch_matcher, status_batch_action, Cardinality::Any),
+            Rule::new("sequence", sequence_matcher, sequence_action, Cardinality::Any),
+        ];
+        let (mut harness, manager_worker) =
+            Harness::new(Duration::from_millis(20), 10, 64, 2, rules);
+        harness.start(manager_worker);
+        let (seq, submit, confirm) = harness.add_tx(vec![0,0]).await;
+        submit.await.expect("submit error");
+        confirm.await.expect("confirm error");
+        let results = harness.stop().await;
+        for log in results.log {
+            log.println();
+        }
+    }
     // async fn submit_callback_after_submit_success() {
-    //     let (mut harness, manager_worker) = Harness::new(Duration::from_millis(200), 10, 64);
+
     //     let manager = harness.manager.clone();
     //     let (seq, submit_rx, _confirm_rx) = add_tx(&manager, vec![1, 2, 3]).await;
     //     assert_eq!(seq, 1);
