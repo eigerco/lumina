@@ -122,7 +122,7 @@ pub struct TxCallbacks<TxId: TxIdT, ConfirmInfo> {
     /// Resolves when submission succeeds or fails.
     pub submitted: Option<oneshot::Sender<Result<TxId>>>,
     /// Resolves when the transaction is confirmed or rejected.
-    pub confirmed: Option<oneshot::Sender<Result<ConfirmInfo>>>,
+    pub confirmed: Option<oneshot::Sender<Result<TxStatus<ConfirmInfo>>>>,
 }
 
 impl<TxId: TxIdT, ConfirmInfo> Default for TxCallbacks<TxId, ConfirmInfo> {
@@ -141,7 +141,7 @@ pub struct TxHandle<TxId: TxIdT, ConfirmInfo> {
     /// Receives submit result.
     pub submitted: oneshot::Receiver<Result<TxId>>,
     /// Receives confirm result.
-    pub confirmed: oneshot::Receiver<Result<ConfirmInfo>>,
+    pub confirmed: oneshot::Receiver<Result<TxStatus<ConfirmInfo>>>,
 }
 
 #[async_trait]
@@ -247,7 +247,7 @@ struct NodeSubmissionState {
     delay: Option<Duration>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum TxStatus<ConfirmInfo> {
     /// Submitted, but not yet committed.
     Pending,
@@ -301,7 +301,7 @@ pub enum RejectionReason {
 #[async_trait]
 pub trait TxServer: Send + Sync {
     type TxId: TxIdT + Eq + StdHash + Send + Sync + 'static;
-    type ConfirmInfo: Send + Sync + 'static;
+    type ConfirmInfo: Clone + Send + Sync + 'static;
 
     /// Submit signed bytes with the given sequence, returning a server TxId.
     async fn submit(&self, tx_bytes: Vec<u8>, sequence: u64) -> TxSubmitResult<Self::TxId>;
@@ -328,7 +328,11 @@ enum TransactionEvent<TxId, ConfirmInfo> {
         sequence: u64,
         failure: SubmitFailure,
     },
-    StatusBatch {
+    SubmitStatusBatch {
+        node_id: NodeId,
+        statuses: Vec<(TxId, TxStatus<ConfirmInfo>)>,
+    },
+    StopStatusBatch {
         node_id: NodeId,
         statuses: Vec<(TxId, TxStatus<ConfirmInfo>)>,
     },
@@ -343,6 +347,7 @@ enum TransactionEvent<TxId, ConfirmInfo> {
 enum ProcessorState {
     Recovering { node_id: NodeId, expected: u64 },
     Submitting,
+    Stopping(StopReason),
     Stopped(StopReason),
 }
 
@@ -350,7 +355,9 @@ impl ProcessorState {
     fn transition(self, other: ProcessorState) -> ProcessorState {
         match (self, other) {
             (stopped @ ProcessorState::Stopped(_), _) => stopped,
+            (stopping @ ProcessorState::Stopping(_), _) => stopping,
             (ProcessorState::Recovering { .. }, stopped @ ProcessorState::Stopped(_)) => stopped,
+            (ProcessorState::Recovering { .. }, stopping @ ProcessorState::Stopping(_)) => stopping,
             (recovering @ ProcessorState::Recovering { .. }, _) => recovering,
             (_, other) => other,
         }
@@ -368,6 +375,7 @@ impl ProcessorState {
                     ProcessorState::Recovering { .. },
                     ProcessorState::Recovering { .. }
                 )
+                | (ProcessorState::Stopping(_), ProcessorState::Stopping(_))
                 | (ProcessorState::Stopped(_), ProcessorState::Stopped(_))
         )
     }
@@ -466,7 +474,6 @@ pub struct TransactionWorker<S: TxServer> {
     txs: VecDeque<Transaction<S::TxId, S::ConfirmInfo>>,
     tx_index: HashMap<S::TxId, u64>,
     events: VecDeque<TransactionEvent<S::TxId, S::ConfirmInfo>>,
-    confirmed_info: HashMap<u64, S::ConfirmInfo>,
     confirmed_sequence: u64,
     next_enqueue_sequence: u64,
     node_state: HashMap<NodeId, NodeSubmissionState>,
@@ -516,7 +523,6 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
                 txs: VecDeque::new(),
                 tx_index: HashMap::new(),
                 events: VecDeque::new(),
-                confirmed_info: HashMap::new(),
                 confirmed_sequence: start_sequence.saturating_sub(1),
                 next_enqueue_sequence: start_sequence,
                 node_state,
@@ -583,7 +589,10 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
                         ProcessorState::Submitting => {
                             self.run_submitting(shutdown.clone()).await?;
                         }
-                        _ => (),
+                        ProcessorState::Stopping(_) => {
+                            self.run_stopping(shutdown.clone()).await?;
+                        }
+                        ProcessorState::Stopped(_) => (),
                     }
                     Ok::<_, Error>(())
                 } => res?,
@@ -592,6 +601,7 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
                 break;
             }
         }
+
         shutdown.cancel();
         // Wait for all in-flight tasks to complete before returning
         self.drain_pending().await;
@@ -615,12 +625,6 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
         node_id: &NodeId,
         expected: u64,
     ) -> Result<()> {
-        let start = self.confirmed_sequence.saturating_add(1);
-        if expected < start {
-            self.state.force_update(ProcessorState::Submitting);
-            return Ok(());
-        }
-
         select! {
             _ = self.confirm_ticker.tick() => {
                 let target = expected.saturating_sub(1);
@@ -708,7 +712,36 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
                 }
                 match result.response {
                     Ok(ConfirmationResponse::Submitting(statuses)) => {
-                        self.events.push_back(TransactionEvent::StatusBatch {
+                        self.events.push_back(TransactionEvent::SubmitStatusBatch {
+                            node_id: result.node_id,
+                            statuses,
+                        });
+                    }
+                    Err(_err) => {
+                        // TODO: add error handling
+                    }
+                    _ => {}
+                }
+            }
+        }
+        Ok(())
+    }
+
+    async fn run_stopping(&mut self, token: CancellationToken) -> Result<()> {
+        select! {
+            _ = self.confirm_ticker.tick() => {
+                self.spawn_confirmations(token.clone());
+            }
+            result = self.confirmations.next() => {
+                let Some(Some(result)) = result else {
+                    return Ok(());
+                };
+                if result.state_epoch != self.state.epoch() {
+                    return Ok(());
+                }
+                match result.response {
+                    Ok(ConfirmationResponse::Submitting(statuses)) => {
+                        self.events.push_back(TransactionEvent::StopStatusBatch {
                             node_id: result.node_id,
                             statuses,
                         });
@@ -758,7 +791,7 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
                         state.delay = Some(self.confirm_interval);
                     }
                     _ => {
-                        self.state.update(ProcessorState::Stopped(failure.into()));
+                        self.state.update(ProcessorState::Stopping(failure.into()));
                     }
                 };
                 self.new_submit.notify_one();
@@ -789,10 +822,15 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
                 }
                 self.new_submit.notify_one();
             }
-            TransactionEvent::StatusBatch { node_id, statuses } => {
+            TransactionEvent::SubmitStatusBatch { node_id, statuses } => {
                 let state = self.node_state.get_mut(&node_id).unwrap();
                 state.confirm_inflight = false;
-                self.process_status_batch(node_id, statuses)?;
+                self.process_status_batch_submitting(node_id, statuses)?;
+            }
+            TransactionEvent::StopStatusBatch { node_id, statuses } => {
+                let state = self.node_state.get_mut(&node_id).unwrap();
+                state.confirm_inflight = false;
+                self.process_status_batch_stopping(node_id, statuses)?;
             }
             TransactionEvent::RecoverStatus {
                 node_id,
@@ -807,7 +845,7 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
         Ok(())
     }
 
-    fn process_status_batch(
+    fn process_status_batch_submitting(
         &mut self,
         node_id: NodeId,
         statuses: Vec<(S::TxId, TxStatus<S::ConfirmInfo>)>,
@@ -815,11 +853,10 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
         let mut collected = statuses
             .into_iter()
             .filter(|(tx_id, _)| self.tx_index.get(&tx_id).is_some())
-            .map(|(tx_id, status)| {
-                (self.tx_index.get(&tx_id).unwrap().clone(), status)
-            })
+            .map(|(tx_id, status)| (self.tx_index.get(&tx_id).unwrap().clone(), status))
             .collect::<Vec<_>>();
         collected.sort_by(|first, second| first.0.cmp(&second.0));
+
         for (cur_seq, status) in collected.into_iter() {
             match status {
                 TxStatus::Pending => {
@@ -850,7 +887,7 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
                     }
                     other => {
                         self.state
-                            .update(ProcessorState::Stopped(StopReason::ConfirmFailure(
+                            .update(ProcessorState::Stopping(StopReason::ConfirmFailure(
                                 ConfirmFailure { reason: other },
                             )));
                     }
@@ -860,7 +897,7 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
                 }
                 TxStatus::Unknown => {
                     self.state
-                        .update(ProcessorState::Stopped(StopReason::ConfirmFailure(
+                        .update(ProcessorState::Stopping(StopReason::ConfirmFailure(
                             ConfirmFailure {
                                 reason: RejectionReason::OtherReason {
                                     error_code: ErrorCode::UnknownRequest,
@@ -869,10 +906,77 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
                                 },
                             },
                         )));
+                    break;
                 }
             }
         }
         Ok(())
+    }
+
+    fn process_status_batch_stopping(
+        &mut self,
+        node_id: NodeId,
+        statuses: Vec<(S::TxId, TxStatus<S::ConfirmInfo>)>,
+    ) -> Result<()> {
+        let mut collected = statuses
+            .into_iter()
+            .filter(|(tx_id, _)| self.tx_index.get(&tx_id).is_some())
+            .map(|(tx_id, status)| (self.tx_index.get(&tx_id).unwrap().clone(), status))
+            .collect::<Vec<_>>();
+        collected.sort_by(|first, second| first.0.cmp(&second.0));
+
+        for (cur_seq, status) in collected.into_iter() {
+            match status {
+                TxStatus::Pending => {
+                    continue;
+                }
+                TxStatus::Confirmed { info } => {
+                    self.update_confirmed_sequence(cur_seq, info)?;
+                }
+                TxStatus::Evicted => {
+                    self.fail_transactions_from(cur_seq, TxStatus::Evicted);
+                    break;
+                }
+                TxStatus::Rejected { reason } => {
+                    self.fail_transactions_from(cur_seq, TxStatus::Rejected { reason });
+                    break;
+                }
+                TxStatus::Unknown => {
+                    self.fail_transactions_from(cur_seq, TxStatus::Unknown);
+                    break;
+                }
+            }
+        }
+
+        if self.txs.is_empty() {
+            self.transition_to_stopped();
+        }
+
+        Ok(())
+    }
+
+    fn fail_transactions_from(&mut self, from_seq: u64, status: TxStatus<S::ConfirmInfo>) {
+        let Some(start_idx) = self.index_for_sequence(from_seq) else {
+            return;
+        };
+
+        // Fail and remove transactions from start_idx to the end
+        while self.txs.len() > start_idx {
+            if let Some(mut tx) = self.txs.pop_back() {
+                if let Some(id) = &tx.id {
+                    self.tx_index.remove(id);
+                }
+                if let Some(on_confirm) = tx.callbacks.confirmed.take() {
+                    let _ = on_confirm.send(Ok(status.clone()));
+                }
+            }
+        }
+    }
+
+    fn transition_to_stopped(&mut self) {
+        if let ProcessorState::Stopping(reason) = self.state.snapshot() {
+            self.state.force_update(ProcessorState::Stopped(reason));
+        }
     }
 
     fn process_status_recovering(
@@ -883,12 +987,10 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
     ) -> Result<()> {
         let seq = self.tx_index.get(&id).unwrap();
         match status {
-            TxStatus::Confirmed { info } => {
-                self.update_confirmed_sequence(*seq, info)?;
-            }
+            TxStatus::Confirmed { info } => self.state.force_update(ProcessorState::Submitting),
             _ => {
                 self.state
-                    .update(ProcessorState::Stopped(StopReason::ConfirmFailure(
+                    .update(ProcessorState::Stopping(StopReason::ConfirmFailure(
                         ConfirmFailure {
                             reason: RejectionReason::SequenceMismatch {
                                 expected: *seq,
@@ -906,30 +1008,18 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
             return Ok(());
         }
         debug!(sequence, "Transaction confirmed");
-        self.confirmed_info.insert(sequence, info);
+        if sequence != self.confirmed_sequence + 1 {
+            panic!("updating confirmed sequence with gaps shouldn't happen");
+        }
+        let mut tx = self.txs.pop_front().unwrap();
+        if let Some(on_confirm) = tx.callbacks.confirmed.take() {
+            let _ = on_confirm.send(Ok(TxStatus::Confirmed { info }));
+        }
         for (_, state) in self.node_state.iter_mut() {
             state.submitted_seq = state.submitted_seq.max(sequence);
         }
         self.confirmed_sequence = sequence;
-        self.trim_confirmed_queue();
         Ok(())
-    }
-
-    fn trim_confirmed_queue(&mut self) {
-        while let Some(front) = self.txs.front() {
-            if front.sequence > self.confirmed_sequence {
-                break;
-            }
-            let mut tx = self.txs.pop_front().expect("front exists");
-            if let Some(id) = tx.id {
-                self.tx_index.remove(&id);
-            }
-            if let Some(info) = self.confirmed_info.remove(&tx.sequence) {
-                if let Some(on_confirm) = tx.callbacks.confirmed.take() {
-                    let _ = on_confirm.send(Ok(info));
-                }
-            }
-        }
     }
 
     fn spawn_submissions(&mut self, token: CancellationToken) {
@@ -1150,6 +1240,7 @@ mod tests {
     struct NodeState {
         sequence: u64,
         accepted_ids: Vec<TestTxId>,
+        is_evicted: bool,
     }
 
     impl NodeState {
@@ -1157,6 +1248,7 @@ mod tests {
             Self {
                 sequence,
                 accepted_ids,
+                is_evicted: false,
             }
         }
     }
@@ -1557,7 +1649,7 @@ mod tests {
         ) -> (
             u64,
             oneshot::Receiver<Result<TestTxId>>,
-            oneshot::Receiver<Result<TestConfirmInfo>>,
+            oneshot::Receiver<Result<TxStatus<TestConfirmInfo>>>,
         ) {
             let handle = self
                 .manager
@@ -1569,7 +1661,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn first_test() {
+    async fn test_it_works() {
         let submit_matcher = Match::new("match submit", |rc: &RoutedCall| match &rc.call {
             ServerCall::Submit { .. } => true,
             _ => false,
@@ -1690,6 +1782,153 @@ mod tests {
             submit.await;
             if let Err(e) = confirm.await.unwrap() {
                 println!("got error confirming at sequence {}, error: {}", seq, e);
+            }
+        }
+        let results = harness.stop().await;
+        for log in results.log {
+            log.println();
+        }
+    }
+
+    #[tokio::test]
+    async fn test_eviction() {
+        let evict_sequence = 15;
+        let submit_matcher = Match::new("match submit", |rc: &RoutedCall| match &rc.call {
+            ServerCall::Submit { .. } => true,
+            _ => false,
+        });
+        let status_matcher = Match::new("match status", |rc: &RoutedCall| match &rc.call {
+            ServerCall::Status { .. } => true,
+            _ => false,
+        });
+        let status_batch_matcher =
+            Match::new("match status batch", |rc: &RoutedCall| match &rc.call {
+                ServerCall::StatusBatch { .. } => true,
+                _ => false,
+            });
+        let sequence_matcher = Match::new("match sequence", |rc: &RoutedCall| match &rc.call {
+            ServerCall::CurrentSequence { .. } => true,
+            _ => false,
+        });
+        let sequence_action = Action::new(
+            "sequence_action",
+            |rc: &RoutedCall, state: NodeState| match rc.call {
+                ServerCall::CurrentSequence { .. } => {
+                    let exp_seq = state.sequence.saturating_add(1);
+                    ActionResult {
+                        new_state: state,
+                        ret: ServerReturn::CurrentSequence(Ok(exp_seq)),
+                    }
+                }
+                _ => panic!("unexpected call"),
+            },
+        );
+        let status_action =
+            Action::new(
+                "status_action",
+                |rc: &RoutedCall, state: NodeState| match rc.call {
+                    ServerCall::Status { id, .. } => {
+                        let status = if id <= state.sequence && state.is_evicted {
+                            TxStatus::Confirmed { info: () }
+                        } else {
+                            TxStatus::Pending
+                        };
+                        ActionResult {
+                            new_state: state,
+                            ret: ServerReturn::Status(TxConfirmResult::Ok(status)),
+                        }
+                    }
+                    _ => panic!("unexpected call"),
+                },
+            );
+        let status_batch_action = Action::new(
+            "status_action",
+            |rc: &RoutedCall, state: NodeState| match &rc.call {
+                ServerCall::StatusBatch { ids, .. } => {
+                    let results = ids
+                        .iter()
+                        .map(|it| {
+                            let status = if *it <= state.sequence {
+                                TxStatus::Confirmed { info: () }
+                            } else {
+                                TxStatus::Pending
+                            };
+                            (*it, status)
+                        })
+                        .collect::<Vec<_>>();
+                    ActionResult {
+                        new_state: state,
+                        ret: ServerReturn::StatusBatch(TxConfirmResult::Ok(results)),
+                    }
+                }
+                _ => panic!("unexpected call"),
+            },
+        );
+        let submit_action = Action::new(
+            "status_action",
+            move |rc: &RoutedCall, mut state: NodeState| match rc.call {
+                ServerCall::Submit { sequence, .. } => {
+                    let result = if state.sequence == sequence - 1 {
+                        if sequence == evict_sequence && !state.is_evicted {
+                            state.is_evicted = true;
+                            state.sequence = 1;
+                            Err(SubmitFailure::SequenceMismatch { expected: 2 })
+                        } else {
+                            state.sequence += 1;
+                            Ok(sequence)
+                        }
+                    } else {
+                        Err(SubmitFailure::InvalidTx {
+                            error_code: ErrorCode::TxTooLarge,
+                        })
+                    };
+                    ActionResult {
+                        new_state: state,
+                        ret: ServerReturn::Submit(result),
+                    }
+                }
+                _ => panic!("unexpected call"),
+            },
+        );
+        let rules: Vec<Rule> = vec![
+            Rule::new("submit", submit_matcher, submit_action, Cardinality::Any),
+            Rule::new("status", status_matcher, status_action, Cardinality::Any),
+            Rule::new(
+                "status batch",
+                status_batch_matcher,
+                status_batch_action,
+                Cardinality::Any,
+            ),
+            Rule::new(
+                "sequence",
+                sequence_matcher,
+                sequence_action,
+                Cardinality::Any,
+            ),
+        ];
+        let (mut harness, manager_worker) =
+            Harness::new(Duration::from_millis(100), 10, 1000, 2, rules);
+        harness.start(manager_worker);
+        let mut add_handles = VecDeque::new();
+        for i in 0..100 {
+            let handle = harness.add_tx(vec![0, 0]).await;
+            add_handles.push_back(handle);
+        }
+        while let Some(handle) = add_handles.pop_front() {
+            let (seq, submit, confirm) = handle;
+            submit.await;
+            match confirm.await {
+                Err(e) => {
+                    println!("confirm await error: {:?} with seq {}", e, seq);
+                }
+                Ok(res) => match res {
+                    Ok(conf) => {
+                        println!("confirm successful for {}", seq);
+                    }
+                    Err(e) => {
+                        println!("confirm failed for {}: {}", seq, e);
+                    }
+                },
             }
         }
         let results = harness.stop().await;

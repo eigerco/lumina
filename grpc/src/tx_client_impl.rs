@@ -652,10 +652,13 @@ mod tests {
             .await
             .unwrap();
         let submit_hash = handle.submitted.await.unwrap().unwrap();
-        let confirm_info = handle.confirmed.await.unwrap().unwrap();
+        let confirm_status = handle.confirmed.await.unwrap().unwrap();
 
-        assert_eq!(submit_hash, confirm_info.info.hash);
-        assert!(confirm_info.info.height > 0);
+        let TxStatus::Confirmed { info } = confirm_status else {
+            panic!("expected confirmed status");
+        };
+        assert_eq!(submit_hash, info.info.hash);
+        assert!(info.info.height > 0);
     }
 
     fn random_blob(size: RangeInclusive<usize>) -> Blob {
