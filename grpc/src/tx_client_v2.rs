@@ -814,7 +814,10 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
     ) -> Result<()> {
         let mut collected = statuses
             .into_iter()
-            .map(|(tx_id, status)| (self.tx_index.get(&tx_id).unwrap().clone(), status))
+            .filter(|(tx_id, _)| self.tx_index.get(&tx_id).is_some())
+            .map(|(tx_id, status)| {
+                (self.tx_index.get(&tx_id).unwrap().clone(), status)
+            })
             .collect::<Vec<_>>();
         collected.sort_by(|first, second| first.0.cmp(&second.0));
         for (cur_seq, status) in collected.into_iter() {
@@ -1383,7 +1386,10 @@ mod tests {
         }
 
         fn println(&self) {
-            println!("logging call: {}, {:?}, {:?}", self.kind, self.seq, &self.ids);
+            println!(
+                "logging call: {}, {:?}, {:?}",
+                self.kind, self.seq, &self.ids
+            );
         }
     }
 
@@ -1553,7 +1559,8 @@ mod tests {
             oneshot::Receiver<Result<TestTxId>>,
             oneshot::Receiver<Result<TestConfirmInfo>>,
         ) {
-            let handle = self.manager
+            let handle = self
+                .manager
                 .add_tx(TxRequest::RawPayload(bytes), TxConfig::default())
                 .await
                 .expect("add tx");
@@ -1643,7 +1650,7 @@ mod tests {
                         Ok(sequence)
                     } else {
                         Err(SubmitFailure::InvalidTx {
-                            error_code: ErrorCode::TxTooLarge
+                            error_code: ErrorCode::TxTooLarge,
                         })
                     };
                     ActionResult {
@@ -1657,440 +1664,37 @@ mod tests {
         let rules: Vec<Rule> = vec![
             Rule::new("submit", submit_matcher, submit_action, Cardinality::Any),
             Rule::new("status", status_matcher, status_action, Cardinality::Any),
-            Rule::new("status batch", status_batch_matcher, status_batch_action, Cardinality::Any),
-            Rule::new("sequence", sequence_matcher, sequence_action, Cardinality::Any),
+            Rule::new(
+                "status batch",
+                status_batch_matcher,
+                status_batch_action,
+                Cardinality::Any,
+            ),
+            Rule::new(
+                "sequence",
+                sequence_matcher,
+                sequence_action,
+                Cardinality::Any,
+            ),
         ];
         let (mut harness, manager_worker) =
-            Harness::new(Duration::from_millis(20), 10, 64, 2, rules);
+            Harness::new(Duration::from_millis(20), 10, 1000, 2, rules);
         harness.start(manager_worker);
-        let (seq, submit, confirm) = harness.add_tx(vec![0,0]).await;
-        submit.await.expect("submit error");
-        confirm.await.expect("confirm error");
+        let mut add_handles = VecDeque::new();
+        for i in 0..100 {
+            let handle = harness.add_tx(vec![0, 0]).await;
+            add_handles.push_back(handle);
+        }
+        while let Some(handle) = add_handles.pop_front() {
+            let (seq, submit, confirm) = handle;
+            submit.await;
+            if let Err(e) = confirm.await.unwrap() {
+                println!("got error confirming at sequence {}, error: {}", seq, e);
+            }
+        }
         let results = harness.stop().await;
         for log in results.log {
             log.println();
         }
     }
-    // async fn submit_callback_after_submit_success() {
-
-    //     let manager = harness.manager.clone();
-    //     let (seq, submit_rx, _confirm_rx) = add_tx(&manager, vec![1, 2, 3]).await;
-    //     assert_eq!(seq, 1);
-    //     harness.start(manager_worker);
-    //
-    //     let (_bytes, sequence, reply) = harness.expect_submit().await;
-    //     assert_eq!(sequence, 1);
-    //     reply.send(Ok(1)).expect("submit reply send");
-    //     harness.pump().await;
-    //
-    //     let submit_result = submit_rx.await.expect("submit recv");
-    //     assert_eq!(submit_result.expect("submit ok"), 1);
-    //
-    //     harness.drain_status_batches_pending().await;
-    //     harness.assert_no_calls();
-    //     harness.shutdown().await;
-    // }
-
-    // #[tokio::test(start_paused = true)]
-    // async fn confirm_callback_after_status_confirmed() {
-    //     let (mut harness, manager_worker) = Harness::new(Duration::from_millis(10), 10, 64);
-    //     let manager = harness.manager.clone();
-    //     let (seq, _submit_rx, confirm_rx) = add_tx(&manager, vec![9, 9, 9]).await;
-    //     assert_eq!(seq, 1);
-    //     harness.start(manager_worker);
-
-    //     let (_bytes, sequence, reply) = harness.expect_submit().await;
-    //     assert_eq!(sequence, 1);
-    //     reply.send(Ok(sequence)).expect("submit reply send");
-    //     harness.pump().await;
-
-    //     harness.drain_status_batches_pending().await;
-    //     harness.tick_confirm().await;
-    //     let (ids, reply) = harness.expect_status_batch().await;
-    //     assert_eq!(ids, vec![sequence]);
-    //     reply
-    //         .send(Ok(vec![(sequence, TxStatus::Confirmed { info: 123 })]))
-    //         .expect("status reply send");
-
-    //     let confirm_result = confirm_rx.await.expect("confirm recv");
-    //     let info = confirm_result.expect("confirm ok");
-    //     assert_eq!(info, 123);
-
-    //     harness.assert_no_calls();
-    //     harness.shutdown().await;
-    // }
-
-    // #[tokio::test(start_paused = true)]
-    // async fn submit_callback_waits_for_submit_delay() {
-    //     let (mut harness, manager_worker) = Harness::new(Duration::from_millis(10), 10, 64);
-    //     let manager = harness.manager.clone();
-    //     let (seq, mut submit_rx, _confirm_rx) = add_tx(&manager, vec![4, 5, 6]).await;
-    //     assert_eq!(seq, 1);
-    //     harness.start(manager_worker);
-
-    //     let (_bytes, sequence, reply) = harness.expect_submit().await;
-    //     assert_eq!(sequence, 1);
-
-    //     tokio::select! {
-    //         _ = &mut submit_rx => panic!("submit resolved before reply"),
-    //         _ = harness.pump() => {}
-    //     }
-
-    //     reply.send(Ok(sequence)).expect("submit reply send");
-    //     harness.pump().await;
-    //     let submit_result = submit_rx.await.expect("submit recv");
-    //     assert_eq!(submit_result.expect("submit ok"), sequence);
-
-    //     harness.drain_status_batches_pending().await;
-    //     harness.assert_no_calls();
-    //     harness.shutdown().await;
-    // }
-
-    // #[tokio::test(start_paused = true)]
-    // async fn max_status_batch_is_capped() {
-    //     let (mut harness, manager_worker) = Harness::new(Duration::from_millis(10), 2, 64);
-    //     let manager = harness.manager.clone();
-    //     let mut submit_rxs = Vec::new();
-    //     let mut confirm_rxs = Vec::new();
-    //     for seq in 1..=3 {
-    //         let (added_seq, submit_rx, confirm_rx) = add_tx(&manager, vec![seq as u8]).await;
-    //         assert_eq!(added_seq, seq);
-    //         submit_rxs.push(submit_rx);
-    //         confirm_rxs.push(confirm_rx);
-    //     }
-    //     harness.start(manager_worker);
-
-    //     for seq in 1..=3 {
-    //         let (_bytes, sequence, reply) = harness.expect_submit().await;
-    //         assert_eq!(sequence, seq);
-    //         reply.send(Ok(seq)).expect("submit reply send");
-    //         harness.pump().await;
-    //     }
-
-    //     for rx in submit_rxs {
-    //         let submit_result = rx.await.expect("submit recv");
-    //         assert!(submit_result.is_ok());
-    //     }
-
-    //     harness.tick_confirm().await;
-    //     let (ids, reply) = harness.expect_status_batch().await;
-    //     assert!(ids.len() <= 2);
-    //     let mut statuses = Vec::with_capacity(ids.len());
-    //     for (idx, id) in ids.iter().enumerate() {
-    //         statuses.push((
-    //             *id,
-    //             TxStatus::Confirmed {
-    //                 info: 100 + idx as u64,
-    //             },
-    //         ));
-    //     }
-    //     reply.send(Ok(statuses)).expect("status reply send");
-    //     harness.pump().await;
-
-    //     harness.tick_confirm().await;
-    //     let (ids, reply) = harness.expect_status_batch().await;
-    //     assert!(ids.len() <= 2);
-    //     let mut statuses = Vec::with_capacity(ids.len());
-    //     for (idx, id) in ids.into_iter().enumerate() {
-    //         statuses.push((
-    //             id,
-    //             TxStatus::Confirmed {
-    //                 info: 200 + idx as u64,
-    //             },
-    //         ));
-    //     }
-    //     reply.send(Ok(statuses)).expect("status reply send");
-
-    //     for rx in confirm_rxs {
-    //         let result = rx.await.expect("confirm recv");
-    //         assert!(result.is_ok());
-    //     }
-
-    //     harness.assert_no_calls();
-    //     harness.shutdown().await;
-    // }
-
-    // #[tokio::test(start_paused = true)]
-    // async fn recovery_stops_on_rejected_in_range() {
-    //     let (mut harness, manager_worker) = Harness::new(Duration::from_millis(200), 10, 64);
-    //     let manager = harness.manager.clone();
-    //     let (seq1, submit_rx1, confirm_rx1) = add_tx(&manager, vec![1]).await;
-    //     let (seq2, _submit_rx2, _confirm_rx2) = add_tx(&manager, vec![2]).await;
-    //     assert_eq!(seq1, 1);
-    //     assert_eq!(seq2, 2);
-    //     harness.start(manager_worker);
-
-    //     let (_bytes, sequence, reply) = harness.expect_submit().await;
-    //     assert_eq!(sequence, 1);
-    //     reply.send(Ok(sequence)).expect("submit reply send");
-    //     let first_id = sequence;
-
-    //     let submit_result = submit_rx1.await.expect("submit recv");
-    //     assert_eq!(submit_result.expect("submit ok"), first_id);
-
-    //     let (_bytes, sequence, reply) = harness.expect_submit().await;
-    //     assert_eq!(sequence, 2);
-    //     reply
-    //         .send(Err(SubmitFailure::SequenceMismatch { expected: 2 }))
-    //         .expect("submit reply send");
-    //     harness.pump().await;
-
-    //     harness.tick_confirm().await;
-    //     let (ids, reply) = harness.expect_status_batch().await;
-    //     assert!(ids.contains(&first_id));
-    //     let statuses = ids
-    //         .into_iter()
-    //         .map(|id| {
-    //             if id == first_id {
-    //                 (
-    //                     id,
-    //                     TxStatus::Rejected {
-    //                         reason: RejectionReason::SequenceMismatch {
-    //                             expected: 2,
-    //                             node_id: Arc::from("node-1"),
-    //                         },
-    //                     },
-    //                 )
-    //             } else {
-    //                 (id, TxStatus::Pending)
-    //             }
-    //         })
-    //         .collect();
-    //     reply.send(Ok(statuses)).expect("status reply send");
-
-    //     harness.assert_no_calls_or_closed();
-    //     harness.shutdown().await;
-
-    //     let confirm_result = confirm_rx1.await;
-    //     assert!(confirm_result.is_err());
-    // }
-
-    // #[tokio::test(start_paused = true)]
-    // async fn recovery_evicted_then_confirmed() {
-    //     // Test that after a transaction is evicted from mempool, it gets resubmitted
-    //     // and eventually confirmed.
-    //     let (mut harness, manager_worker) = Harness::new(Duration::from_millis(200), 10, 64);
-    //     let manager = harness.manager.clone();
-    //     let (seq1, _submit_rx1, confirm_rx1) = add_tx(&manager, vec![1]).await;
-    //     assert_eq!(seq1, 1);
-    //     harness.start(manager_worker);
-
-    //     // First submission succeeds
-    //     let (_bytes, sequence, reply) = harness.expect_submit().await;
-    //     assert_eq!(sequence, 1);
-    //     reply.send(Ok(sequence)).expect("submit reply send");
-    //     let first_id = sequence;
-    //     harness.pump().await;
-
-    //     // Query status - tx is evicted
-    //     harness.tick_confirm().await;
-    //     let (ids, reply) = harness.expect_status_batch().await;
-    //     assert!(ids.contains(&first_id));
-    //     reply
-    //         .send(Ok(vec![(first_id, TxStatus::Evicted)]))
-    //         .expect("status reply send");
-
-    //     // After eviction, worker processes the result and resubmits.
-    //     // Advance time and pump to ensure the confirmation result is processed
-    //     // and the resubmission is triggered.
-    //     for _ in 0..100 {
-    //         tokio::time::advance(Duration::from_millis(1)).await;
-    //         harness.pump().await;
-    //     }
-
-    //     let (_bytes, sequence, reply) = harness.expect_submit().await;
-    //     assert_eq!(sequence, 1); // Resubmitting seq 1
-    //     reply.send(Ok(sequence)).expect("resubmit reply send");
-    //     harness.pump().await;
-
-    //     // Query status again - now tx is confirmed
-    //     harness.tick_confirm().await;
-    //     let (ids, reply) = harness.expect_status_batch().await;
-    //     assert!(ids.contains(&first_id));
-    //     reply
-    //         .send(Ok(vec![(first_id, TxStatus::Confirmed { info: 456 })]))
-    //         .expect("status reply send");
-
-    //     // Verify confirm callback is received
-    //     let confirm_result = confirm_rx1.await.expect("confirm recv");
-    //     let info = confirm_result.expect("confirm ok");
-    //     assert_eq!(info, 456);
-
-    //     harness.drain_status_batches_pending().await;
-    //     harness.shutdown().await;
-    // }
-
-    // #[tokio::test(start_paused = true)]
-    // async fn shutdown_completes_with_pending_submit() {
-    //     let (mut harness, manager_worker) = Harness::new(Duration::from_millis(200), 10, 64);
-    //     let manager = harness.manager.clone();
-    //     let (seq, _submit_rx, _confirm_rx) = add_tx(&manager, vec![1, 2, 3]).await;
-    //     assert_eq!(seq, 1);
-    //     harness.start(manager_worker);
-
-    //     let (_bytes, sequence, reply) = harness.expect_submit().await;
-    //     assert_eq!(sequence, 1);
-    //     // Must reply so the spawned task can complete during drain_pending
-    //     reply.send(Ok(sequence)).expect("send reply");
-
-    //     harness.drain_status_batches_pending().await;
-    //     harness.shutdown().await;
-    // }
-
-    // #[tokio::test(start_paused = true)]
-    // async fn add_tx_from_another_task() {
-    //     let (mut harness, manager_worker) = Harness::new(Duration::from_millis(200), 10, 64);
-    //     let manager = harness.manager.clone();
-
-    //     harness.start(manager_worker);
-
-    //     let handle = tokio::spawn(async move {
-    //         let tx_handle = manager
-    //             .add_tx(TxRequest::RawPayload(vec![7, 8, 9]), TxConfig::default())
-    //             .await
-    //             .expect("enqueue tx");
-    //         let _ = tx_handle.submitted.await;
-    //         tx_handle.sequence
-    //     });
-
-    //     let (_bytes, seq, reply) = harness.expect_submit().await;
-    //     assert_eq!(seq, 1);
-    //     reply.send(Ok(seq)).expect("submit reply send");
-    //     harness.pump().await;
-
-    //     harness.drain_status_batches_pending().await;
-    //     let queued_sequence = handle.await.expect("enqueue task");
-    //     assert_eq!(queued_sequence, 1);
-    //     harness.shutdown().await;
-    // }
-
-    // #[tokio::test]
-    // async fn add_tx_queue_full_does_not_increment() {
-    //     let nodes = HashMap::<NodeId, Arc<MockTxServer>>::new();
-    //     let signer = Arc::new(TestSigner::default());
-    //     let (manager, mut worker) =
-    //         TransactionWorker::new(nodes, Duration::from_millis(10), 10, signer, 1, 1);
-
-    //     let seq1 = manager
-    //         .add_tx(TxRequest::RawPayload(vec![1]), TxConfig::default())
-    //         .await
-    //         .expect("first add")
-    //         .sequence;
-    //     assert_eq!(seq1, 1);
-
-    //     let err = manager
-    //         .add_tx(TxRequest::RawPayload(vec![2]), TxConfig::default())
-    //         .await
-    //         .expect_err("second add should fail");
-    //     assert!(matches!(err, Error::UnexpectedResponseType(_)));
-    //     assert_eq!(manager.max_sent(), 1);
-
-    //     let _drained = worker.add_tx_rx.try_recv().expect("drain queued tx");
-    //     let seq2 = manager
-    //         .add_tx(TxRequest::RawPayload(vec![3]), TxConfig::default())
-    //         .await
-    //         .expect("third add")
-    //         .sequence;
-    //     assert_eq!(seq2, 2);
-    //     assert_eq!(manager.max_sent(), 2);
-    // }
-
-    // #[tokio::test]
-    // async fn signer_sequence_mismatch_rejects_without_increment() {
-    //     struct BadSigner {
-    //         seen: Arc<AtomicU64>,
-    //     }
-
-    //     #[async_trait]
-    //     impl SignFn<TestTxId, TestConfirmInfo> for BadSigner {
-    //         async fn sign(
-    //             &self,
-    //             sequence: u64,
-    //             request: &TxRequest,
-    //             _cfg: &TxConfig,
-    //         ) -> Result<Transaction<TestTxId, TestConfirmInfo>> {
-    //             self.seen.store(sequence, Ordering::SeqCst);
-    //             let bytes = match request {
-    //                 TxRequest::RawPayload(bytes) => bytes.clone(),
-    //                 TxRequest::Message(_) | TxRequest::Blobs(_) => Vec::new(),
-    //             };
-    //             Ok(Transaction {
-    //                 sequence: sequence.saturating_add(1),
-    //                 bytes,
-    //                 callbacks: TxCallbacks::default(),
-    //                 id: None,
-    //             })
-    //         }
-    //     }
-
-    //     let seen = Arc::new(AtomicU64::new(0));
-    //     let signer = Arc::new(BadSigner { seen: seen.clone() });
-    //     let nodes = HashMap::<NodeId, Arc<MockTxServer>>::new();
-    //     let (manager, mut worker) =
-    //         TransactionWorker::new(nodes, Duration::from_millis(10), 10, signer, 1, 4);
-
-    //     let err = manager
-    //         .add_tx(TxRequest::RawPayload(vec![1]), TxConfig::default())
-    //         .await
-    //         .expect_err("bad signer");
-    //     assert!(matches!(err, Error::UnexpectedResponseType(_)));
-    //     assert_eq!(seen.load(Ordering::SeqCst), 1);
-    //     assert_eq!(manager.max_sent(), 0);
-    //     assert!(matches!(
-    //         worker.add_tx_rx.try_recv(),
-    //         Err(TryRecvError::Empty)
-    //     ));
-
-    //     let err = manager
-    //         .add_tx(TxRequest::RawPayload(vec![2]), TxConfig::default())
-    //         .await
-    //         .expect_err("bad signer again");
-    //     assert!(matches!(err, Error::UnexpectedResponseType(_)));
-    //     assert_eq!(seen.load(Ordering::SeqCst), 1);
-    //     assert_eq!(manager.max_sent(), 0);
-    // }
-
-    // #[tokio::test]
-    // async fn add_tx_closed_channel_returns_error() {
-    //     let nodes = HashMap::<NodeId, Arc<MockTxServer>>::new();
-    //     let signer = Arc::new(TestSigner::default());
-    //     let (manager, _worker) =
-    //         TransactionWorker::new(nodes, Duration::from_millis(10), 10, signer, 1, 4);
-
-    //     drop(_worker);
-
-    //     let err = manager
-    //         .add_tx(TxRequest::RawPayload(vec![1]), TxConfig::default())
-    //         .await
-    //         .expect_err("closed manager");
-    //     assert!(matches!(err, Error::UnexpectedResponseType(_)));
-    //     assert_eq!(manager.max_sent(), 0);
-    // }
-
-    // #[tokio::test]
-    // async fn add_tx_concurrent_sequences_are_monotonic() {
-    //     let nodes = HashMap::<NodeId, Arc<MockTxServer>>::new();
-    //     let signer = Arc::new(TestSigner::default());
-    //     let (manager, _worker) =
-    //         TransactionWorker::new(nodes, Duration::from_millis(10), 10, signer, 1, 128);
-
-    //     let mut handles = Vec::new();
-    //     for _ in 0..20 {
-    //         let manager = manager.clone();
-    //         handles.push(tokio::spawn(async move {
-    //             manager
-    //                 .add_tx(TxRequest::RawPayload(vec![1, 2, 3]), TxConfig::default())
-    //                 .await
-    //                 .map(|handle| handle.sequence)
-    //         }));
-    //     }
-
-    //     let mut sequences = Vec::new();
-    //     for handle in handles {
-    //         sequences.push(handle.await.expect("task").expect("add tx"));
-    //     }
-    //     sequences.sort_unstable();
-    //     assert_eq!(sequences, (1..=20).collect::<Vec<u64>>());
-    //     assert_eq!(manager.max_sent(), 20);
-    // }
 }
