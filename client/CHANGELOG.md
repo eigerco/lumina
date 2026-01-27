@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0](https://github.com/celestiaorg/lumina/compare/celestia-client-v0.4.1...celestia-client-v0.5.0) - 2026-01-27
+
+### Added
+
+- *(grpc)* [**breaking**] add per-endpoint configuration for metadata and timeouts ([#875](https://github.com/celestiaorg/lumina/pull/875))
+
+### Fixed
+
+- update npm repo ([#880](https://github.com/celestiaorg/lumina/pull/880))
+
 ## [0.4.1](https://github.com/eigerco/lumina/compare/celestia-client-v0.4.0...celestia-client-v0.4.1) - 2026-01-08
 
 ### Fixed
