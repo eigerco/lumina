@@ -118,7 +118,7 @@ pub mod appconsts {
         pub const MAX_TX_SIZE: u64 = 8_388_608; // 8MB
     }
 
-    // https://github.com/celestiaorg/celestia-app/blob/main/pkg/appconsts/app_consts.go
+    // https://github.com/celestiaorg/celestia-app/blob/v7.0.0-rc0/pkg/appconsts/app_consts.go
     /// Consts of App v7.
     pub mod v7 {
         /// App version.
