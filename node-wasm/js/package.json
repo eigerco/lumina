@@ -2,7 +2,7 @@
     "name": "lumina-node",
     "type": "module",
     "collaborators": [
-        "Celestia <mcrakhman@celestia.org>"
+        "Celestia <contact@celestia.org>"
     ],
     "description": "Lumina node for Celestia, running in browser",
     "version": "0.13.1",
