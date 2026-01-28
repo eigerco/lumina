@@ -355,7 +355,7 @@ impl ProcessorState {
     fn transition(self, other: ProcessorState) -> ProcessorState {
         match (self, other) {
             (stopped @ ProcessorState::Stopped(_), _) => stopped,
-            (stopping @ ProcessorState::Stopping(_), _) => stopping,
+            (ProcessorState::Stopping(_), stopped @ ProcessorState::Stopped(_)) => stopped,
             (ProcessorState::Recovering { .. }, stopped @ ProcessorState::Stopped(_)) => stopped,
             (ProcessorState::Recovering { .. }, stopping @ ProcessorState::Stopping(_)) => stopping,
             (recovering @ ProcessorState::Recovering { .. }, _) => recovering,
@@ -412,6 +412,13 @@ impl ProcessorStateWithEpoch {
 
     fn set_if_changed(&mut self, next: ProcessorState) {
         if !self.state.equivalent(&next) {
+            println!(
+                "[STATE] Transitioning from {:?} to {:?} (epoch {} -> {})",
+                self.state,
+                next,
+                self.epoch,
+                self.epoch.saturating_add(1)
+            );
             self.state = next;
             self.epoch = self.epoch.saturating_add(1);
         }
@@ -544,6 +551,11 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
                 self.next_enqueue_sequence, tx.sequence
             )));
         }
+        println!(
+            "[ENQUEUE] Transaction enqueued with sequence {} (queue size: {})",
+            tx.sequence,
+            self.txs.len() + 1
+        );
         self.txs.push_back(tx);
         self.next_enqueue_sequence += 1;
         self.new_submit.notify_one();
@@ -578,7 +590,6 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
             while let Some(event) = self.events.pop_front() {
                 self.process_event(event).await?;
             }
-
             select! {
                 _ = shutdown.cancelled() => self.state.update(ProcessorState::Stopped(StopReason::Shutdown)),
                 res = async {
@@ -753,6 +764,17 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
                 }
             }
         }
+        let mut max_sub_seq = 0;
+        for (node, state) in self.node_state.iter() {
+            max_sub_seq = state.submitted_seq.max(state.submitted_seq);
+        }
+        if max_sub_seq == self.confirmed_sequence {
+            let reason = match &self.state.state {
+                ProcessorState::Stopping(reason) => reason.clone(),
+                _ => unreachable!(),
+            };
+            self.state.update(ProcessorState::Stopped(reason));
+        }
         Ok(())
     }
 
@@ -768,6 +790,10 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
                 failure,
                 ..
             } => {
+                println!(
+                    "[EVENT] SubmitFailed: node={}, sequence={}, failure={:?}",
+                    node_id, sequence, failure
+                );
                 let Some(state) = self.node_state.get_mut(&node_id) else {
                     return Ok(());
                 };
@@ -801,6 +827,10 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
                 sequence,
                 id,
             } => {
+                println!(
+                    "[EVENT] Submitted: node={}, sequence={}, tx_id={:?}",
+                    node_id, sequence, id
+                );
                 debug!(
                     %node_id,
                     sequence,
@@ -823,11 +853,21 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
                 self.new_submit.notify_one();
             }
             TransactionEvent::SubmitStatusBatch { node_id, statuses } => {
+                println!(
+                    "[EVENT] SubmitStatusBatch: node={}, statuses_count={}",
+                    node_id,
+                    statuses.len()
+                );
                 let state = self.node_state.get_mut(&node_id).unwrap();
                 state.confirm_inflight = false;
                 self.process_status_batch_submitting(node_id, statuses)?;
             }
             TransactionEvent::StopStatusBatch { node_id, statuses } => {
+                println!(
+                    "[EVENT] StopStatusBatch: node={}, statuses_count={}",
+                    node_id,
+                    statuses.len()
+                );
                 let state = self.node_state.get_mut(&node_id).unwrap();
                 state.confirm_inflight = false;
                 self.process_status_batch_stopping(node_id, statuses)?;
@@ -837,6 +877,17 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
                 id,
                 status,
             } => {
+                let status_name = match &status {
+                    TxStatus::Pending => "Pending",
+                    TxStatus::Confirmed { .. } => "Confirmed",
+                    TxStatus::Rejected { .. } => "Rejected",
+                    TxStatus::Evicted => "Evicted",
+                    TxStatus::Unknown => "Unknown",
+                };
+                println!(
+                    "[EVENT] RecoverStatus: node={}, id={:?}, status={}",
+                    node_id, id, status_name
+                );
                 let state = self.node_state.get_mut(&node_id).unwrap();
                 state.confirm_inflight = false;
                 self.process_status_recovering(node_id, id, status)?;
@@ -960,6 +1011,19 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
             return;
         };
 
+        let num_to_fail = self.txs.len() - start_idx;
+        let status_name = match &status {
+            TxStatus::Pending => "Pending",
+            TxStatus::Confirmed { .. } => "Confirmed",
+            TxStatus::Rejected { .. } => "Rejected",
+            TxStatus::Evicted => "Evicted",
+            TxStatus::Unknown => "Unknown",
+        };
+        println!(
+            "[FAIL] Failing {} transactions from sequence {} with status {}",
+            num_to_fail, from_seq, status_name
+        );
+
         // Fail and remove transactions from start_idx to the end
         while self.txs.len() > start_idx {
             if let Some(mut tx) = self.txs.pop_back() {
@@ -975,6 +1039,7 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
 
     fn transition_to_stopped(&mut self) {
         if let ProcessorState::Stopping(reason) = self.state.snapshot() {
+            println!("[STOP] Transitioning to Stopped state: reason={:?}", reason);
             self.state.force_update(ProcessorState::Stopped(reason));
         }
     }
@@ -1007,6 +1072,10 @@ impl<S: TxServer + 'static> TransactionWorker<S> {
         if sequence <= self.confirmed_sequence {
             return Ok(());
         }
+        println!(
+            "[CONFIRM] Transaction confirmed: sequence={} (prev_confirmed={})",
+            sequence, self.confirmed_sequence
+        );
         debug!(sequence, "Transaction confirmed");
         if sequence != self.confirmed_sequence + 1 {
             panic!("updating confirmed sequence with gaps shouldn't happen");
@@ -1238,7 +1307,8 @@ mod tests {
 
     #[derive(Debug, Clone)]
     struct NodeState {
-        sequence: u64,
+        mempool_sequence: u64,
+        block_sequence: u64,
         accepted_ids: Vec<TestTxId>,
         is_evicted: bool,
     }
@@ -1246,7 +1316,8 @@ mod tests {
     impl NodeState {
         fn new(sequence: u64, accepted_ids: Vec<TestTxId>) -> Self {
             Self {
-                sequence,
+                mempool_sequence: sequence,
+                block_sequence: sequence,
                 accepted_ids,
                 is_evicted: false,
             }
@@ -1683,7 +1754,7 @@ mod tests {
             "sequence_action",
             |rc: &RoutedCall, state: NodeState| match rc.call {
                 ServerCall::CurrentSequence { .. } => {
-                    let exp_seq = state.sequence.saturating_add(1);
+                    let exp_seq = state.mempool_sequence.saturating_add(1);
                     ActionResult {
                         new_state: state,
                         ret: ServerReturn::CurrentSequence(Ok(exp_seq)),
@@ -1697,7 +1768,7 @@ mod tests {
                 "status_action",
                 |rc: &RoutedCall, state: NodeState| match rc.call {
                     ServerCall::Status { id, .. } => {
-                        let status = if id <= state.sequence {
+                        let status = if id <= state.mempool_sequence {
                             TxStatus::Confirmed { info: () }
                         } else {
                             TxStatus::Pending
@@ -1717,7 +1788,7 @@ mod tests {
                     let results = ids
                         .iter()
                         .map(|it| {
-                            let status = if *it <= state.sequence {
+                            let status = if *it <= state.mempool_sequence {
                                 TxStatus::Confirmed { info: () }
                             } else {
                                 TxStatus::Pending
@@ -1737,8 +1808,8 @@ mod tests {
             "status_action",
             |rc: &RoutedCall, mut state: NodeState| match rc.call {
                 ServerCall::Submit { sequence, .. } => {
-                    let result = if state.sequence == sequence - 1 {
-                        state.sequence += 1;
+                    let result = if state.mempool_sequence == sequence - 1 {
+                        state.mempool_sequence += 1;
                         Ok(sequence)
                     } else {
                         Err(SubmitFailure::InvalidTx {
@@ -1814,7 +1885,7 @@ mod tests {
             "sequence_action",
             |rc: &RoutedCall, state: NodeState| match rc.call {
                 ServerCall::CurrentSequence { .. } => {
-                    let exp_seq = state.sequence.saturating_add(1);
+                    let exp_seq = state.mempool_sequence.saturating_add(1);
                     ActionResult {
                         new_state: state,
                         ret: ServerReturn::CurrentSequence(Ok(exp_seq)),
@@ -1828,7 +1899,7 @@ mod tests {
                 "status_action",
                 |rc: &RoutedCall, state: NodeState| match rc.call {
                     ServerCall::Status { id, .. } => {
-                        let status = if id <= state.sequence && state.is_evicted {
+                        let status = if id <= state.mempool_sequence && state.is_evicted {
                             TxStatus::Confirmed { info: () }
                         } else {
                             TxStatus::Pending
@@ -1848,10 +1919,12 @@ mod tests {
                     let results = ids
                         .iter()
                         .map(|it| {
-                            let status = if *it <= state.sequence {
+                            let status = if *it <= state.block_sequence {
                                 TxStatus::Confirmed { info: () }
-                            } else {
+                            } else if *it <= state.mempool_sequence {
                                 TxStatus::Pending
+                            } else {
+                                TxStatus::Unknown
                             };
                             (*it, status)
                         })
@@ -1868,13 +1941,20 @@ mod tests {
             "status_action",
             move |rc: &RoutedCall, mut state: NodeState| match rc.call {
                 ServerCall::Submit { sequence, .. } => {
-                    let result = if state.sequence == sequence - 1 {
+                    let result = if state.mempool_sequence == sequence - 1 {
                         if sequence == evict_sequence && !state.is_evicted {
                             state.is_evicted = true;
-                            state.sequence = 1;
+                            state.mempool_sequence = 1;
+                            state.block_sequence = 1;
+                            println!("evicting!");
                             Err(SubmitFailure::SequenceMismatch { expected: 2 })
+                        } else if state.is_evicted {
+                            state.block_sequence += 1;
+                            state.mempool_sequence += 1;
+                            Ok(sequence)
                         } else {
-                            state.sequence += 1;
+                            state.mempool_sequence += 1;
+                            state.block_sequence = 1;
                             Ok(sequence)
                         }
                     } else {
@@ -1907,7 +1987,7 @@ mod tests {
             ),
         ];
         let (mut harness, manager_worker) =
-            Harness::new(Duration::from_millis(100), 10, 1000, 2, rules);
+            Harness::new(Duration::from_millis(1), 10, 1000, 2, rules);
         harness.start(manager_worker);
         let mut add_handles = VecDeque::new();
         for i in 0..100 {
